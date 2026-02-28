@@ -31,6 +31,7 @@ defmodule SkillKit.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:yaml_elixir, "~> 2.12"},
       {:ex_doc, "~> 0.38", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
