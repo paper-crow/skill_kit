@@ -46,8 +46,8 @@ defmodule SkillKit do
 
   ## Configuration
 
-  All configuration is passed via `start_link/1` opts — SkillKit never calls
-  `Application.get_env/2`. This makes it safe to use in libraries and umbrella
-  apps without polluting the application configuration namespace.
+  All configuration is passed via `start_link/1` opts — SkillKit never reads
+  from the application environment. This makes it safe to use in libraries and
+  umbrella apps without polluting the application configuration namespace.
   """
 end

@@ -1,0 +1,73 @@
+defmodule SkillKit.Supervisor do
+  @moduledoc """
+  The OTP Supervisor for SkillKit.
+
+  `SkillKit.Supervisor` is the primary integration surface for host applications.
+  Add it to your supervision tree to start and supervise the skill registry.
+
+  ## Usage
+
+  The simplest integration uses default names:
+
+      defmodule MyApp.Application do
+        use Application
+
+        def start(_type, _args) do
+          children = [
+            {SkillKit.Supervisor, []}
+          ]
+
+          Supervisor.start_link(children, strategy: :one_for_one)
+        end
+      end
+
+  To use a custom registry name (useful in umbrella apps or multi-tenant setups):
+
+      children = [
+        {SkillKit.Supervisor, registry_name: MyApp.SkillRegistry}
+      ]
+
+  ## Supervision Strategy
+
+  Phase 1 uses `:one_for_one` with a single child (`SkillKit.Registry`). When
+  the file watcher is added in Phase 2, the strategy will be updated to
+  `:rest_for_one` so that a registry crash restarts the watcher as well.
+
+  ## Options
+
+  - `:name` — the name to register the Supervisor process under. Defaults to
+    `SkillKit.Supervisor`.
+
+  - `:registry_name` — the name to pass to `SkillKit.Registry.start_link/1`.
+    Defaults to `SkillKit.Registry`. Override this when running multiple
+    SkillKit instances in the same node (e.g., in tests or umbrella apps).
+  """
+
+  use Supervisor
+
+  @doc """
+  Starts a SkillKit.Supervisor process linked to the current process.
+
+  ## Options
+
+  - `:name` — the name to register the Supervisor under. Defaults to `__MODULE__`.
+  - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
+    `SkillKit.Registry`.
+  """
+  @spec start_link(keyword()) :: Supervisor.on_start()
+  def start_link(opts \\ []) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    Supervisor.start_link(__MODULE__, opts, name: name)
+  end
+
+  @impl true
+  def init(opts) do
+    registry_name = Keyword.get(opts, :registry_name, SkillKit.Registry)
+
+    children = [
+      {SkillKit.Registry, name: registry_name}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end

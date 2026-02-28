@@ -21,7 +21,7 @@ defmodule SkillKit.MixProject do
   end
 
   # Run "mix help compile.app" to learn about applications.
-  # IMPORTANT: This is a library — no mod: key here.
+  # SkillKit is a library — application/0 has no :mod key.
   def application do
     [
       extra_applications: [:logger]
