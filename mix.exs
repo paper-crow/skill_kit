@@ -7,6 +7,7 @@ defmodule SkillKit.MixProject do
       version: "0.1.0",
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       description: description(),
       package: package(),
@@ -19,6 +20,12 @@ defmodule SkillKit.MixProject do
       ]
     ]
   end
+
+  # Compile test/support helpers in the test environment so shared test modules
+  # (e.g., SkillKit.TestSkills.Echo) are available across all test files and
+  # are compiled as proper .beam files (enabling Code.ensure_loaded/1 checks).
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
   # SkillKit is a library — application/0 has no :mod key.

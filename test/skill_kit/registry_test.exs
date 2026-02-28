@@ -1,7 +1,17 @@
 defmodule SkillKit.RegistryTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias SkillKit.{Registry, Skill}
+
+  # ---------------------------------------------------------------------------
+  # Test helper: a code skill module for boot-time module loading tests
+  # Defined at top level to avoid ExUnit namespace prefix issue
+  # ---------------------------------------------------------------------------
+
+  # (SkillKit.TestSkills.Echo is defined in skill_test.exs at top level
+  #  and is available here since it's compiled before this test runs)
 
   setup do
     name = :"registry_#{:erlang.unique_integer([:positive])}"
@@ -213,6 +223,114 @@ defmodule SkillKit.RegistryTest do
 
       assert length(results) == 50
       assert Enum.all?(results, fn result -> result == {:ok, skill} end)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # boot-time loading
+  # ---------------------------------------------------------------------------
+
+  describe "boot-time loading" do
+    # Fixture paths
+    @fixtures_root Path.join([__DIR__, "..", "support", "fixtures", "skills"])
+    @valid_fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "valid"])
+    @invalid_fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "invalid"])
+    @nested_fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "nested"])
+
+    test "skill_dirs loads valid .skill.md files from directory" do
+      name = :"boot_valid_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, name: name, skill_dirs: [@valid_fixtures_path]})
+
+      skills = Registry.list_skills(name)
+      skill_names = Enum.map(skills, & &1.name)
+
+      assert "files:summarize" in skill_names
+      assert "tools:greet" in skill_names
+    end
+
+    test "skill_dirs recursively discovers .skill.md files in subdirectories" do
+      name = :"boot_nested_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, name: name, skill_dirs: [@nested_fixtures_path]})
+
+      assert {:ok, skill} = Registry.get_skill(name, "admin:delete-user")
+      assert skill.type == :prompt
+      assert skill.description == "Delete a user account"
+    end
+
+    test "skill_dirs skips malformed files without crashing startup" do
+      name = :"boot_invalid_#{:erlang.unique_integer([:positive])}"
+
+      # capture_log/2 with level: :all captures logs from all processes
+      log =
+        capture_log([level: :warning], fn ->
+          start_supervised!({Registry, name: name, skill_dirs: [@invalid_fixtures_path]})
+          # Briefly yield to let handle_continue complete and flush log messages
+          Process.sleep(10)
+        end)
+
+      # Registry started successfully — skills list may be empty (all invalid)
+      skills = Registry.list_skills(name)
+      assert is_list(skills)
+
+      # Warning was logged for the malformed files
+      assert log =~ "SkillKit"
+      assert log =~ "skipped"
+    end
+
+    test "skill_dirs ignores files without .skill.md extension" do
+      name = :"boot_ignore_#{:erlang.unique_integer([:positive])}"
+      # The fixtures root contains ignored.md (no .skill.md extension)
+      start_supervised!({Registry, name: name, skill_dirs: [@fixtures_root]})
+
+      # ignored.md has name "should:ignore" — it must NOT be registered
+      assert {:error, :not_found} = Registry.get_skill(name, "should:ignore")
+    end
+
+    test "skills: modules auto-register code skills at boot" do
+      name = :"boot_modules_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, name: name, skills: [SkillKit.TestSkills.Echo]})
+
+      assert {:ok, skill} = Registry.get_skill(name, "test:echo")
+      assert skill.type == :code
+      assert skill.module == SkillKit.TestSkills.Echo
+    end
+
+    test "skills: code skill has all fields populated" do
+      name = :"boot_fields_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, name: name, skills: [SkillKit.TestSkills.Echo]})
+
+      {:ok, skill} = Registry.get_skill(name, "test:echo")
+      assert skill.type == :code
+      assert skill.name == "test:echo"
+      assert skill.namespace == "test"
+      assert skill.description == "Echoes input"
+      assert skill.required_scope == ["test:read"]
+      assert skill.module == SkillKit.TestSkills.Echo
+    end
+
+    test "empty skill_dirs and skills defaults — backward compatibility" do
+      name = :"boot_empty_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, name: name})
+
+      assert [] = Registry.list_skills(name)
+    end
+
+    test "after boot loading, list_skills includes all loaded skills" do
+      name = :"boot_list_#{:erlang.unique_integer([:positive])}"
+
+      start_supervised!({
+        Registry,
+        name: name,
+        skill_dirs: [@valid_fixtures_path],
+        skills: [SkillKit.TestSkills.Echo]
+      })
+
+      skills = Registry.list_skills(name)
+      skill_names = Enum.map(skills, & &1.name)
+
+      assert "files:summarize" in skill_names
+      assert "tools:greet" in skill_names
+      assert "test:echo" in skill_names
     end
   end
 end

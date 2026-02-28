@@ -160,4 +160,73 @@ defmodule SkillKit.SupervisorTest do
              "Library code must not call Application.get_env. Violations found in: #{inspect(violations)}"
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Supervisor opts passthrough — skill_dirs and skills
+  # ---------------------------------------------------------------------------
+
+  describe "Supervisor with skill_dirs and skills passthrough" do
+    @valid_fixtures_path Path.join([
+                           __DIR__,
+                           "..",
+                           "support",
+                           "fixtures",
+                           "skills",
+                           "valid"
+                         ])
+
+    test "supervisor with skill_dirs discovers and registers .skill.md files" do
+      sup_name = :"sup_dirs_#{:erlang.unique_integer([:positive])}"
+      reg_name = :"reg_dirs_#{:erlang.unique_integer([:positive])}"
+
+      start_supervised!({
+        Supervisor,
+        name: sup_name,
+        registry_name: reg_name,
+        skill_dirs: [@valid_fixtures_path]
+      })
+
+      skills = Registry.list_skills(reg_name)
+      skill_names = Enum.map(skills, & &1.name)
+
+      assert "files:summarize" in skill_names
+      assert "tools:greet" in skill_names
+    end
+
+    test "supervisor with skills: modules auto-registers code skills" do
+      sup_name = :"sup_mods_#{:erlang.unique_integer([:positive])}"
+      reg_name = :"reg_mods_#{:erlang.unique_integer([:positive])}"
+
+      start_supervised!({
+        Supervisor,
+        name: sup_name,
+        registry_name: reg_name,
+        skills: [SkillKit.TestSkills.Echo]
+      })
+
+      assert {:ok, skill} = Registry.get_skill(reg_name, "test:echo")
+      assert skill.type == :code
+      assert skill.module == SkillKit.TestSkills.Echo
+    end
+
+    test "supervisor with both skill_dirs and skills registers all" do
+      sup_name = :"sup_both_#{:erlang.unique_integer([:positive])}"
+      reg_name = :"reg_both_#{:erlang.unique_integer([:positive])}"
+
+      start_supervised!({
+        Supervisor,
+        name: sup_name,
+        registry_name: reg_name,
+        skill_dirs: [@valid_fixtures_path],
+        skills: [SkillKit.TestSkills.Echo]
+      })
+
+      skills = Registry.list_skills(reg_name)
+      skill_names = Enum.map(skills, & &1.name)
+
+      assert "files:summarize" in skill_names
+      assert "tools:greet" in skill_names
+      assert "test:echo" in skill_names
+    end
+  end
 end
