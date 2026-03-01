@@ -320,9 +320,7 @@ defmodule SkillKit.RegistryTest do
 
       start_supervised!({
         Registry,
-        name: name,
-        skill_dirs: [@valid_fixtures_path],
-        skills: [SkillKit.TestSkills.Echo]
+        name: name, skill_dirs: [@valid_fixtures_path], skills: [SkillKit.TestSkills.Echo]
       })
 
       skills = Registry.list_skills(name)

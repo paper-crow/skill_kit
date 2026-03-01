@@ -10,14 +10,17 @@ defmodule SkillKit.ScopeTest do
 
   # Generates a lowercase identifier matching ^[a-z][a-z0-9_-]*$
   defp scope_segment do
+    tail_char =
+      StreamData.one_of([
+        StreamData.integer(?a..?z),
+        StreamData.integer(?0..?9),
+        StreamData.constant(?_),
+        StreamData.constant(?-)
+      ])
+
     gen all(
           first <- StreamData.integer(?a..?z),
-          rest <- StreamData.list_of(StreamData.one_of([
-            StreamData.integer(?a..?z),
-            StreamData.integer(?0..?9),
-            StreamData.constant(?_),
-            StreamData.constant(?-)
-          ]), min_length: 0, max_length: 10)
+          rest <- StreamData.list_of(tail_char, min_length: 0, max_length: 10)
         ) do
       List.to_string([first | rest])
     end

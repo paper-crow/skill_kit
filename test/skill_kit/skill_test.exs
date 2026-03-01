@@ -71,6 +71,7 @@ defmodule SkillKit.SkillTest do
 
     test "interpolates multiple {{vars}} in one pass" do
       skill = %Skill{type: :prompt, body: "Hello {{name}}, welcome to {{place}}!"}
+
       assert {:ok, "Hello Alice, welcome to Wonderland!"} =
                Skill.execute(skill, %{"name" => "Alice", "place" => "Wonderland"}, %{})
     end
@@ -94,6 +95,7 @@ defmodule SkillKit.SkillTest do
 
     test "returns {:error, {:missing_arg, name}} with partial args (one present, one missing)" do
       skill = %Skill{type: :prompt, body: "{{present}} is here, {{absent}} is not"}
+
       assert {:error, {:missing_arg, "absent"}} =
                Skill.execute(skill, %{"present" => "yes"}, %{})
     end

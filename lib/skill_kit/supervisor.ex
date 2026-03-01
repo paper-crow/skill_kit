@@ -92,8 +92,7 @@ defmodule SkillKit.Supervisor do
     skills = Keyword.get(opts, :skills, [])
 
     children = [
-      {SkillKit.Registry,
-       name: registry_name, skill_dirs: skill_dirs, skills: skills}
+      {SkillKit.Registry, name: registry_name, skill_dirs: skill_dirs, skills: skills}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

@@ -181,9 +181,7 @@ defmodule SkillKit.SupervisorTest do
 
       start_supervised!({
         Supervisor,
-        name: sup_name,
-        registry_name: reg_name,
-        skill_dirs: [@valid_fixtures_path]
+        name: sup_name, registry_name: reg_name, skill_dirs: [@valid_fixtures_path]
       })
 
       skills = Registry.list_skills(reg_name)
@@ -199,9 +197,7 @@ defmodule SkillKit.SupervisorTest do
 
       start_supervised!({
         Supervisor,
-        name: sup_name,
-        registry_name: reg_name,
-        skills: [SkillKit.TestSkills.Echo]
+        name: sup_name, registry_name: reg_name, skills: [SkillKit.TestSkills.Echo]
       })
 
       assert {:ok, skill} = Registry.get_skill(reg_name, "test:echo")

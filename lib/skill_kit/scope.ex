@@ -50,7 +50,7 @@ defmodule SkillKit.Scope do
   # Same pattern as @name_segment_regex in Loader and @segment_regex in Registry
   @segment_regex ~r/^[a-z][a-z0-9_-]*$/
 
-  @typedoc "A scope string, e.g. \"admin:read\" or \"admin:*\""
+  @typedoc ~S(A scope string, e.g. "admin:read" or "admin:*")
   @type scope :: String.t()
 
   @doc """
@@ -75,7 +75,10 @@ defmodule SkillKit.Scope do
   - `{:error, :leading_trailing_whitespace}` — binary has surrounding whitespace
   - `{:error, {:invalid_scope_format, scope}}` — binary but invalid format
   """
-  @spec validate(term()) :: {:ok, scope()} | {:error, :not_a_string | :leading_trailing_whitespace | {:invalid_scope_format, term()}}
+  @spec validate(term()) ::
+          {:ok, scope()}
+          | {:error,
+             :not_a_string | :leading_trailing_whitespace | {:invalid_scope_format, term()}}
   def validate(scope) when is_binary(scope) do
     with :ok <- reject_whitespace(scope),
          :ok <- parse_and_validate(scope) do
