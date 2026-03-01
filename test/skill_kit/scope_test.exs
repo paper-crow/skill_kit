@@ -33,13 +33,6 @@ defmodule SkillKit.ScopeTest do
     end
   end
 
-  # Generates wildcard scopes like "namespace:*"
-  defp wildcard_scope do
-    gen all(ns <- scope_segment()) do
-      "#{ns}:*"
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # SCOPE-01: Format validation — valid?/1
   # ---------------------------------------------------------------------------
@@ -270,13 +263,12 @@ defmodule SkillKit.ScopeTest do
     end
   end
 
-  property "covers?/2 wildcard rejects different-namespace — ns1:* does not cover ns2:action when ns1 != ns2",
-           max_runs: 500 do
+  property "covers?/2 wildcard rejects different-namespace — ns1:* does not cover ns2:action when ns1 != ns2" do
     check all(
             ns1 <- scope_segment(),
-            ns2 <- scope_segment(),
+            ns2 <- StreamData.filter(scope_segment(), fn s -> s != ns1 end),
             action <- scope_segment(),
-            ns1 != ns2
+            max_runs: 500
           ) do
       wildcard = "#{ns1}:*"
       required = "#{ns2}:#{action}"
