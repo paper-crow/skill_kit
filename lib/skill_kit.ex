@@ -40,9 +40,18 @@ defmodule SkillKit do
 
   ## Usage
 
+  Once the supervision tree is running (see Quick Start above), you can
+  register and look up skills. The single-argument forms below use the
+  default registry name (`SkillKit.Registry`):
+
       skill = %SkillKit.Skill{name: "files:read", namespace: "files"}
       :ok = SkillKit.Registry.register(skill)
       {:ok, skill} = SkillKit.Registry.get_skill("files:read")
+
+  If you started the registry with a custom name, pass it explicitly:
+
+      :ok = SkillKit.Registry.register(MyApp.SkillRegistry, skill)
+      {:ok, skill} = SkillKit.Registry.get_skill(MyApp.SkillRegistry, "files:read")
 
   ## Configuration
 

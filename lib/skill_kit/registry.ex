@@ -390,16 +390,9 @@ defmodule SkillKit.Registry do
   # Returns {:ok, namespace} or {:error, :invalid_name_format}
   @spec validate_skill_name(String.t()) :: {:ok, String.t()} | {:error, :invalid_name_format}
   defp validate_skill_name(name) when is_binary(name) do
-    case String.split(name, ":", parts: 3) do
-      [namespace, skill_name] ->
-        if valid_segment?(namespace) and valid_segment?(skill_name) do
-          {:ok, namespace}
-        else
-          {:error, :invalid_name_format}
-        end
-
-      _ ->
-        {:error, :invalid_name_format}
+    case parse_namespaced_name(name) do
+      {:ok, {namespace, _skill_name}} -> {:ok, namespace}
+      :error -> {:error, :invalid_name_format}
     end
   end
 
@@ -417,26 +410,41 @@ defmodule SkillKit.Registry do
   end
 
   # Validates that a skill name follows the "namespace:skill_name" format.
+  # Delegates to parse_namespaced_name/1 for the shared parsing logic.
+  defp validate_namespace(name) when is_binary(name) do
+    case parse_namespaced_name(name) do
+      {:ok, _} = ok -> ok
+      :error -> {:error, :invalid_namespace}
+    end
+  end
+
+  defp validate_namespace(_), do: {:error, :invalid_namespace}
+
+  # Parses and validates a "namespace:skill_name" string.
+  #
+  # Shared parsing logic used by both validate_namespace/1 (runtime register path)
+  # and validate_skill_name/1 (boot code-skill path).
   #
   # Rules:
   #   - Exactly one colon, producing exactly two segments
   #   - Both segments match ~r/^[a-z][a-z0-9_-]*$/ (lowercase start, alphanumeric + hyphens/underscores)
   #   - Rejects: no colon, multi-level ("a:b:c"), empty segments (":name", "ns:"), uppercase
-  defp validate_namespace(name) when is_binary(name) do
+  #
+  # Returns {:ok, {namespace, skill_name}} or :error
+  @spec parse_namespaced_name(String.t()) :: {:ok, {String.t(), String.t()}} | :error
+  defp parse_namespaced_name(name) when is_binary(name) do
     case String.split(name, ":", parts: 3) do
       [namespace, skill_name] ->
         if valid_segment?(namespace) and valid_segment?(skill_name) do
           {:ok, {namespace, skill_name}}
         else
-          {:error, :invalid_namespace}
+          :error
         end
 
       _ ->
-        {:error, :invalid_namespace}
+        :error
     end
   end
-
-  defp validate_namespace(_), do: {:error, :invalid_namespace}
 
   defp valid_segment?(segment) when is_binary(segment) do
     String.match?(segment, @segment_regex)
