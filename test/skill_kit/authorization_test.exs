@@ -176,6 +176,7 @@ defmodule SkillKit.AuthorizationTest do
 
     test "CrashProvider raises RuntimeError (let it crash — no rescue)" do
       s = skill(["admin:read"])
+
       assert_raise RuntimeError, "provider crashed", fn ->
         Authorization.authorize(s, CrashProvider, %{})
       end
@@ -188,6 +189,7 @@ defmodule SkillKit.AuthorizationTest do
 
     test "multiple required scopes one not covered returns {:error, :unauthorized}" do
       s = skill(["admin:read", "tools:execute"])
+
       # GrantAll grants ["admin:read", "admin:write", "tools:*"] — tools:execute IS covered by tools:*
       assert {:ok, ^s} = Authorization.authorize(s, GrantAll, %{})
     end
