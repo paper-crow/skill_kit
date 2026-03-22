@@ -106,10 +106,13 @@ Project-scoped agents override user-scoped agents of the same name.
 Application
 ├── Agent.Registry (Registry)                        ← name lookup for all agent components
 └── Agent.Supervisor (DynamicSupervisor)             ← owns primary agents
-    └── Agent (Supervisor, :rest_for_one)            ← one per session/tenant
-        ├── Agent.Mailbox (GenServer)                ← buffers user requests + peer messages
-        ├── Agent.Server (GenServer)                 ← state, LLM loop
-        └── Agent.SubagentSupervisor (DynamicSupervisor)  ← the "team"
+    └── Agent (Supervisor, :one_for_one)             ← one per session/tenant
+        ├── Agent.Infrastructure (Supervisor, :one_for_one)
+        │   └── SkillKit.Supervisor                  ← skill registry, isolated from core
+        └── Agent.Core (Supervisor, :rest_for_one)
+            ├── Agent.Mailbox (GenServer)            ← buffers user requests + peer messages
+            ├── Agent.Server (GenServer)             ← state, LLM loop
+            └── Agent.SubagentSupervisor (DynamicSupervisor)  ← the "team"
             ├── Subagent.Skill (GenServer)           ← ephemeral, runs executor
             └── Subagent.Agent (Supervisor)          ← ephemeral, full agent tree
                 ├── Agent.Mailbox
@@ -145,7 +148,15 @@ All processes receive `agent_name` at init. That's the only coordination point �
 
 ### Supervision strategies
 
-**`Agent` → `:rest_for_one`**
+**`Agent` → `:one_for_one`**
+Two isolated subtrees: Infrastructure and Core. A skill registry crash restarts the registry without touching the agent's conversation state or subagents. A core crash restarts the core without touching the skill registry.
+
+**`Agent.Infrastructure` → `:one_for_one`**
+Contains `SkillKit.Supervisor` (which owns the skill registry). Crashes and restarts independently. During restart, tool calls that hit the skill registry block on the GenServer call until it's back — OTP handles this naturally. No special retry logic needed.
+
+**Note:** This requires `SkillKit.Registry` reads to go through the GenServer (not direct ETS reads) so that calls block correctly during restarts. The current ETS-direct-read optimization will need to be revisited for the orchestration layer.
+
+**`Agent.Core` → `:rest_for_one`**
 Components are ordered: Mailbox, Server, SubagentSupervisor. If Mailbox crashes, everything restarts — an agent without its mailbox would silently lose messages. If Server crashes, SubagentSupervisor restarts too — orphaned subagents with no parent to report to should not continue running. This applies equally to primary agents and subagent-agents.
 
 When a process restarts, it re-registers in `Agent.Registry` under the same `{agent_name, role}` key. The OTP `Registry` automatically unregisters crashed processes, so the new instance claims the key cleanly.
@@ -679,7 +690,7 @@ end
 Each agent's registry is initialized at startup with workspace-scoped skill directories:
 
 ```elixir
-# In Agent supervisor init — all children receive agent_name, discover each other via Registry.
+# In Agent supervisor init — two isolated subtrees, all discovery via Registry.
 # No dynamic atoms — all processes register under {agent_name, role} tuples.
 defmodule Agent do
   use Supervisor
@@ -689,18 +700,51 @@ defmodule Agent do
   end
 
   def init({agent_name, definition, depth, parent_name}) do
+    children = [
+      {Agent.Infrastructure, {agent_name, definition}},
+      {Agent.Core, {agent_name, definition, depth, parent_name}}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end
+
+defmodule Agent.Infrastructure do
+  use Supervisor
+
+  def start_link({agent_name, definition}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition})
+  end
+
+  def init({agent_name, definition}) do
     backends = [
       {SkillKit.Backend.Filesystem, dirs: [
         "#{definition.workspace}/skills",
         "#{definition.workspace}/.claude/skills",
-        Path.expand("~/.agents/skills")               # shared fallback
+        Path.expand("~/.agents/skills")
       ]}
     ]
 
     children = [
-      {SkillKit.Supervisor, name: {:via, Registry, {Agent.Registry, {agent_name, :skill_supervisor}}},
+      {SkillKit.Supervisor,
+        name: {:via, Registry, {Agent.Registry, {agent_name, :skill_supervisor}}},
         registry_name: {:via, Registry, {Agent.Registry, {agent_name, :skill_registry}}},
-        backends: backends},
+        backends: backends}
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end
+
+defmodule Agent.Core do
+  use Supervisor
+
+  def start_link({agent_name, definition, depth, parent_name}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name})
+  end
+
+  def init({agent_name, definition, depth, parent_name}) do
+    children = [
       {Agent.Mailbox, {agent_name, definition.mailbox}},
       {Agent.Server, {agent_name, definition, depth, parent_name}},
       {Agent.SubagentSupervisor, agent_name}
