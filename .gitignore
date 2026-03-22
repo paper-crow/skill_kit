@@ -25,3 +25,5 @@ skill_kit-*.tar
 # Git worktrees
 .worktrees/
 
+.DS_Store
+/.claude
