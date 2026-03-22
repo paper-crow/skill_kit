@@ -57,7 +57,8 @@ defmodule SkillKit.Backend.Filesystem.Parser do
       }}
   """
 
-  alias SkillKit.{Hook, Skill}
+  alias SkillKit.Hook
+  alias SkillKit.Skill
 
   # Namespace segment validation — same regex as SkillKit.Registry
   @name_segment_regex ~r/^[a-z][a-z0-9_-]*$/

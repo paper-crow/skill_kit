@@ -38,7 +38,8 @@ defmodule SkillKit.Authorization do
       false = SkillKit.Authorization.authorized?(skill, [])
   """
 
-  alias SkillKit.{Scope, Skill}
+  alias SkillKit.Scope
+  alias SkillKit.Skill
 
   # ---------------------------------------------------------------------------
   # authorize/2 — direct mode

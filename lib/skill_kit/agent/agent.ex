@@ -23,7 +23,8 @@ defmodule SkillKit.Agent do
 
   use Supervisor
 
-  alias SkillKit.Agent.{Core, Infrastructure}
+  alias SkillKit.Agent.Core
+  alias SkillKit.Agent.Infrastructure
 
   @type opts :: %{
           agent_name: String.t(),

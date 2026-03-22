@@ -12,7 +12,9 @@ defmodule SkillKit.Catalog do
   3. **Execution** — handled by `SkillKit.Executor` (separate concern)
   """
 
-  alias SkillKit.{Authorization, Registry, Skill}
+  alias SkillKit.Authorization
+  alias SkillKit.Registry
+  alias SkillKit.Skill
 
   @doc """
   Lists skills the caller is authorized to see.

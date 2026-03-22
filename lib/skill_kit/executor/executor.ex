@@ -10,7 +10,8 @@ defmodule SkillKit.Executor do
   use `SkillKit.Execution` directly.
   """
 
-  alias SkillKit.{Execution, Registry}
+  alias SkillKit.Execution
+  alias SkillKit.Registry
 
   @doc """
   Convenience function that builds and runs an execution pipeline.

@@ -9,7 +9,9 @@ defmodule SkillKit.Agent.Core do
 
   use Supervisor
 
-  alias SkillKit.Agent.{Mailbox, Server, SubagentSupervisor}
+  alias SkillKit.Agent.Mailbox
+  alias SkillKit.Agent.Server
+  alias SkillKit.Agent.SubagentSupervisor
 
   def start_link({agent_name, definition, depth, parent_name, scope, registry}) do
     Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope, registry})
