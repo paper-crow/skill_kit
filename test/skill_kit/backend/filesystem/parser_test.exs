@@ -5,6 +5,7 @@ defmodule SkillKit.Backend.Filesystem.ParserTest do
   alias SkillKit.Skill
 
   @fixtures_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills"])
+  @valid_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills", "valid"])
 
   # ---------------------------------------------------------------------------
   # load_file/1 — valid files
@@ -274,6 +275,25 @@ defmodule SkillKit.Backend.Filesystem.ParserTest do
     test "skills without hooks have empty hooks list" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
       assert {:ok, %Skill{hooks: []}} = Parser.load_file(path)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # load_file/1 — metadata field
+  # ---------------------------------------------------------------------------
+
+  describe "load_file/1 metadata field" do
+    test "parses metadata from frontmatter" do
+      path = Path.join(@valid_path, "metadata.skill.md")
+      assert {:ok, skill} = Parser.load_file(path)
+      assert skill.metadata["author"] == "test-org"
+      assert skill.metadata["version"] == "1.0"
+    end
+
+    test "defaults metadata to empty map when not present" do
+      path = Path.join(@valid_path, "summarize.skill.md")
+      assert {:ok, skill} = Parser.load_file(path)
+      assert skill.metadata == %{}
     end
   end
 

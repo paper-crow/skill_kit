@@ -18,6 +18,7 @@ defmodule SkillKit.Skill do
   | `:required_scope` | `[String.t()]`      | `[]`                       | Scopes required to call this skill           |
   | `:executor`       | `module()`          | `SkillKit.Executor.Shell`  | Module responsible for executing the skill   |
   | `:hooks`          | `[SkillKit.Hook.t()]` | `[]`                     | Lifecycle hooks attached to this skill       |
+  | `:metadata`       | `%{String.t() => term()}` | `%{}`              | Arbitrary key-value metadata from frontmatter |
 
   ## Naming Convention
 
@@ -39,7 +40,8 @@ defmodule SkillKit.Skill do
           location: String.t() | nil,
           required_scope: [String.t()],
           executor: module(),
-          hooks: [Hook.t()]
+          hooks: [Hook.t()],
+          metadata: %{optional(String.t()) => term()}
         }
 
   defstruct [
@@ -50,7 +52,8 @@ defmodule SkillKit.Skill do
     :location,
     required_scope: [],
     executor: SkillKit.Executor.Shell,
-    hooks: []
+    hooks: [],
+    metadata: %{}
   ]
 
   @doc """
