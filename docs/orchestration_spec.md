@@ -632,7 +632,86 @@ end
 
 ### `Subagent.Agent`
 
-Ephemeral. Wraps a full `Agent` supervision tree but with the same external interface as `Subagent.Skill` — reports a result to parent and stops.
+Ephemeral. Wraps a full `Agent` supervision tree — its own Mailbox, Server, SubagentSupervisor, and skill registry scoped to its workspace. Runs an autonomous LLM loop until it completes its task.
+
+**Lifecycle:**
+
+1. Parent LLM calls a tool that maps to an agent definition (e.g. `"project-a"`)
+2. Orchestration layer loads the `Agent.Definition` from disk
+3. Spawns `Subagent.Agent` under the parent's `SubagentSupervisor`
+4. The tool call input becomes the first `%Message.User{}` in the child's conversation
+5. Child runs its LLM loop — multiple turns, tool calls, its own subagents (depth permitting)
+6. Child calls `report_status` to send intermediate updates to parent
+7. Child calls `report_result` with the final output — sends result to parent, stops
+
+**Built-in tools:** Two tools are injected automatically into every agent subagent's tool list. The `AGENT.md` does not declare them — they are framework-provided.
+
+```elixir
+# report_status — send intermediate update, keep running
+%{
+  name: "report_status",
+  description: "Send a progress update to the parent agent. Use this to report intermediate results, status changes, or progress on long-running tasks. The agent continues running after calling this.",
+  input_schema: %{
+    type: "object",
+    properties: %{
+      status: %{type: "string", description: "Progress update message"}
+    },
+    required: ["status"]
+  }
+}
+
+# report_result — send final result, stop
+%{
+  name: "report_result",
+  description: "Report the final result and complete this task. Use this when the assigned task is fully complete. The agent stops after calling this.",
+  input_schema: %{
+    type: "object",
+    properties: %{
+      result: %{type: "string", description: "Final result of the task"}
+    },
+    required: ["result"]
+  }
+}
+```
+
+**Handling in Agent.Server:**
+
+Both tools are handled as local tool calls in the child's `run_agent_loop`. They don't go through the executor — they're intercepted by the agent loop and routed directly:
+
+```elixir
+defp execute_local(state, %ToolCall{name: "report_status", input: %{"status" => status}}) do
+  message = %Message.System{
+    content: "[Status update from '#{state.agent_name}'] #{status}"
+  }
+  GenServer.cast(parent_mailbox(state), {:message, message})
+  %ToolResult{tool_call_id: tool_call.id, content: "Status reported."}
+end
+
+defp execute_local(state, %ToolCall{name: "report_result", input: %{"result" => result}}) do
+  send(self(), {:stop_with_result, result})
+  %ToolResult{tool_call_id: tool_call.id, content: "Result reported. Shutting down."}
+end
+
+def handle_info({:stop_with_result, result}, state) do
+  # Send result to parent via their mailbox — arrives as %Message.System{}
+  parent = state.parent_name
+  message = %Message.System{
+    content: "[Background task #{state.task_ref} complete] " <>
+             "Agent '#{state.agent_name}' returned: #{result}"
+  }
+  GenServer.cast(parent_mailbox(state), {:message, message})
+  {:stop, :normal, state}
+end
+
+defp parent_mailbox(state) do
+  [{pid, _}] = Registry.lookup(Agent.Registry, {state.parent_name, :mailbox})
+  pid
+end
+```
+
+`report_result` uses a self-message (`{:stop_with_result, ...}`) rather than stopping inline because the tool result needs to be appended to the conversation first — the LLM may produce text alongside the tool call that should be captured before the process terminates.
+
+**From the parent's perspective**, `report_status` and `report_result` both arrive as `%Message.System{}` through the mailbox — same as any subagent result. The parent's LLM sees them as new context and can relay progress to the user or act on the final result.
 
 ---
 
