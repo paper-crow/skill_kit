@@ -68,7 +68,8 @@ defmodule SkillKit.Registry do
 
   require Logger
 
-  alias SkillKit.{Loader, Skill}
+  alias SkillKit.{Skill}
+  alias SkillKit.Backend.Filesystem.Parser
 
   # Regex for valid namespace/skill name segments
   @segment_regex ~r/^[a-z][a-z0-9_-]*$/
@@ -299,7 +300,7 @@ defmodule SkillKit.Registry do
   end
 
   defp load_skill_file(file, {skills_acc, errors_acc}) do
-    case Loader.load_file(file) do
+    case Parser.load_file(file) do
       {:ok, skill} -> {[skill | skills_acc], errors_acc}
       {:error, reason} -> {skills_acc, [{Path.basename(file), reason} | errors_acc]}
     end

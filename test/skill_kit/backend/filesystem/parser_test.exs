@@ -1,9 +1,10 @@
-defmodule SkillKit.LoaderTest do
+defmodule SkillKit.Backend.Filesystem.ParserTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Loader, Skill}
+  alias SkillKit.Backend.Filesystem.Parser
+  alias SkillKit.Skill
 
-  @fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills"])
+  @fixtures_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills"])
 
   # ---------------------------------------------------------------------------
   # load_file/1 — valid files
@@ -12,7 +13,7 @@ defmodule SkillKit.LoaderTest do
   describe "load_file/1 with valid files" do
     test "returns {:ok, %Skill{}} for summarize.skill.md — full round-trip" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert skill.name == "files:summarize"
       assert skill.namespace == "files"
       assert skill.description == "Summarize a file's contents"
@@ -25,7 +26,7 @@ defmodule SkillKit.LoaderTest do
 
     test "returns {:ok, %Skill{}} for multi_arg.skill.md — multiple template vars" do
       path = Path.join(@fixtures_path, "valid/multi_arg.skill.md")
-      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert skill.name == "tools:greet"
       assert skill.description == "Generate a greeting"
       assert String.contains?(skill.body, "{{name}}")
@@ -34,13 +35,13 @@ defmodule SkillKit.LoaderTest do
 
     test "body has leading/trailing whitespace trimmed" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      {:ok, skill} = Loader.load_file(path)
+      {:ok, skill} = Parser.load_file(path)
       assert skill.body == String.trim(skill.body)
     end
 
     test "required_scope is a list of strings for summarize fixture" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      {:ok, skill} = Loader.load_file(path)
+      {:ok, skill} = Parser.load_file(path)
       assert is_list(skill.required_scope)
       assert Enum.all?(skill.required_scope, &is_binary/1)
     end
@@ -53,16 +54,16 @@ defmodule SkillKit.LoaderTest do
   describe "load_file/1 with invalid files" do
     test "returns {:error, {:missing_field, \"name\"}} when name field absent" do
       path = Path.join(@fixtures_path, "invalid/missing_name.skill.md")
-      assert {:error, {:missing_field, "name"}} = Loader.load_file(path)
+      assert {:error, {:missing_field, "name"}} = Parser.load_file(path)
     end
 
     test "returns {:error, %YamlElixir.ParsingError{}} for invalid YAML" do
       path = Path.join(@fixtures_path, "invalid/bad_yaml.skill.md")
-      assert {:error, %YamlElixir.ParsingError{}} = Loader.load_file(path)
+      assert {:error, %YamlElixir.ParsingError{}} = Parser.load_file(path)
     end
 
     test "returns {:error, :enoent} for nonexistent file" do
-      assert {:error, :enoent} = Loader.load_file("nonexistent/path.skill.md")
+      assert {:error, :enoent} = Parser.load_file("nonexistent/path.skill.md")
     end
   end
 
@@ -81,7 +82,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("no_colon.skill.md", content)
-      assert {:error, :invalid_name_format} = Loader.load_file(path)
+      assert {:error, :invalid_name_format} = Parser.load_file(path)
     end
 
     test "returns {:error, :invalid_name_format} for name with empty namespace" do
@@ -94,7 +95,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("empty_ns.skill.md", content)
-      assert {:error, :invalid_name_format} = Loader.load_file(path)
+      assert {:error, :invalid_name_format} = Parser.load_file(path)
     end
 
     test "returns {:error, :invalid_name_format} for name with empty skill part" do
@@ -107,7 +108,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("empty_skill.skill.md", content)
-      assert {:error, :invalid_name_format} = Loader.load_file(path)
+      assert {:error, :invalid_name_format} = Parser.load_file(path)
     end
   end
 
@@ -126,7 +127,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("no_scope.skill.md", content)
-      assert {:ok, skill} = Loader.load_file(path)
+      assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == []
     end
 
@@ -143,7 +144,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("multi_scope.skill.md", content)
-      assert {:ok, skill} = Loader.load_file(path)
+      assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["tools:read", "tools:write"]
     end
 
@@ -158,7 +159,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("single_scope.skill.md", content)
-      assert {:ok, skill} = Loader.load_file(path)
+      assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["single:scope"]
     end
   end
@@ -170,7 +171,7 @@ defmodule SkillKit.LoaderTest do
   describe "atoms: false YAML parsing" do
     test "skill struct fields are all binary strings (not atoms)" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      {:ok, skill} = Loader.load_file(path)
+      {:ok, skill} = Parser.load_file(path)
       # These are struct fields — verify the values loaded from YAML are binaries
       assert is_binary(skill.name)
       assert is_binary(skill.description)
@@ -180,7 +181,7 @@ defmodule SkillKit.LoaderTest do
 
     test "required_scope list contains binary strings (not atoms)" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      {:ok, skill} = Loader.load_file(path)
+      {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["files:read"]
       # Verify they are binaries, not atoms
       assert Enum.all?(skill.required_scope, fn s -> is_binary(s) end)
@@ -201,7 +202,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("missing_desc.skill.md", content)
-      assert {:error, {:missing_field, "description"}} = Loader.load_file(path)
+      assert {:error, {:missing_field, "description"}} = Parser.load_file(path)
     end
 
     test "returns {:error, {:missing_field, \"name\"}} when name is empty string" do
@@ -214,7 +215,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("empty_name.skill.md", content)
-      assert {:error, {:missing_field, "name"}} = Loader.load_file(path)
+      assert {:error, {:missing_field, "name"}} = Parser.load_file(path)
     end
   end
 
@@ -239,7 +240,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("with_hooks.skill.md", content)
-      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert length(skill.hooks) == 1
 
       [hook] = skill.hooks
@@ -263,7 +264,7 @@ defmodule SkillKit.LoaderTest do
       """
 
       path = write_tmp_fixture("post_hooks.skill.md", content)
-      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert length(skill.hooks) == 1
 
       [hook] = skill.hooks
@@ -272,7 +273,7 @@ defmodule SkillKit.LoaderTest do
 
     test "skills without hooks have empty hooks list" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
-      assert {:ok, %Skill{hooks: []}} = Loader.load_file(path)
+      assert {:ok, %Skill{hooks: []}} = Parser.load_file(path)
     end
   end
 
