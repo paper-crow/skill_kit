@@ -104,7 +104,7 @@ Project-scoped agents override user-scoped agents of the same name.
 
 ```
 Application
-├── Agent.Registry (Registry)                        ← name lookup, keyed by {owner_pid, agent_name}
+├── Agent.Registry (Registry)                        ← name lookup for all agent components
 └── Agent.Supervisor (DynamicSupervisor)             ← owns primary agents
     └── Agent (Supervisor, :rest_for_one)            ← one per session/tenant
         ├── Agent.Mailbox (GenServer)                ← buffers user requests + peer messages
@@ -118,12 +118,37 @@ Application
                     └── ...
 ```
 
-`Agent.SubagentSupervisor` is the team. Siblings under the same supervisor are peers — they share an owner and can address each other via the registry using `{owner_pid, agent_name}` as the key.
+`Agent.SubagentSupervisor` is the team. Siblings under the same supervisor are peers — they share an owner and can address each other via the registry.
+
+### Process discovery via Registry
+
+Agent components find each other through `Agent.Registry` rather than passing pids at init. Each process registers under `{agent_name, role}` where role is `:mailbox`, `:server`, or `:subagent_supervisor`:
+
+```elixir
+# Each process registers itself in init
+Registry.register(Agent.Registry, {agent_name, :mailbox}, [])
+Registry.register(Agent.Registry, {agent_name, :server}, [])
+Registry.register(Agent.Registry, {agent_name, :subagent_supervisor}, [])
+
+# Lookup siblings by name
+defp lookup(agent_name, role) do
+  case Registry.lookup(Agent.Registry, {agent_name, role}) do
+    [{pid, _}] -> {:ok, pid}
+    [] -> {:error, :not_found}
+  end
+end
+```
+
+This solves the `:rest_for_one` startup ordering problem — Mailbox starts before Server, but doesn't need Server's pid at init. When Mailbox flushes, it looks up `{agent_name, :server}` in the registry. Server does the same for `{agent_name, :mailbox}` and `{agent_name, :subagent_supervisor}`.
+
+All processes receive `agent_name` at init. That's the only coordination point — no pid wiring, no post-init handshakes.
 
 ### Supervision strategies
 
 **`Agent` → `:rest_for_one`**
 Components are ordered: Mailbox, Server, SubagentSupervisor. If Mailbox crashes, everything restarts — an agent without its mailbox would silently lose messages. If Server crashes, SubagentSupervisor restarts too — orphaned subagents with no parent to report to should not continue running. This applies equally to primary agents and subagent-agents.
+
+When a process restarts, it re-registers in `Agent.Registry` under the same `{agent_name, role}` key. The OTP `Registry` automatically unregisters crashed processes, so the new instance claims the key cleanly.
 
 ### Application startup
 
@@ -221,16 +246,33 @@ defmodule Agent.Server do
   use GenServer
 
   defstruct [
-    :name,
-    :owner_pid,        # nil for primary agents, parent Agent.Server pid for subagent-agents
-    :mailbox_pid,
-    :subagent_supervisor,
+    :agent_name,       # registry key — used to look up mailbox, supervisor, peers
+    :parent_name,      # nil for primary agents, parent's agent_name for subagent-agents
     :definition,
     :depth,            # 0 = primary agent, increments with each agent spawn
     messages: [],      # conversation history — the full message list sent to the LLM
-    subagents: %{},    # pid → %{task_ref, monitor_ref, restart, attempts}
+    subagents: %{},    # pid → %{task_ref, name, monitor_ref, restart, attempts}
     pending_requests: %{}   # correlation_id → %{payload, on_reply}
   ]
+
+  def init({agent_name, definition, depth, parent_name}) do
+    Registry.register(Agent.Registry, {agent_name, :server}, [])
+    {:ok, %__MODULE__{
+      agent_name: agent_name,
+      parent_name: parent_name,
+      definition: definition,
+      depth: depth
+    }}
+  end
+
+  # Look up sibling processes by role
+  defp mailbox(state), do: whereis(state.agent_name, :mailbox)
+  defp subagent_sup(state), do: whereis(state.agent_name, :subagent_supervisor)
+
+  defp whereis(agent_name, role) do
+    [{pid, _}] = Registry.lookup(Agent.Registry, {agent_name, role})
+    pid
+  end
 end
 ```
 
@@ -292,7 +334,7 @@ The agent's system prompt instructs it how to handle these: proactively inform t
                "Agent '#{entry.name}' returned: #{inspect(result)}"
     }
 
-    GenServer.cast(state.mailbox_pid, {:message, wrap_message(message)})
+    GenServer.cast(mailbox(state), {:message, wrap_message(message)})
     {:noreply, state}
   end
 
@@ -311,7 +353,7 @@ The agent's system prompt instructs it how to handle these: proactively inform t
                    "Agent '#{entry.name}' crashed: #{inspect(reason)}"
         }
 
-        GenServer.cast(state.mailbox_pid, {:message, wrap_message(message)})
+        GenServer.cast(mailbox(state), {:message, wrap_message(message)})
         {:noreply, maybe_restart(state, entry, reason)}
     end
   end
@@ -378,21 +420,21 @@ defmodule Agent.Mailbox do
   use GenServer
 
   defstruct [
-    :agent_pid,
+    :agent_name,
     :max_messages,
     :flush_interval,
     :timer_ref,
     messages: []
   ]
 
-  def init({agent_pid, config}) do
-    state = %__MODULE__{
-      agent_pid:      agent_pid,
+  def init({agent_name, config}) do
+    Registry.register(Agent.Registry, {agent_name, :mailbox}, [])
+    {:ok, %__MODULE__{
+      agent_name:     agent_name,
       max_messages:   config.max_messages,
       flush_interval: config.flush_interval,
       timer_ref:      schedule_flush(config.flush_interval)
-    }
-    {:ok, state}
+    }}
   end
 
   def handle_cast({:message, message}, state) do
@@ -415,8 +457,14 @@ defmodule Agent.Mailbox do
   end
   defp flush(state) do
     cancel_timer(state.timer_ref)
-    send(state.agent_pid, {:mailbox_flush, Enum.reverse(state.messages)})
+    server = whereis(state.agent_name, :server)
+    send(server, {:mailbox_flush, Enum.reverse(state.messages)})
     %{state | messages: [], timer_ref: schedule_flush(state.flush_interval)}
+  end
+
+  defp whereis(agent_name, role) do
+    [{pid, _}] = Registry.lookup(Agent.Registry, {agent_name, role})
+    pid
   end
 
   defp schedule_flush(interval), do: Process.send_after(self(), :flush, interval)
@@ -499,35 +547,37 @@ Ephemeral. Wraps a full `Agent` supervision tree but with the same external inte
 
 ## Messaging
 
-Agents address siblings by name via the registry. The registry key is `{owner_pid, agent_name}` — siblings share the same `owner_pid` (the parent `Agent.Server` that spawned them), so names are naturally scoped without a separate team ID. All messaging is fire-and-forget — no blocking calls between agents. When a reply is needed, the sender tags the message with a correlation ID and matches on it when the reply arrives via the next mailbox flush.
+Agents address each other by name via `Agent.Registry`. All messaging is fire-and-forget — no blocking calls between agents. When a reply is needed, the sender tags the message with a correlation ID and matches on it when the reply arrives via the next mailbox flush.
+
+Messages always route through the target agent's mailbox — never directly to `Agent.Server`.
 
 ```elixir
 defmodule Agent.Messaging do
 
   # Fire and forget — no reply expected
-  def send_message(owner_pid, agent_name, payload, from_mailbox) do
-    message = %{correlation_id: nil, from_mailbox: from_mailbox, payload: payload}
-    dispatch(owner_pid, agent_name, message)
+  def send_message(target_name, payload, from_name) do
+    message = %{correlation_id: nil, from: from_name, payload: payload}
+    dispatch(target_name, message)
   end
 
   # Fire and track — reply expected, returns correlation_id for matching
-  def request(owner_pid, agent_name, payload, from_mailbox) do
+  def request(target_name, payload, from_name) do
     correlation_id = make_ref()
-    message = %{correlation_id: correlation_id, from_mailbox: from_mailbox, payload: payload}
-    case dispatch(owner_pid, agent_name, message) do
+    message = %{correlation_id: correlation_id, from: from_name, payload: payload}
+    case dispatch(target_name, message) do
       :ok   -> {:ok, correlation_id}
       error -> error
     end
   end
 
   # Reply to a received message — routes through sender's mailbox
-  def reply(%{correlation_id: id, from_mailbox: mailbox}, payload) when not is_nil(id) do
-    message = %{correlation_id: id, from_mailbox: mailbox, payload: payload}
-    GenServer.cast(mailbox, {:message, message})
+  def reply(%{correlation_id: id, from: from_name}, payload) when not is_nil(id) do
+    message = %{correlation_id: id, from: from_name, payload: payload}
+    dispatch(from_name, message)
   end
 
-  defp dispatch(owner_pid, agent_name, message) do
-    case Registry.lookup(Agent.Registry, {owner_pid, agent_name}) do
+  defp dispatch(agent_name, message) do
+    case Registry.lookup(Agent.Registry, {agent_name, :mailbox}) do
       [{pid, _}] -> GenServer.cast(pid, {:message, message}); :ok
       []         -> {:error, :not_found}
     end
@@ -539,32 +589,15 @@ The sending agent tracks pending requests in its state and matches on correlatio
 
 ```elixir
 # Sending a request to a sibling and registering a callback
-def request_from_sibling(state, agent_name, payload, on_reply) do
-  {:ok, correlation_id} = Agent.Messaging.request(state.owner_pid, agent_name, payload, state.mailbox_pid)
+def request_from_sibling(state, target_name, payload, on_reply) do
+  {:ok, correlation_id} = Agent.Messaging.request(target_name, payload, state.agent_name)
   pending = Map.put(state.pending_requests, correlation_id, %{
     payload:  payload,
     on_reply: on_reply
   })
   %{state | pending_requests: pending}
 end
-
-# On mailbox flush — split replies from new messages, resolve pending requests
-def handle_info({:mailbox_flush, messages}, state) do
-  {replies, messages} = Enum.split_with(messages, fn m ->
-    not is_nil(m.correlation_id) and Map.has_key?(state.pending_requests, m.correlation_id)
-  end)
-
-  state = Enum.reduce(replies, state, fn reply, state ->
-    {entry, pending} = Map.pop(state.pending_requests, reply.correlation_id)
-    entry.on_reply.(reply.payload)
-    %{state | pending_requests: pending}
-  end)
-
-  {:noreply, run_agent_loop(state, messages)}
-end
 ```
-
-All messages to an agent go through its mailbox process, not directly to `Agent.Server`.
 
 ---
 
@@ -646,22 +679,43 @@ end
 Each agent's registry is initialized at startup with workspace-scoped skill directories:
 
 ```elixir
-# In Agent supervisor init — registry is a child before Server
-backends = [
-  {SkillKit.Backend.Filesystem, dirs: [
-    "#{definition.workspace}/skills",
-    "#{definition.workspace}/.claude/skills",
-    Path.expand("~/.agents/skills")               # shared fallback
-  ]}
-]
+# In Agent supervisor init — all children receive agent_name, discover each other via Registry
+defmodule Agent do
+  use Supervisor
 
-children = [
-  {SkillKit.Supervisor, name: registry_sup_name, registry_name: registry_name, backends: backends},
-  {Agent.Mailbox, {self(), definition.mailbox}},
-  {Agent.Server, {definition, registry_name, depth}},
-  {DynamicSupervisor, name: subagent_supervisor_name}
-]
+  def start_link({agent_name, definition, depth, parent_name}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name})
+  end
+
+  def init({agent_name, definition, depth, parent_name}) do
+    backends = [
+      {SkillKit.Backend.Filesystem, dirs: [
+        "#{definition.workspace}/skills",
+        "#{definition.workspace}/.claude/skills",
+        Path.expand("~/.agents/skills")               # shared fallback
+      ]}
+    ]
+
+    children = [
+      {SkillKit.Supervisor,
+        name: :"#{agent_name}_skill_sup",
+        registry_name: :"#{agent_name}_skill_registry",
+        backends: backends},
+      {Agent.Mailbox, {agent_name, definition.mailbox}},
+      {Agent.Server, {agent_name, definition, depth, parent_name}},
+      {DynamicSupervisor, name: :"#{agent_name}_subagent_sup"}
+    ]
+
+    # SubagentSupervisor registers itself — but DynamicSupervisor doesn't call
+    # Registry.register automatically. Agent.Server does this in handle_continue
+    # after all children are started.
+
+    Supervisor.init(children, strategy: :rest_for_one)
+  end
+end
 ```
+
+The `DynamicSupervisor` is started with an atom name (`:"#{agent_name}_subagent_sup"`) so `Agent.Server` can spawn children directly via the atom name — no Registry lookup needed for the supervisor.
 
 ---
 
