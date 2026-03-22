@@ -8,6 +8,8 @@ defmodule Anthropic.Client do
 
   @default_endpoint "https://api.anthropic.com"
 
+  @api_version "2023-06-01"
+
   @type t :: %__MODULE__{
           api_key: String.t(),
           endpoint: String.t()
@@ -24,5 +26,52 @@ defmodule Anthropic.Client do
   def new(opts) do
     _ = Keyword.fetch!(opts, :api_key)
     struct!(__MODULE__, opts)
+  end
+
+  @doc """
+  Sends a streaming request to the Anthropic Messages API.
+
+  Returns `{:ok, Enumerable.t()}` where each element is a parsed
+  JSON map from an SSE `data:` line. Non-data lines are skipped.
+
+  `opts` are merged into the request body (e.g. `model`, `max_tokens`).
+  """
+  @spec stream(t(), list(map()), keyword()) :: {:ok, Enumerable.t()} | {:error, term()}
+  def stream(%__MODULE__{} = client, messages, opts \\ []) do
+    body =
+      opts
+      |> Keyword.take([:model, :max_tokens, :system, :tools, :temperature, :top_p])
+      |> Map.new()
+      |> Map.put(:messages, messages)
+      |> Map.put(:stream, true)
+
+    case Req.post(
+           url: client.endpoint <> "/v1/messages",
+           headers: [
+             {"x-api-key", client.api_key},
+             {"anthropic-version", @api_version},
+             {"content-type", "application/json"}
+           ],
+           json: body,
+           into: :self
+         ) do
+      {:ok, %{status: 200} = resp} ->
+        {:ok, sse_stream(resp.body)}
+
+      {:ok, resp} ->
+        {:error, {resp.status, resp.body}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp sse_stream(async_body) do
+    Stream.flat_map(async_body, fn chunk ->
+      chunk
+      |> String.split("\n")
+      |> Enum.filter(&String.starts_with?(&1, "data: "))
+      |> Enum.map(fn "data: " <> json -> Jason.decode!(json) end)
+    end)
   end
 end

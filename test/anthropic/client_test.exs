@@ -19,4 +19,91 @@ defmodule Anthropic.ClientTest do
       assert_raise KeyError, fn -> Client.new([]) end
     end
   end
+
+  describe "stream/3" do
+    setup do
+      bypass = Bypass.open()
+      client = Client.new(api_key: "sk-test", endpoint: "http://localhost:#{bypass.port}")
+      {:ok, bypass: bypass, client: client}
+    end
+
+    test "streams parsed SSE events from messages endpoint", %{bypass: bypass, client: client} do
+      Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
+        conn =
+          conn
+          |> Plug.Conn.put_resp_content_type("text/event-stream")
+          |> Plug.Conn.send_chunked(200)
+
+        chunks = [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-sonnet-4-20250514\",\"stop_reason\":null}}\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\n",
+          "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+        ]
+
+        Enum.reduce(chunks, conn, fn chunk, conn ->
+          {:ok, conn} = Plug.Conn.chunk(conn, chunk)
+          conn
+        end)
+      end)
+
+      messages = [%{"role" => "user", "content" => "Hi"}]
+
+      assert {:ok, stream} =
+               Client.stream(client, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+
+      events = Enum.to_list(stream)
+      assert length(events) == 3
+      assert %{"type" => "message_start"} = List.first(events)
+      assert %{"type" => "message_stop"} = List.last(events)
+    end
+
+    test "returns error tuple on non-200 response", %{bypass: bypass, client: client} do
+      Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
+        Plug.Conn.send_resp(
+          conn,
+          401,
+          ~s({"error":{"type":"authentication_error","message":"invalid api key"}})
+        )
+      end)
+
+      messages = [%{"role" => "user", "content" => "Hi"}]
+
+      assert {:error, {401, _body}} =
+               Client.stream(client, messages,
+                 model: "claude-sonnet-4-20250514",
+                 max_tokens: 1024
+               )
+    end
+
+    test "sends correct headers and body", %{bypass: bypass, client: client} do
+      Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        assert Plug.Conn.get_req_header(conn, "x-api-key") == ["sk-test"]
+        assert Plug.Conn.get_req_header(conn, "anthropic-version") == ["2023-06-01"]
+        assert decoded["model"] == "claude-sonnet-4-20250514"
+        assert decoded["max_tokens"] == 1024
+        assert decoded["stream"] == true
+        assert [%{"role" => "user", "content" => "Hi"}] = decoded["messages"]
+
+        conn =
+          conn
+          |> Plug.Conn.put_resp_content_type("text/event-stream")
+          |> Plug.Conn.send_chunked(200)
+
+        {:ok, conn} =
+          Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+
+        conn
+      end)
+
+      messages = [%{"role" => "user", "content" => "Hi"}]
+
+      {:ok, stream} =
+        Client.stream(client, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+
+      Enum.to_list(stream)
+    end
+  end
 end
