@@ -10,7 +10,7 @@ defmodule SkillKit.Agent.Server do
   use GenServer
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Agent.ToolRouter
+  alias SkillKit.Agent.ToolBuilder
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
 
@@ -22,6 +22,7 @@ defmodule SkillKit.Agent.Server do
     :scope,
     :registry,
     :backend,
+    :kits,
     messages: [],
     subagents: %{},
     pending_requests: %{}
@@ -35,6 +36,7 @@ defmodule SkillKit.Agent.Server do
           scope: term(),
           registry: atom(),
           backend: {module(), keyword()} | nil,
+          kits: list(),
           messages: list(),
           subagents: map(),
           pending_requests: map()
@@ -53,6 +55,7 @@ defmodule SkillKit.Agent.Server do
     Registry.register(registry, {agent_name, :server}, [])
 
     backend = Keyword.get(opts, :backend)
+    kits = Keyword.get(opts, :kits, [])
 
     {:ok, %__MODULE__{
       agent_name: agent_name,
@@ -61,7 +64,8 @@ defmodule SkillKit.Agent.Server do
       depth: depth,
       scope: scope,
       registry: registry,
-      backend: backend
+      backend: backend,
+      kits: kits
     }}
   end
 
@@ -140,7 +144,9 @@ defmodule SkillKit.Agent.Server do
   defp run_agent_loop(state, new_messages) do
     state = %{state | messages: state.messages ++ new_messages}
 
-    llm_opts = build_llm_opts(state)
+    tools = ToolBuilder.build_tools(state.kits)
+    llm_opts = build_llm_opts(state) ++ [tools: tools]
+
     {:ok, stream} = SkillKit.LLM.stream(state.messages, llm_opts)
     response = stream |> Enum.to_list() |> Decoder.decode_events()
 
@@ -157,18 +163,8 @@ defmodule SkillKit.Agent.Server do
         state
 
       tool_calls ->
-        classifier = fn _tc -> :local end
-        local_handler = &execute_local_tool/1
-
-        {results, state} = ToolRouter.execute(tool_calls, state, classifier, local_handler)
-
-        Enum.each(tool_calls, fn tc ->
-          :telemetry.execute(
-            [:skill_kit, :agent, :tool_call],
-            %{},
-            %{agent_name: state.agent_name, tool_call: tc}
-          )
-        end)
+        classifier = ToolBuilder.classifier(state.kits)
+        {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
         Enum.each(results, fn result ->
           :telemetry.execute(
@@ -183,11 +179,51 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp execute_local_tool(%Message.ToolCall{id: id, name: name, input: input}) do
-    %Message.ToolResult{
-      tool_call_id: id,
-      content: "Tool '#{name}' executed with input: #{inspect(input)}"
-    }
+  defp execute_tool_calls(tool_calls, state, classifier) do
+    Enum.map_reduce(tool_calls, state, fn tc, acc ->
+      :telemetry.execute(
+        [:skill_kit, :agent, :tool_call],
+        %{},
+        %{agent_name: acc.agent_name, tool_call: tc}
+      )
+
+      case classifier.(tc) do
+        :executor -> {execute_command(tc, acc), acc}
+        :activate_skill -> {activate_skill(tc, acc), acc}
+        :subagent -> {subagent_placeholder(tc), acc}
+        :builtin -> {builtin_placeholder(tc), acc}
+      end
+    end)
+  end
+
+  defp execute_command(%Message.ToolCall{id: id, input: input}, state) do
+    command = Map.get(input, "command", "")
+    context = %{cwd: state.definition.workspace, scope: state.scope}
+
+    case SkillKit.Executor.Shell.execute(command, context) do
+      {:ok, output} -> %Message.ToolResult{tool_call_id: id, content: output}
+      {:error, {output, _code}} -> %Message.ToolResult{tool_call_id: id, content: output, is_error: true}
+    end
+  end
+
+  defp activate_skill(%Message.ToolCall{id: id, input: input}, state) do
+    skill_name = Map.get(input, "name", "")
+    skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
+
+    case SkillKit.Catalog.activate(skill_registry, skill_name, %{}) do
+      {:ok, rendered_body} ->
+        %Message.ToolResult{tool_call_id: id, content: rendered_body}
+      {:error, reason} ->
+        %Message.ToolResult{tool_call_id: id, content: "Error: #{inspect(reason)}", is_error: true}
+    end
+  end
+
+  defp subagent_placeholder(%Message.ToolCall{id: id, name: name}) do
+    %Message.ToolResult{tool_call_id: id, content: "Subagent '#{name}' delegation not yet implemented."}
+  end
+
+  defp builtin_placeholder(%Message.ToolCall{id: id, name: name}) do
+    %Message.ToolResult{tool_call_id: id, content: "Builtin '#{name}' not yet implemented."}
   end
 
   defp build_llm_opts(state) do

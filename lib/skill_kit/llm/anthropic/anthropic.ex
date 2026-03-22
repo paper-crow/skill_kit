@@ -14,7 +14,10 @@ defmodule SkillKit.LLM.Anthropic do
 
   @impl true
   def stream(config, messages, opts) do
-    encoded = Encoder.encode_messages(messages)
-    Anthropic.stream(config, encoded, opts)
+    encoded_messages = Encoder.encode_messages(messages)
+    {tools, opts} = Keyword.pop(opts, :tools, [])
+    encoded_tools = Encoder.encode_tools(tools)
+    opts = if encoded_tools != [], do: Keyword.put(opts, :tools, encoded_tools), else: opts
+    Anthropic.stream(config, encoded_messages, opts)
   end
 end

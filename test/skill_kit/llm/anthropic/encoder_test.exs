@@ -88,4 +88,20 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
       assert Enum.map(encoded, & &1["role"]) == ["user", "assistant", "user", "assistant"]
     end
   end
+
+  describe "encode_tools/1" do
+    test "encodes tool definitions to Anthropic format" do
+      tools = [
+        %SkillKit.Executor.ToolDefinition{
+          name: "bash",
+          description: "Run a command",
+          input_schema: %{"type" => "object", "properties" => %{"command" => %{"type" => "string"}}}
+        }
+      ]
+
+      encoded = Encoder.encode_tools(tools)
+      assert [%{"name" => "bash", "description" => "Run a command", "input_schema" => schema}] = encoded
+      assert schema["properties"]["command"]
+    end
+  end
 end

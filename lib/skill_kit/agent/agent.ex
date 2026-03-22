@@ -55,11 +55,23 @@ defmodule SkillKit.Agent do
 
     server_opts = Map.get(opts, :server_opts, [])
 
+    kits = load_kits_from_backends(backends)
+    server_opts = Keyword.put(server_opts, :kits, kits)
+
     children = [
       {Infrastructure, {agent_name, definition, backends, registry}},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
+  end
+
+  defp load_kits_from_backends(backends) do
+    Enum.flat_map(backends, fn {mod, config} ->
+      case mod.load_kits(config) do
+        {:ok, kits} -> kits
+        {:error, _} -> []
+      end
+    end)
   end
 end

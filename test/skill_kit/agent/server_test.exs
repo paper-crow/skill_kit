@@ -120,6 +120,42 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "tools from kits" do
+    test "passes tools to LLM when kits have skills", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, opts ->
+        tools = Keyword.get(opts, :tools, [])
+        assert Enum.any?(tools, fn t -> t.name == "bash" end)
+        assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
+
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "ok"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      kits = [%SkillKit.Kit{
+        name: "test",
+        skills: [%SkillKit.Skill{name: "tools:echo", namespace: "tools", description: "Echo"}]
+      }]
+
+      backend = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, backend: backend, kits: kits})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "hi"}]})
+      Process.sleep(50)
+    end
+  end
+
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
       registry: registry,
