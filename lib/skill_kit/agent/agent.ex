@@ -53,9 +53,11 @@ defmodule SkillKit.Agent do
       registry: registry
     } = opts
 
+    server_opts = Map.get(opts, :server_opts, [])
+
     children = [
       {Infrastructure, {agent_name, definition, backends, registry}},
-      {Core, {agent_name, definition, depth, parent_name, scope, registry}}
+      {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

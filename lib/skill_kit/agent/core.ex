@@ -14,14 +14,18 @@ defmodule SkillKit.Agent.Core do
   alias SkillKit.Agent.SubagentSupervisor
 
   def start_link({agent_name, definition, depth, parent_name, scope, registry}) do
-    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope, registry})
+    start_link({agent_name, definition, depth, parent_name, scope, registry, []})
+  end
+
+  def start_link({agent_name, definition, depth, parent_name, scope, registry, opts}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope, registry, opts})
   end
 
   @impl true
-  def init({agent_name, definition, depth, parent_name, scope, registry}) do
+  def init({agent_name, definition, depth, parent_name, scope, registry, opts}) do
     children = [
       {Mailbox, {agent_name, definition.mailbox, registry}},
-      {Server, {agent_name, definition, depth, parent_name, scope, registry}},
+      {Server, {agent_name, definition, depth, parent_name, scope, registry, opts}},
       {SubagentSupervisor, {agent_name, registry}}
     ]
 
