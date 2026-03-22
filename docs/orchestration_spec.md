@@ -1088,3 +1088,19 @@ Explicit session serialization is not needed. `GenServer` already processes mess
 ### Workspace isolation
 
 Skill discovery is workspace-scoped so agents are naturally isolated. The shared `~/.agents/skills/` fallback is available to all agents. If two agents need the same skill with different behaviour, each workspace defines its own version and the shared fallback is never reached.
+
+---
+
+## Follow-up: Not in scope for orchestration
+
+The following items surfaced during the spec audit but are outside the orchestration layer's scope. They need to be addressed before or during implementation:
+
+1. **Tool registration and routing.** How the agent builds its tool list for LLM calls (combining skills, agent definitions, and built-in tools) and how `classify_tool_calls` / `local?/1` maps tool names to execution strategies (skill subagent, agent subagent, local executor). Likely a `ToolRouter` module.
+
+2. **User message entry point.** The public API for sending messages into a primary agent from the host application (e.g. `Agent.send(agent_name, message)`). Defines the boundary between the host and the orchestration layer.
+
+3. **Agent.Definition LLM opts.** The Definition struct needs to carry enough LLM configuration to build opts for `SkillKit.LLM.stream/2` — backend, model, and any provider-specific config. May use the same `skill_kit:backend:*` metadata convention as skills.
+
+4. **Context window management.** Conversation history grows unbounded. Needs truncation, summarization, or sliding window strategy before hitting provider context limits.
+
+5. **Streaming vs collecting.** The agent loop currently collects the full LLM response before processing. Needs to define when `response_chunk` telemetry events fire — during streaming or after — and whether the host can receive chunks in real time.
