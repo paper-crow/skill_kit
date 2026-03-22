@@ -44,6 +44,7 @@ defmodule SkillKit.MixProject do
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.2", only: [:dev, :test]},
       {:req, "~> 0.5"},
+      {:telemetry, "~> 1.0"},
       {:mox, "~> 1.2", only: :test},
       {:bypass, "~> 2.1", only: :test}
     ]
