@@ -180,6 +180,23 @@ Following the Agent Skills spec scan convention:
 
 Project-scoped agents override user-scoped agents of the same name.
 
+### Discovery and hot reload
+
+Agent definitions and skills are loaded at agent startup and auto-reloaded when files change on disk. The same mechanism covers both `AGENT.md` and `SKILL.md` files.
+
+**Boot-time:** When an agent starts, its `Agent.Infrastructure` supervisor loads:
+- Skills from workspace directories via `SkillKit.Backend.Filesystem` into the agent's skill registry
+- Agent definitions from discovery paths into an agent definition registry (used to resolve tool calls that map to other agents)
+
+**Runtime:** A file watcher monitors the workspace directories. When a file changes:
+- `SKILL.md` changes → `SkillKit.Registry` reloads the affected skill (re-invokes the backend)
+- `AGENT.md` changes → agent definition registry updates the definition
+- New files → registered, deleted files → unregistered
+
+No process restarts needed — the registries update in place. An agent that spawns a subagent-agent always reads the latest definition from the registry, so changes take effect on the next spawn.
+
+The file watcher is a single process per agent (part of `Agent.Infrastructure`), using `:fs` or `FileSystem` to receive OS-level change notifications. It debounces rapid changes and reloads through the existing backend interface.
+
 ---
 
 ## Supervision Tree
