@@ -354,9 +354,7 @@ defmodule SkillKit.Registry do
     end
   end
 
-  defp valid_segment?(segment) when is_binary(segment) do
+  defp valid_segment?(segment) do
     String.match?(segment, @segment_regex)
   end
-
-  defp valid_segment?(_), do: false
 end
