@@ -41,6 +41,19 @@ defmodule SkillKit.Executor.ShellTest do
       # Should succeed — just proves it doesn't crash without :cwd
       assert is_binary(output)
     end
+
+    test "passes environment variables to the command" do
+      context = %{env: [{"SKILL_KIT_TEST_VAR", "hello_from_skill"}]}
+      assert {:ok, output} = Shell.execute("echo $SKILL_KIT_TEST_VAR", context)
+      assert String.trim(output) == "hello_from_skill"
+    end
+
+    test "preserves existing environment when adding vars" do
+      context = %{env: [{"SKILL_KIT_EXTRA", "extra"}]}
+      assert {:ok, output} = Shell.execute("echo $HOME", context)
+      # HOME should still be set — env merges, not replaces
+      refute String.trim(output) == ""
+    end
   end
 
   describe "resume/3" do

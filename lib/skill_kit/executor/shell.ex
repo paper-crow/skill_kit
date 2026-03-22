@@ -27,10 +27,22 @@ defmodule SkillKit.Executor.Shell do
   defp port_opts(context) do
     []
     |> maybe_add_cd(context)
+    |> maybe_add_env(context)
   end
 
   defp maybe_add_cd(opts, %{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd} | opts]
   defp maybe_add_cd(opts, _context), do: opts
+
+  defp maybe_add_env(opts, %{env: env}) when is_list(env) do
+    merged =
+      System.get_env()
+      |> Map.merge(Map.new(env))
+      |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
+
+    [{:env, merged} | opts]
+  end
+
+  defp maybe_add_env(opts, _context), do: opts
 
   defp collect(port, acc) do
     receive do
