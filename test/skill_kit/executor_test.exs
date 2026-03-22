@@ -50,6 +50,22 @@ defmodule SkillKit.ExecutorTest do
       assert {:ok, result} = Executor.run(registry, skill(), "echo clean", %{})
       assert result.status == :complete
     end
+
+    test "passes context with cwd through to Shell executor", %{registry: registry} do
+      tmp = System.tmp_dir!()
+      # Resolve symlinks for macOS
+      {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
+      resolved_tmp = String.trim(resolved)
+      context = %{cwd: tmp}
+      assert {:ok, result} = Executor.run(registry, skill(), "pwd", context)
+      assert result.results["execute"] == {:ok, resolved_tmp <> "\n"}
+    end
+
+    test "passes context with env through to Shell executor", %{registry: registry} do
+      context = %{env: [{"SKILL_KIT_INT_TEST", "integration"}]}
+      assert {:ok, result} = Executor.run(registry, skill(), "echo $SKILL_KIT_INT_TEST", context)
+      assert result.results["execute"] == {:ok, "integration\n"}
+    end
   end
 
   describe "resume/2" do
