@@ -52,7 +52,7 @@ defmodule SkillKit.Executor.ShellTest do
       context = %{env: [{"SKILL_KIT_EXTRA", "extra"}]}
       assert {:ok, output} = Shell.execute("echo $HOME", context)
       # HOME should still be set — env merges, not replaces
-      refute String.trim(output) == ""
+      assert String.trim(output) == System.get_env("HOME")
     end
   end
 
