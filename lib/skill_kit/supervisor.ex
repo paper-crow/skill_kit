@@ -35,14 +35,6 @@ defmodule SkillKit.Supervisor do
           skill_dirs: [Path.join(Application.app_dir(:my_app), "priv/skills")]}
       ]
 
-  To auto-register code skill modules at boot:
-
-      children = [
-        {SkillKit.Supervisor,
-          registry_name: MyApp.SkillRegistry,
-          skills: [MyApp.Skills.Search, MyApp.Skills.Summarize]}
-      ]
-
   ## Supervision Strategy
 
   Uses `:one_for_one` with a single child (`SkillKit.Registry`). `SkillKit.Loader`
@@ -60,10 +52,6 @@ defmodule SkillKit.Supervisor do
   - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at
     boot. Scanning is recursive. Malformed files are skipped with a warning.
     Defaults to `[]`.
-
-  - `:skills` — list of module atoms implementing the `SkillKit.Skill` behaviour
-    to register at boot. Each module is validated before registration.
-    Defaults to `[]`.
   """
 
   use Supervisor
@@ -77,7 +65,6 @@ defmodule SkillKit.Supervisor do
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
   - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at boot.
-  - `:skills` — list of module atoms implementing `SkillKit.Skill` to register at boot.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -89,10 +76,9 @@ defmodule SkillKit.Supervisor do
   def init(opts) do
     registry_name = Keyword.get(opts, :registry_name, SkillKit.Registry)
     skill_dirs = Keyword.get(opts, :skill_dirs, [])
-    skills = Keyword.get(opts, :skills, [])
 
     children = [
-      {SkillKit.Registry, name: registry_name, skill_dirs: skill_dirs, skills: skills}
+      {SkillKit.Registry, name: registry_name, skill_dirs: skill_dirs}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

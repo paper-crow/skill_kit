@@ -5,14 +5,6 @@ defmodule SkillKit.RegistryTest do
 
   alias SkillKit.{Registry, Skill}
 
-  # ---------------------------------------------------------------------------
-  # Test helper: a code skill module for boot-time module loading tests
-  # Defined at top level to avoid ExUnit namespace prefix issue
-  # ---------------------------------------------------------------------------
-
-  # (SkillKit.TestSkills.Echo is defined in skill_test.exs at top level
-  #  and is available here since it's compiled before this test runs)
-
   setup do
     name = :"registry_#{:erlang.unique_integer([:positive])}"
     registry = start_supervised!({Registry, name: name})
@@ -253,7 +245,6 @@ defmodule SkillKit.RegistryTest do
       start_supervised!({Registry, name: name, skill_dirs: [@nested_fixtures_path]})
 
       assert {:ok, skill} = Registry.get_skill(name, "admin:delete-user")
-      assert skill.type == :prompt
       assert skill.description == "Delete a user account"
     end
 
@@ -286,29 +277,7 @@ defmodule SkillKit.RegistryTest do
       assert {:error, :not_found} = Registry.get_skill(name, "should:ignore")
     end
 
-    test "skills: modules auto-register code skills at boot" do
-      name = :"boot_modules_#{:erlang.unique_integer([:positive])}"
-      start_supervised!({Registry, name: name, skills: [SkillKit.TestSkills.Echo]})
-
-      assert {:ok, skill} = Registry.get_skill(name, "test:echo")
-      assert skill.type == :code
-      assert skill.module == SkillKit.TestSkills.Echo
-    end
-
-    test "skills: code skill has all fields populated" do
-      name = :"boot_fields_#{:erlang.unique_integer([:positive])}"
-      start_supervised!({Registry, name: name, skills: [SkillKit.TestSkills.Echo]})
-
-      {:ok, skill} = Registry.get_skill(name, "test:echo")
-      assert skill.type == :code
-      assert skill.name == "test:echo"
-      assert skill.namespace == "test"
-      assert skill.description == "Echoes input"
-      assert skill.required_scope == ["test:read"]
-      assert skill.module == SkillKit.TestSkills.Echo
-    end
-
-    test "empty skill_dirs and skills defaults — backward compatibility" do
+    test "empty skill_dirs defaults — backward compatibility" do
       name = :"boot_empty_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, name: name})
 
@@ -320,7 +289,7 @@ defmodule SkillKit.RegistryTest do
 
       start_supervised!({
         Registry,
-        name: name, skill_dirs: [@valid_fixtures_path], skills: [SkillKit.TestSkills.Echo]
+        name: name, skill_dirs: [@valid_fixtures_path]
       })
 
       skills = Registry.list_skills(name)
@@ -328,7 +297,6 @@ defmodule SkillKit.RegistryTest do
 
       assert "files:summarize" in skill_names
       assert "tools:greet" in skill_names
-      assert "test:echo" in skill_names
     end
   end
 end

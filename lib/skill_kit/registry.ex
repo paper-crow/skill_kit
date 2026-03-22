@@ -25,15 +25,11 @@ defmodule SkillKit.Registry do
   ## Boot-time Loading
 
   When starting the registry via a supervision tree, you can pass `skill_dirs`
-  and/or `skills` opts to automatically load skills at boot time:
+  to automatically load skills at boot time:
 
   - `:skill_dirs` — list of directory paths to scan for `.skill.md` files.
     Scanning is recursive (uses `Path.wildcard("**/*.skill.md")`). Malformed
     files are skipped with a warning; the registry still starts successfully.
-
-  - `:skills` — list of module atoms implementing the `SkillKit.Skill` behaviour.
-    Each module is validated (all 4 callbacks required) and registered as a
-    `%Skill{type: :code}` struct.
 
   Boot loading happens in `handle_continue/2`, which runs before any external
   calls can reach the GenServer. This means skills are available immediately
@@ -89,8 +85,6 @@ defmodule SkillKit.Registry do
   - `:name` — the name to register the GenServer under. Defaults to `__MODULE__`
     (`SkillKit.Registry`). Pass a unique atom for test isolation.
   - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at boot.
-  - `:skills` — list of module atoms implementing `SkillKit.Skill` behaviour to
-    register at boot.
 
   ## Examples
 
@@ -239,31 +233,24 @@ defmodule SkillKit.Registry do
   @impl true
   def handle_continue(:load_skills, state) do
     skill_dirs = Keyword.get(state.opts, :skill_dirs, [])
-    skill_modules = Keyword.get(state.opts, :skills, [])
 
     # Load from directories
-    {dir_skills, dir_errors} = load_from_dirs(skill_dirs)
-
-    # Load from explicit modules
-    {mod_skills, mod_errors} = load_from_modules(skill_modules)
-
-    all_skills = dir_skills ++ mod_skills
-    all_errors = dir_errors ++ mod_errors
+    {skills, errors} = load_from_dirs(skill_dirs)
 
     # Register all successfully loaded skills
-    Enum.each(all_skills, fn skill ->
+    Enum.each(skills, fn skill ->
       :ets.insert(state.table, {skill.name, skill})
     end)
 
     # Log batch summary if any errors
-    if all_errors != [] do
+    if errors != [] do
       error_summary =
-        Enum.map_join(all_errors, ", ", fn {source, reason} ->
+        Enum.map_join(errors, ", ", fn {source, reason} ->
           "#{source}: #{inspect(reason)}"
         end)
 
       Logger.warning(
-        "SkillKit: loaded #{length(all_skills)} skills, #{length(all_errors)} skipped (#{error_summary})"
+        "SkillKit: loaded #{length(skills)} skills, #{length(errors)} skipped (#{error_summary})"
       )
     end
 
@@ -321,80 +308,6 @@ defmodule SkillKit.Registry do
       {skills_acc ++ new_skills, errors_acc ++ new_errors}
     end)
   end
-
-  # Validates and constructs %Skill{type: :code} structs from a list of module atoms.
-  # Returns {[%Skill{}], [{source, reason}]}
-  @spec load_from_modules([module()]) :: {[Skill.t()], [{String.t(), term()}]}
-  defp load_from_modules(modules) do
-    Enum.reduce(modules, {[], []}, fn mod, {skills_acc, errors_acc} ->
-      case build_code_skill(mod) do
-        {:ok, skill} ->
-          {[skill | skills_acc], errors_acc}
-
-        {:error, reason} ->
-          {skills_acc, [{inspect(mod), reason} | errors_acc]}
-      end
-    end)
-  end
-
-  # Builds a %Skill{type: :code} struct from a module atom.
-  # Validates the module is loaded and exports all 4 behaviour callbacks.
-  # Returns {:ok, %Skill{}} or {:error, reason}
-  @spec build_code_skill(module()) :: {:ok, Skill.t()} | {:error, term()}
-  defp build_code_skill(mod) do
-    with :ok <- ensure_module_available(mod),
-         :ok <- validate_callbacks(mod),
-         name = mod.name(),
-         {:ok, namespace} <- validate_skill_name(name) do
-      {:ok,
-       %Skill{
-         name: name,
-         namespace: namespace,
-         description: mod.description(),
-         required_scope: mod.required_scope(),
-         location: inspect(mod)
-       }}
-    end
-  end
-
-  # Checks if a module is available — either already loaded in memory (e.g., test
-  # modules compiled in-memory by ExUnit) or loadable from disk via Code.ensure_loaded/1.
-  @spec ensure_module_available(module()) :: :ok | {:error, term()}
-  defp ensure_module_available(mod) do
-    cond do
-      :erlang.module_loaded(mod) -> :ok
-      match?({:module, _}, Code.ensure_loaded(mod)) -> :ok
-      true -> {:error, :nofile}
-    end
-  end
-
-  # Verifies that a module exports all 4 required behaviour callbacks.
-  @spec validate_callbacks(module()) :: :ok | {:error, {:missing_callbacks, [atom()]}}
-  defp validate_callbacks(mod) do
-    required = [{:name, 0}, {:description, 0}, {:required_scope, 0}, {:execute, 2}]
-
-    missing =
-      Enum.reject(required, fn {fun, arity} ->
-        function_exported?(mod, fun, arity)
-      end)
-
-    case missing do
-      [] -> :ok
-      missing -> {:error, {:missing_callbacks, missing}}
-    end
-  end
-
-  # Validates a skill name follows "namespace:skill_name" format.
-  # Returns {:ok, namespace} or {:error, :invalid_name_format}
-  @spec validate_skill_name(String.t()) :: {:ok, String.t()} | {:error, :invalid_name_format}
-  defp validate_skill_name(name) when is_binary(name) do
-    case parse_namespaced_name(name) do
-      {:ok, {namespace, _skill_name}} -> {:ok, namespace}
-      :error -> {:error, :invalid_name_format}
-    end
-  end
-
-  defp validate_skill_name(_), do: {:error, :invalid_name_format}
 
   # ---------------------------------------------------------------------------
   # Private Helpers
