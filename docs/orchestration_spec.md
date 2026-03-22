@@ -994,6 +994,66 @@ All processes are discovered via `Registry.lookup(Agent.Registry, {agent_name, r
 
 ---
 
+## Telemetry
+
+The orchestration layer emits `:telemetry` events for all observable agent activity. The host application attaches handlers to route events to the user — Phoenix channels, WebSockets, CLI, logging, etc. The agent never knows or cares who's listening.
+
+Telemetry handlers execute synchronously in the emitting process, so events arrive in natural order (tool call before tool result, response chunks in sequence). If a handler needs to do expensive work (e.g. push to a WebSocket), it should hand off to another process to avoid blocking the agent.
+
+### Events
+
+| Event | Measurements | Metadata | Emitted when |
+|-------|-------------|----------|--------------|
+| `[:skill_kit, :agent, :turn_start]` | `%{}` | `%{agent_name, message_count}` | Agent loop begins processing messages |
+| `[:skill_kit, :agent, :response]` | `%{}` | `%{agent_name, response}` | LLM produces a response (text and/or tool calls) |
+| `[:skill_kit, :agent, :response_chunk]` | `%{}` | `%{agent_name, chunk}` | Single chunk from LLM stream (for real-time streaming to user) |
+| `[:skill_kit, :agent, :tool_call]` | `%{}` | `%{agent_name, tool_call}` | Agent is executing a tool call |
+| `[:skill_kit, :agent, :tool_result]` | `%{}` | `%{agent_name, tool_call_id, result}` | Tool call completed |
+| `[:skill_kit, :agent, :subagent_spawned]` | `%{}` | `%{agent_name, subagent_name, task_ref}` | Background subagent started |
+| `[:skill_kit, :agent, :subagent_result]` | `%{}` | `%{agent_name, subagent_name, task_ref, result}` | Background subagent completed |
+| `[:skill_kit, :agent, :turn_end]` | `%{duration}` | `%{agent_name}` | Agent loop finished, no more tool calls |
+
+### Host application example
+
+```elixir
+# In application startup — attach handlers for user delivery
+:telemetry.attach_many("user-delivery", [
+  [:skill_kit, :agent, :response_chunk],
+  [:skill_kit, :agent, :subagent_spawned],
+  [:skill_kit, :agent, :subagent_result]
+], &MyApp.AgentHandler.handle_event/4, %{})
+
+defmodule MyApp.AgentHandler do
+  def handle_event([:skill_kit, :agent, :response_chunk], _measurements, metadata, _config) do
+    MyApp.Endpoint.broadcast("agent:#{metadata.agent_name}", "chunk", metadata.chunk)
+  end
+
+  def handle_event([:skill_kit, :agent, :subagent_spawned], _measurements, metadata, _config) do
+    MyApp.Endpoint.broadcast("agent:#{metadata.agent_name}", "status",
+      %{message: "Started background task: #{metadata.subagent_name}"})
+  end
+
+  def handle_event([:skill_kit, :agent, :subagent_result], _measurements, metadata, _config) do
+    MyApp.Endpoint.broadcast("agent:#{metadata.agent_name}", "status",
+      %{message: "Background task complete: #{metadata.subagent_name}"})
+  end
+end
+```
+
+The `deliver_response` call in the agent loop is simply a telemetry emit:
+
+```elixir
+defp deliver_response(state, response) do
+  :telemetry.execute(
+    [:skill_kit, :agent, :response],
+    %{},
+    %{agent_name: state.agent_name, response: response}
+  )
+end
+```
+
+---
+
 ## Open Considerations
 
 ### Output size
