@@ -24,3 +24,11 @@ defmodule SkillKit.RegistryTest.FailingBackend do
     {:error, :database_unavailable}
   end
 end
+
+defmodule SkillKit.TestBackends.SkillsOnly do
+  @moduledoc false
+  @behaviour SkillKit.Backend
+
+  @impl true
+  def load_skills(_config), do: {:ok, []}
+end

@@ -1,11 +1,10 @@
 defmodule SkillKit.Agent.Discovery do
   @moduledoc """
-  Discovers agent definitions from filesystem directories.
+  Loads agent definitions from backends.
 
-  Scans directories for subdirectories containing `AGENT.md` files,
-  parses them into `%Agent.Definition{}` structs. Directories are
-  scanned in order — first-discovered-wins on name conflicts
-  (project-scoped agents override user-scoped agents).
+  Iterates over configured backends, calling `load_agents/1` on those
+  that implement it. First-loaded-wins on name conflicts — backends
+  listed first take priority.
   """
 
   alias SkillKit.Agent.Definition
@@ -13,20 +12,19 @@ defmodule SkillKit.Agent.Discovery do
   require Logger
 
   @doc """
-  Discovers agent definitions from the given directories.
+  Loads agent definitions from the given backends.
 
-  Scans each directory for immediate subdirectories containing
-  an `AGENT.md` file. Returns `{:ok, [%Definition{}]}`.
+  Each backend is a `{module, config}` tuple. Backends that don't
+  implement `load_agents/1` are silently skipped. Failed backends
+  are logged and skipped.
 
-  Invalid files are logged and skipped. Nonexistent directories
-  are silently ignored.
+  Returns `{:ok, [%Definition{}]}` with first-loaded-wins dedup.
   """
-  @spec discover([Path.t()]) :: {:ok, [Definition.t()]}
-  def discover(dirs) do
+  @spec discover([{module(), keyword()}]) :: {:ok, [Definition.t()]}
+  def discover(backends) do
     {definitions, _seen} =
-      dirs
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.flat_map(&scan_dir/1)
+      backends
+      |> Enum.flat_map(&load_from_backend/1)
       |> Enum.reduce({[], MapSet.new()}, fn definition, {acc, seen} ->
         if MapSet.member?(seen, definition.name) do
           {acc, seen}
@@ -38,22 +36,18 @@ defmodule SkillKit.Agent.Discovery do
     {:ok, Enum.reverse(definitions)}
   end
 
-  defp scan_dir(dir) do
-    dir
-    |> File.ls!()
-    |> Enum.map(&Path.join(dir, &1))
-    |> Enum.filter(&File.dir?/1)
-    |> Enum.map(&Path.join(&1, "AGENT.md"))
-    |> Enum.filter(&File.exists?/1)
-    |> Enum.flat_map(fn path ->
-      case Definition.parse(path) do
-        {:ok, definition} ->
-          [definition]
+  defp load_from_backend({mod, config}) do
+    Code.ensure_loaded(mod)
 
+    if function_exported?(mod, :load_agents, 1) do
+      case mod.load_agents(config) do
+        {:ok, agents} -> agents
         {:error, reason} ->
-          Logger.warning("SkillKit: skipped #{path}: #{inspect(reason)}")
+          Logger.warning("SkillKit: agent backend #{inspect(mod)} failed: #{inspect(reason)}")
           []
       end
-    end)
+    else
+      []
+    end
   end
 end
