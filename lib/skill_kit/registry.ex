@@ -24,12 +24,14 @@ defmodule SkillKit.Registry do
 
   ## Boot-time Loading
 
-  When starting the registry via a supervision tree, you can pass `skill_dirs`
+  When starting the registry via a supervision tree, you can pass `backends`
   to automatically load skills at boot time:
 
-  - `:skill_dirs` — list of directory paths to scan for `.skill.md` files.
-    Scanning is recursive (uses `Path.wildcard("**/*.skill.md")`). Malformed
-    files are skipped with a warning; the registry still starts successfully.
+  - `:backends` — list of `{backend_module, backend_config}` tuples. Each
+    backend module must implement `load_skills/1`, returning `{:ok, [%Skill{}]}`
+    or `{:error, reason}`. Backends are iterated in order; first-registered-wins
+    semantics apply when multiple backends provide skills with the same name.
+    Backend failures are logged as warnings; the registry still starts successfully.
 
   Boot loading happens in `handle_continue/2`, which runs before any external
   calls can reach the GenServer. This means skills are available immediately
@@ -68,8 +70,7 @@ defmodule SkillKit.Registry do
 
   require Logger
 
-  alias SkillKit.{Skill}
-  alias SkillKit.Backend.Filesystem.Parser
+  alias SkillKit.Skill
 
   # Regex for valid namespace/skill name segments
   @segment_regex ~r/^[a-z][a-z0-9_-]*$/
@@ -85,13 +86,14 @@ defmodule SkillKit.Registry do
 
   - `:name` — the name to register the GenServer under. Defaults to `__MODULE__`
     (`SkillKit.Registry`). Pass a unique atom for test isolation.
-  - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at boot.
+  - `:backends` — list of `{backend_module, backend_config}` tuples for boot-time
+    skill loading. Defaults to `[]` (no skills loaded at boot).
 
   ## Examples
 
       iex> {:ok, _pid} = SkillKit.Registry.start_link([])
       iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry)
-      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skill_dirs: ["/path/to/skills"])
+      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, backends: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -233,27 +235,22 @@ defmodule SkillKit.Registry do
 
   @impl true
   def handle_continue(:load_skills, state) do
-    skill_dirs = Keyword.get(state.opts, :skill_dirs, [])
+    backends = Keyword.get(state.opts, :backends, [])
 
-    # Load from directories
-    {skills, errors} = load_from_dirs(skill_dirs)
+    Enum.each(backends, fn {backend_mod, backend_config} ->
+      case backend_mod.load_skills(backend_config) do
+        {:ok, skills} ->
+          Enum.each(skills, fn skill ->
+            # First-registered-wins: only insert if not already present
+            if :ets.lookup(state.table, skill.name) == [] do
+              :ets.insert(state.table, {skill.name, skill})
+            end
+          end)
 
-    # Register all successfully loaded skills
-    Enum.each(skills, fn skill ->
-      :ets.insert(state.table, {skill.name, skill})
+        {:error, reason} ->
+          Logger.warning("SkillKit: backend #{inspect(backend_mod)} failed: #{inspect(reason)}")
+      end
     end)
-
-    # Log batch summary if any errors
-    if errors != [] do
-      error_summary =
-        Enum.map_join(errors, ", ", fn {source, reason} ->
-          "#{source}: #{inspect(reason)}"
-        end)
-
-      Logger.warning(
-        "SkillKit: loaded #{length(skills)} skills, #{length(errors)} skipped (#{error_summary})"
-      )
-    end
 
     {:noreply, state}
   end
@@ -279,31 +276,6 @@ defmodule SkillKit.Registry do
   def handle_call({:unregister, name}, _from, state) do
     :ets.delete(state.table, name)
     {:reply, :ok, state}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private: Boot-time loading helpers
-  # ---------------------------------------------------------------------------
-
-  # Discovers and loads all .skill.md files from a list of directories.
-  # Uses Path.wildcard with **/*.skill.md for recursive discovery.
-  # Returns {[%Skill{}], [{source, reason}]}
-  @spec load_from_dirs([Path.t()]) :: {[Skill.t()], [{String.t(), term()}]}
-  defp load_from_dirs(dirs) do
-    dirs
-    |> Enum.flat_map(&discover_skill_files/1)
-    |> Enum.reduce({[], []}, &load_skill_file/2)
-  end
-
-  defp discover_skill_files(dir) do
-    Path.join(dir, "**/*.skill.md") |> Path.wildcard()
-  end
-
-  defp load_skill_file(file, {skills_acc, errors_acc}) do
-    case Parser.load_file(file) do
-      {:ok, skill} -> {[skill | skills_acc], errors_acc}
-      {:error, reason} -> {skills_acc, [{Path.basename(file), reason} | errors_acc]}
-    end
   end
 
   # ---------------------------------------------------------------------------
