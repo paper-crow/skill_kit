@@ -29,7 +29,7 @@ defmodule SkillKit.Executor.ShellTest do
     test "runs command in specified working directory" do
       tmp = System.tmp_dir!() |> String.trim_trailing("/")
       # Resolve any symlinks (e.g. macOS /var -> /private/var) so comparison works
-      {resolved_tmp, 0} = System.cmd("sh", ["-c", "cd #{tmp} && pwd -P"])
+      {resolved_tmp, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved_tmp)
       context = %{cwd: tmp}
       assert {:ok, output} = Shell.execute("pwd", context)
