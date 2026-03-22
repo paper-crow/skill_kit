@@ -52,4 +52,78 @@ defmodule SkillKit.Skill do
     executor: SkillKit.Executor.Shell,
     hooks: []
   ]
+
+  @doc """
+  Renders the skill body by substituting template tokens with values from `args`.
+
+  Supported tokens:
+  - `$ARGUMENTS` — all arguments as a single string (from `args["arguments"]`)
+  - `$ARGUMENTS[N]` — positional argument by 0-based index (space-split)
+  - `$N` — shorthand for `$ARGUMENTS[N]` (e.g., `$0`, `$1`)
+  - `${CLAUDE_SKILL_DIR}` — directory of the skill (derived from `:location` field)
+  - `${CLAUDE_SESSION_ID}` — session ID (from `args["session_id"]`)
+
+  If `$ARGUMENTS` (or `$N`) is NOT present in the body but arguments are provided,
+  appends `\\n\\nARGUMENTS: <value>` to the end.
+
+  Returns `{:ok, ""}` when body is `nil`.
+  """
+  @spec render(t(), map()) :: {:ok, String.t()}
+  def render(%__MODULE__{body: nil}, _args), do: {:ok, ""}
+
+  def render(%__MODULE__{body: body, location: location}, args) do
+    arguments = Map.get(args, "arguments", "")
+    session_id = Map.get(args, "session_id", "")
+    positional = if arguments != "", do: String.split(arguments, " "), else: []
+
+    has_arguments_token =
+      String.contains?(body, "$ARGUMENTS") or
+        Regex.match?(~r/\$\d+(?!\])/, body)
+
+    result =
+      body
+      |> substitute_arguments_indexed(positional)
+      |> substitute_arguments(arguments)
+      |> substitute_shorthand(positional)
+      |> substitute_skill_dir(location)
+      |> substitute_session_id(session_id)
+
+    result =
+      if not has_arguments_token and arguments != "" do
+        result <> "\n\nARGUMENTS: #{arguments}"
+      else
+        result
+      end
+
+    {:ok, result}
+  end
+
+  defp substitute_arguments_indexed(body, positional) do
+    Regex.replace(~r/\$ARGUMENTS\[(\d+)\]/, body, fn _, index ->
+      i = String.to_integer(index)
+      Enum.at(positional, i, "")
+    end)
+  end
+
+  defp substitute_arguments(body, arguments) do
+    String.replace(body, "$ARGUMENTS", arguments)
+  end
+
+  defp substitute_shorthand(body, positional) do
+    Regex.replace(~r/\$(\d+)(?!\])/, body, fn _, index ->
+      i = String.to_integer(index)
+      Enum.at(positional, i, "")
+    end)
+  end
+
+  defp substitute_skill_dir(body, nil), do: body
+
+  defp substitute_skill_dir(body, location) do
+    dir = Path.dirname(location)
+    String.replace(body, "${CLAUDE_SKILL_DIR}", dir)
+  end
+
+  defp substitute_session_id(body, session_id) do
+    String.replace(body, "${CLAUDE_SESSION_ID}", session_id)
+  end
 end
