@@ -42,7 +42,10 @@ defmodule SkillKit.MixProject do
       {:ex_doc, "~> 0.38", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:stream_data, "~> 1.2", only: [:dev, :test]}
+      {:stream_data, "~> 1.2", only: [:dev, :test]},
+      {:req, "~> 0.5"},
+      {:mox, "~> 1.2", only: :test},
+      {:bypass, "~> 2.1", only: :test}
     ]
   end
 
