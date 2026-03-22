@@ -345,29 +345,41 @@ Ephemeral. Spawned under `Agent.SubagentSupervisor`. Activates the skill via `Ca
 defmodule Subagent.Skill do
   use GenServer
 
-  def init({parent, task_id, registry, skill_name, args, scopes, llm_opts}) do
-    send(self(), :run)
-    {:ok, %{parent: parent, task_id: task_id, registry: registry,
-            skill_name: skill_name, args: args, scopes: scopes,
-            llm_opts: llm_opts}}
+  defstruct [
+    :parent,
+    :task_id,
+    :registry,
+    :skill_name,
+    :args,
+    :scopes,
+    :llm_opts
+  ]
+
+  def start_link(%__MODULE__{} = task) do
+    GenServer.start_link(__MODULE__, task)
   end
 
-  def handle_info(:run, state) do
+  def init(%__MODULE__{} = task) do
+    send(self(), :run)
+    {:ok, task}
+  end
+
+  def handle_info(:run, task) do
     with {:ok, rendered_body} <- SkillKit.Catalog.activate(
-           state.registry, state.skill_name, state.args, scopes: state.scopes
+           task.registry, task.skill_name, task.args, scopes: task.scopes
          ),
          {:ok, skill} <- SkillKit.Catalog.get_skill(
-           state.registry, state.skill_name, scopes: state.scopes
+           task.registry, task.skill_name, scopes: task.scopes
          ),
-         {:ok, command} <- get_command(rendered_body, state.llm_opts) do
-      context = build_context(state, skill)
-      result = SkillKit.Executor.run(state.registry, skill, command, context)
-      send(state.parent, {:subagent_result, self(), result})
+         {:ok, command} <- get_command(rendered_body, task.llm_opts) do
+      context = build_context(task, skill)
+      result = SkillKit.Executor.run(task.registry, skill, command, context)
+      send(task.parent, {:subagent_result, self(), result})
     else
-      error -> send(state.parent, {:subagent_result, self(), error})
+      error -> send(task.parent, {:subagent_result, self(), error})
     end
 
-    {:stop, :normal, state}
+    {:stop, :normal, task}
   end
 
   # Streams the rendered skill body through the LLM backend to produce
@@ -382,10 +394,10 @@ defmodule Subagent.Skill do
     end
   end
 
-  defp build_context(state, skill) do
+  defp build_context(task, skill) do
     %{
       cwd: skill.location && Path.dirname(skill.location),
-      scope: state.scopes
+      scope: task.scopes
     }
   end
 end
@@ -519,13 +531,22 @@ defmodule Agent.SkillLauncher do
 
   def launch(agent_server, task_id, skill_name, args, scopes) do
     registry = Agent.Server.registry(agent_server)
-    llm_opts = Agent.Server.llm_opts(agent_server)
 
     case SkillKit.Catalog.get_skill(registry, skill_name, scopes: scopes) do
       {:ok, _skill} ->
+        task = %Subagent.Skill{
+          parent: agent_server,
+          task_id: task_id,
+          registry: registry,
+          skill_name: skill_name,
+          args: args,
+          scopes: scopes,
+          llm_opts: Agent.Server.llm_opts(agent_server)
+        }
+
         DynamicSupervisor.start_child(
           subagent_supervisor(agent_server),
-          {Subagent.Skill, {agent_server, task_id, registry, skill_name, args, scopes, llm_opts}}
+          {Subagent.Skill, task}
         )
       {:error, reason} ->
         {:error, reason}
