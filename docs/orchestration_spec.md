@@ -339,16 +339,17 @@ end
 
 ### `Subagent.Skill`
 
-Ephemeral. Spawned under `Agent.SubagentSupervisor`. Activates the skill via `Catalog`, renders the body for LLM context, and executes commands through the `Execution` pipeline.
+Ephemeral. Spawned under `Agent.SubagentSupervisor`. Activates the skill via `Catalog`, renders the body for LLM context, streams through the LLM backend to produce a command, and executes through the `Execution` pipeline.
 
 ```elixir
 defmodule Subagent.Skill do
   use GenServer
 
-  def init({parent, task_id, registry, skill_name, args, scopes}) do
+  def init({parent, task_id, registry, skill_name, args, scopes, llm_opts}) do
     send(self(), :run)
     {:ok, %{parent: parent, task_id: task_id, registry: registry,
-            skill_name: skill_name, args: args, scopes: scopes}}
+            skill_name: skill_name, args: args, scopes: scopes,
+            llm_opts: llm_opts}}
   end
 
   def handle_info(:run, state) do
@@ -357,9 +358,8 @@ defmodule Subagent.Skill do
          ),
          {:ok, skill} <- SkillKit.Catalog.get_skill(
            state.registry, state.skill_name, scopes: state.scopes
-         ) do
-      # rendered_body goes to LLM context; LLM returns a command to execute
-      command = get_command_from_llm(rendered_body)
+         ),
+         {:ok, command} <- get_command(rendered_body, state.llm_opts) do
       context = build_context(state, skill)
       result = SkillKit.Executor.run(state.registry, skill, command, context)
       send(state.parent, {:subagent_result, self(), result})
@@ -368,6 +368,18 @@ defmodule Subagent.Skill do
     end
 
     {:stop, :normal, state}
+  end
+
+  # Streams the rendered skill body through the LLM backend to produce
+  # a command for the executor. The parent agent passes llm_opts (which
+  # may include a :backend override from the agent definition or skill metadata).
+  defp get_command(rendered_body, llm_opts) do
+    messages = [%{"role" => "user", "content" => rendered_body}]
+
+    with {:ok, stream} <- SkillKit.LLM.stream(messages, llm_opts) do
+      command = stream |> Enum.to_list() |> extract_command()
+      {:ok, command}
+    end
   end
 
   defp build_context(state, skill) do
@@ -507,12 +519,13 @@ defmodule Agent.SkillLauncher do
 
   def launch(agent_server, task_id, skill_name, args, scopes) do
     registry = Agent.Server.registry(agent_server)
+    llm_opts = Agent.Server.llm_opts(agent_server)
 
     case SkillKit.Catalog.get_skill(registry, skill_name, scopes: scopes) do
       {:ok, _skill} ->
         DynamicSupervisor.start_child(
           subagent_supervisor(agent_server),
-          {Subagent.Skill, {agent_server, task_id, registry, skill_name, args, scopes}}
+          {Subagent.Skill, {agent_server, task_id, registry, skill_name, args, scopes, llm_opts}}
         )
       {:error, reason} ->
         {:error, reason}
@@ -525,14 +538,16 @@ Each agent's registry is initialized at startup with workspace-scoped skill dire
 
 ```elixir
 # In Agent supervisor init — registry is a child before Server
-skill_dirs = [
-  "#{definition.workspace}/skills",
-  "#{definition.workspace}/.claude/skills",
-  Path.expand("~/.agents/skills")               # shared fallback
+backends = [
+  {SkillKit.Backend.Filesystem, dirs: [
+    "#{definition.workspace}/skills",
+    "#{definition.workspace}/.claude/skills",
+    Path.expand("~/.agents/skills")               # shared fallback
+  ]}
 ]
 
 children = [
-  {SkillKit.Registry, name: registry_name, skill_dirs: skill_dirs},
+  {SkillKit.Supervisor, name: registry_sup_name, registry_name: registry_name, backends: backends},
   {Agent.Mailbox, {self(), definition.mailbox}},
   {Agent.Server, {definition, registry_name, depth}},
   {DynamicSupervisor, name: subagent_supervisor_name}
