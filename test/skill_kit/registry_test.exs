@@ -315,5 +315,35 @@ defmodule SkillKit.RegistryTest do
       assert "files:summarize" in skill_names
       assert "tools:greet" in skill_names
     end
+
+    test "first-registered-wins when backends return duplicate names" do
+      name = :"boot_dup_#{:erlang.unique_integer([:positive])}"
+
+      start_supervised!({Registry, name: name, backends: [
+        {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]},
+        {SkillKit.RegistryTest.OverlappingBackend, []}
+      ]})
+
+      {:ok, skill} = Registry.get_skill(name, "files:summarize")
+      # The filesystem backend was listed first, so its version wins
+      assert skill.description == "Summarize a file's contents"
+      refute skill.description == "Overlapping description"
+    end
+  end
+end
+
+defmodule SkillKit.RegistryTest.OverlappingBackend do
+  @behaviour SkillKit.Backend
+
+  @impl true
+  def load_skills(_config) do
+    {:ok, [
+      %SkillKit.Skill{
+        name: "files:summarize",
+        namespace: "files",
+        description: "Overlapping description",
+        body: "Different body"
+      }
+    ]}
   end
 end
