@@ -17,6 +17,12 @@ defmodule SkillKit.Executor.ShellTest do
       assert {:ok, output} = Shell.execute("echo hello world", %{})
       assert String.trim(output) == "hello world"
     end
+
+    test "merges stderr into stdout" do
+      assert {:ok, output} = Shell.execute("echo out && echo err >&2", %{})
+      assert String.contains?(output, "out")
+      assert String.contains?(output, "err")
+    end
   end
 
   describe "resume/3" do

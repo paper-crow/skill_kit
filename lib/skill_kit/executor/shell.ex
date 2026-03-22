@@ -2,9 +2,8 @@ defmodule SkillKit.Executor.Shell do
   @moduledoc """
   Default executor that runs commands via the system shell.
 
-  Parses the command string and executes it using `System.cmd/3` through
-  the system shell (`/bin/sh -c`). Returns stdout on success, or
-  `{output, exit_code}` on failure.
+  Executes the command string using `Port.open/2` with `:stderr_to_stdout`.
+  Returns stdout on success, or `{output, exit_code}` on failure.
 
   `resume/3` delegates to `execute/2` — shell commands have no approval
   concept, so resuming just runs the command stored in the frozen state.
@@ -14,9 +13,20 @@ defmodule SkillKit.Executor.Shell do
 
   @impl true
   def execute(command, _context) do
-    case System.cmd("sh", ["-c", command], stderr_to_stdout: true) do
-      {output, 0} -> {:ok, output}
-      {output, exit_code} -> {:error, {output, exit_code}}
+    port =
+      Port.open(
+        {:spawn_executable, System.find_executable("sh")},
+        [:binary, :exit_status, :stderr_to_stdout, args: ["-c", command]]
+      )
+
+    collect(port, [])
+  end
+
+  defp collect(port, acc) do
+    receive do
+      {^port, {:data, data}} -> collect(port, [acc | data])
+      {^port, {:exit_status, 0}} -> {:ok, IO.iodata_to_binary(acc)}
+      {^port, {:exit_status, code}} -> {:error, {IO.iodata_to_binary(acc), code}}
     end
   end
 
