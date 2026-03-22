@@ -27,12 +27,12 @@ defmodule SkillKit.Supervisor do
         {SkillKit.Supervisor, registry_name: MyApp.SkillRegistry}
       ]
 
-  To auto-load skills from directories at boot:
+  To auto-load skills from directories at boot using backends:
 
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          skill_dirs: [Path.join(Application.app_dir(:my_app), "priv/skills")]}
+          backends: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
       ]
 
   ## Supervision Strategy
@@ -49,8 +49,8 @@ defmodule SkillKit.Supervisor do
     Defaults to `SkillKit.Registry`. Override this when running multiple
     SkillKit instances in the same node (e.g., in tests or umbrella apps).
 
-  - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at
-    boot. Scanning is recursive. Malformed files are skipped with a warning.
+  - `:backends` — list of `{module, keyword()}` backend configurations. Each
+    backend implements `SkillKit.Backend` and is called at boot to load skills.
     Defaults to `[]`.
   """
 
@@ -64,7 +64,8 @@ defmodule SkillKit.Supervisor do
   - `:name` — the name to register the Supervisor under. Defaults to `__MODULE__`.
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
-  - `:skill_dirs` — list of directory paths to scan for `.skill.md` files at boot.
+  - `:backends` — list of `{module, keyword()}` backend configurations. Each backend
+    implements `SkillKit.Backend` and is called at boot to load skills. Defaults to `[]`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -75,10 +76,10 @@ defmodule SkillKit.Supervisor do
   @impl true
   def init(opts) do
     registry_name = Keyword.get(opts, :registry_name, SkillKit.Registry)
-    skill_dirs = Keyword.get(opts, :skill_dirs, [])
+    backends = Keyword.get(opts, :backends, [])
 
     children = [
-      {SkillKit.Registry, name: registry_name, skill_dirs: skill_dirs}
+      {SkillKit.Registry, name: registry_name, backends: backends}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
