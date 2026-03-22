@@ -52,21 +52,24 @@ defmodule SkillKit.Backend.Filesystem do
   end
 
   defp load_agents_from(dir) do
-    if File.dir?(dir) do
-      dir
-      |> File.ls!()
-      |> Enum.map(&Path.join(dir, &1))
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.map(&Path.join(&1, "AGENT.md"))
-      |> Enum.filter(&File.exists?/1)
-      |> Enum.reduce({[], []}, fn file, {agents, errors} ->
-        case Definition.parse(file) do
-          {:ok, agent} -> {[agent | agents], errors}
-          {:error, reason} -> {agents, [{Path.basename(Path.dirname(file)), reason} | errors]}
-        end
-      end)
-    else
-      {[], []}
+    dir
+    |> discover_agent_files()
+    |> Enum.reduce({[], []}, &load_agent_file/2)
+  end
+
+  defp discover_agent_files(dir) do
+    dir
+    |> File.ls!()
+    |> Enum.map(&Path.join(dir, &1))
+    |> Enum.filter(&File.dir?/1)
+    |> Enum.map(&Path.join(&1, "AGENT.md"))
+    |> Enum.filter(&File.exists?/1)
+  end
+
+  defp load_agent_file(file, {agents, errors}) do
+    case Definition.parse(file) do
+      {:ok, agent} -> {[agent | agents], errors}
+      {:error, reason} -> {agents, [{Path.basename(Path.dirname(file)), reason} | errors]}
     end
   end
 end

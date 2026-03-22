@@ -11,6 +11,7 @@ defmodule SkillKit.Agent.Server do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.ToolBuilder
+  alias SkillKit.Executor.Shell
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
 
@@ -200,7 +201,7 @@ defmodule SkillKit.Agent.Server do
     command = Map.get(input, "command", "")
     context = %{cwd: state.definition.workspace, scope: state.scope}
 
-    case SkillKit.Executor.Shell.execute(command, context) do
+    case Shell.execute(command, context) do
       {:ok, output} -> %Message.ToolResult{tool_call_id: id, content: output}
       {:error, {output, _code}} -> %Message.ToolResult{tool_call_id: id, content: output, is_error: true}
     end
