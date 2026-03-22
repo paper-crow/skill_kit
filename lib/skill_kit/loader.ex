@@ -167,31 +167,30 @@ defmodule SkillKit.Loader do
   # Other event names are silently ignored.
   # If no "hooks" key is present, returns {:ok, []}.
   @spec parse_hooks(map()) :: {:ok, [Hook.t()]}
+  @phase_map %{"PreToolUse" => :pre, "PostToolUse" => :post}
+
   defp parse_hooks(yaml_map) do
-    hooks_yaml = Map.get(yaml_map, "hooks", %{})
-
-    phase_map = %{
-      "PreToolUse" => :pre,
-      "PostToolUse" => :post
-    }
-
     hooks =
-      Enum.flat_map(hooks_yaml, fn {event_name, entries} ->
-        case Map.fetch(phase_map, event_name) do
-          {:ok, phase} ->
-            Enum.map(entries, fn entry ->
-              matcher = Regex.compile!(Map.get(entry, "matcher", ".*"))
-              handler_defs = Map.get(entry, "hooks", [])
-              handler = build_hook_handler(handler_defs)
-              %Hook{phase: phase, matcher: matcher, handler: handler}
-            end)
-
-          :error ->
-            []
-        end
-      end)
+      yaml_map
+      |> Map.get("hooks", %{})
+      |> Enum.flat_map(&parse_hook_event/1)
 
     {:ok, hooks}
+  end
+
+  defp parse_hook_event({event_name, entries}) do
+    case Map.fetch(@phase_map, event_name) do
+      {:ok, phase} -> Enum.map(entries, &build_hook(phase, &1))
+      :error -> []
+    end
+  end
+
+  defp build_hook(phase, entry) do
+    %Hook{
+      phase: phase,
+      matcher: Regex.compile!(Map.get(entry, "matcher", ".*")),
+      handler: build_hook_handler(Map.get(entry, "hooks", []))
+    }
   end
 
   # Builds a handler function from a list of hook handler definitions.

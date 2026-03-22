@@ -128,51 +128,46 @@ defmodule SkillKit.Execution do
   @spec resume(t(), any()) :: {:ok, t()} | {:error, t()} | {:pending, t()}
   def resume(%__MODULE__{status: :suspended, suspended_at: name} = exec, decision) do
     exec = %{exec | status: :running}
-
-    # Find the suspended step and continue from there
     remaining = Enum.drop_while(exec.steps, fn {_type, step_name, _mod} -> step_name != name end)
 
     case remaining do
-      [{:execute, step_name, executor_mod} | rest] ->
+      [{:execute, _step_name, executor_mod} | _rest] ->
         context = build_execute_context(exec)
+        result = executor_mod.resume(exec.suspended_state, decision, context)
+        apply_step_result(remaining, exec, result)
 
-        case executor_mod.resume(exec.suspended_state, decision, context) do
-          {:ok, result} ->
-            exec = put_result(exec, step_name, {:ok, result})
-            walk_steps(rest, exec)
-
-          {:error, reason} ->
-            exec = put_result(exec, step_name, {:error, reason})
-            {:error, %{exec | status: :failed}}
-
-          {:pending, state} ->
-            {:pending,
-             %{exec | status: :suspended, suspended_at: step_name, suspended_state: state}}
-        end
-
-      [{:pre_hook, step_name, hook} | rest] ->
+      [{_hook_type, _step_name, hook} | _rest] ->
         context = build_pre_context(exec)
-
-        case invoke_handler(hook.handler, context) do
-          :allow ->
-            exec = put_result(exec, step_name, :allow)
-            walk_steps(rest, exec)
-
-          {:allow, new_cmd} ->
-            exec = exec |> put_result(step_name, {:allow, new_cmd}) |> update_command(new_cmd)
-            walk_steps(rest, exec)
-
-          {:deny, reason} ->
-            exec = put_result(exec, step_name, {:deny, reason})
-            {:error, %{exec | status: :failed}}
-
-          {:pending, state} ->
-            {:pending,
-             %{exec | status: :suspended, suspended_at: step_name, suspended_state: state}}
-        end
+        result = invoke_handler(hook.handler, context)
+        apply_step_result(remaining, exec, result)
 
       _ ->
         {:error, %{exec | status: :failed}}
+    end
+  end
+
+  # Applies a step result and continues walking. Used by both walk_steps and resume
+  # to avoid duplicating the result-handling logic.
+  defp apply_step_result([{type, name, _handler} | rest], exec, result) do
+    case {type, result} do
+      {_, {:pending, state}} ->
+        {:pending, %{exec | status: :suspended, suspended_at: name, suspended_state: state}}
+
+      {:pre_hook, :allow} ->
+        walk_steps(rest, put_result(exec, name, :allow))
+
+      {:pre_hook, {:allow, new_cmd}} ->
+        exec = exec |> put_result(name, {:allow, new_cmd}) |> update_command(new_cmd)
+        walk_steps(rest, exec)
+
+      {:pre_hook, {:deny, reason}} ->
+        {:error, %{put_result(exec, name, {:deny, reason}) | status: :failed}}
+
+      {_, {:ok, value}} ->
+        walk_steps(rest, put_result(exec, name, {:ok, value}))
+
+      {_, {:error, reason}} ->
+        {:error, %{put_result(exec, name, {:error, reason}) | status: :failed}}
     end
   end
 
@@ -182,60 +177,20 @@ defmodule SkillKit.Execution do
     {:ok, %{exec | status: :complete}}
   end
 
-  defp walk_steps([{:pre_hook, name, hook} | rest], exec) do
+  defp walk_steps([{:pre_hook, _name, hook} | _rest] = steps, exec) do
     context = build_pre_context(exec)
-
-    case invoke_handler(hook.handler, context) do
-      :allow ->
-        exec = put_result(exec, name, :allow)
-        walk_steps(rest, exec)
-
-      {:allow, new_cmd} ->
-        exec = exec |> put_result(name, {:allow, new_cmd}) |> update_command(new_cmd)
-        walk_steps(rest, exec)
-
-      {:deny, reason} ->
-        exec = put_result(exec, name, {:deny, reason})
-        {:error, %{exec | status: :failed}}
-
-      {:pending, state} ->
-        {:pending, %{exec | status: :suspended, suspended_at: name, suspended_state: state}}
-    end
+    apply_step_result(steps, exec, invoke_handler(hook.handler, context))
   end
 
-  defp walk_steps([{:execute, name, executor_mod} | rest], exec) do
+  defp walk_steps([{:execute, _name, executor_mod} | _rest] = steps, exec) do
     context = build_execute_context(exec)
-
-    case executor_mod.execute(exec.command, context) do
-      {:ok, result} ->
-        exec = put_result(exec, name, {:ok, result})
-        walk_steps(rest, exec)
-
-      {:error, reason} ->
-        exec = put_result(exec, name, {:error, reason})
-        {:error, %{exec | status: :failed}}
-
-      {:pending, state} ->
-        {:pending, %{exec | status: :suspended, suspended_at: name, suspended_state: state}}
-    end
+    apply_step_result(steps, exec, executor_mod.execute(exec.command, context))
   end
 
-  defp walk_steps([{:post_hook, name, hook} | rest], exec) do
+  defp walk_steps([{:post_hook, _name, hook} | _rest] = steps, exec) do
     execute_result = Map.get(exec.results, "execute")
     context = build_post_context(exec, execute_result)
-
-    case invoke_handler(hook.handler, context) do
-      {:ok, result} ->
-        exec = put_result(exec, name, {:ok, result})
-        walk_steps(rest, exec)
-
-      {:error, reason} ->
-        exec = put_result(exec, name, {:error, reason})
-        {:error, %{exec | status: :failed}}
-
-      {:pending, state} ->
-        {:pending, %{exec | status: :suspended, suspended_at: name, suspended_state: state}}
-    end
+    apply_step_result(steps, exec, invoke_handler(hook.handler, context))
   end
 
   defp invoke_handler(fun, context) when is_function(fun, 1) do

@@ -48,21 +48,15 @@ defmodule SkillKit.Catalog do
   When no `scopes` option is provided, skips authorization check.
   """
   def get_skill(server, name, opts \\ []) do
-    case Registry.get_skill(server, name) do
-      {:ok, skill} ->
-        case Keyword.fetch(opts, :scopes) do
-          {:ok, granted_scopes} ->
-            case Authorization.authorize(skill, granted_scopes) do
-              {:ok, skill} -> {:ok, skill}
-              {:error, :unauthorized} -> {:error, :unauthorized}
-            end
+    with {:ok, skill} <- Registry.get_skill(server, name) do
+      maybe_authorize(skill, opts)
+    end
+  end
 
-          :error ->
-            {:ok, skill}
-        end
-
-      {:error, :not_found} ->
-        {:error, :not_found}
+  defp maybe_authorize(skill, opts) do
+    case Keyword.fetch(opts, :scopes) do
+      {:ok, granted_scopes} -> Authorization.authorize(skill, granted_scopes)
+      :error -> {:ok, skill}
     end
   end
 
