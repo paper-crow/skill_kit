@@ -53,7 +53,7 @@ defmodule SkillKit.Loader do
       }}
   """
 
-  alias SkillKit.Skill
+  alias SkillKit.{Hook, Skill}
 
   # Namespace segment validation — same regex as SkillKit.Registry
   @name_segment_regex ~r/^[a-z][a-z0-9_-]*$/
@@ -139,7 +139,8 @@ defmodule SkillKit.Loader do
     with {:ok, name} <- fetch_required_field(yaml_map, "name"),
          {:ok, description} <- fetch_required_field(yaml_map, "description"),
          {:ok, required_scope} <- fetch_scope(yaml_map),
-         {:ok, namespace} <- validate_name_format(name) do
+         {:ok, namespace} <- validate_name_format(name),
+         {:ok, hooks} <- parse_hooks(yaml_map) do
       {:ok,
        %Skill{
          name: name,
@@ -147,9 +148,69 @@ defmodule SkillKit.Loader do
          description: description,
          required_scope: required_scope,
          body: body,
-         location: source_path
+         location: source_path,
+         hooks: hooks
        }}
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private: Hook parsing
+  # ---------------------------------------------------------------------------
+
+  # Converts the Claude Code hook YAML format into a list of %Hook{} structs.
+  #
+  # Supported event names:
+  #   - "PreToolUse"  → phase: :pre
+  #   - "PostToolUse" → phase: :post
+  #
+  # Other event names are silently ignored.
+  # If no "hooks" key is present, returns {:ok, []}.
+  @spec parse_hooks(map()) :: {:ok, [Hook.t()]}
+  defp parse_hooks(yaml_map) do
+    hooks_yaml = Map.get(yaml_map, "hooks", %{})
+
+    phase_map = %{
+      "PreToolUse" => :pre,
+      "PostToolUse" => :post
+    }
+
+    hooks =
+      Enum.flat_map(hooks_yaml, fn {event_name, entries} ->
+        case Map.fetch(phase_map, event_name) do
+          {:ok, phase} ->
+            Enum.map(entries, fn entry ->
+              matcher = Regex.compile!(Map.get(entry, "matcher", ".*"))
+              handler_defs = Map.get(entry, "hooks", [])
+              handler = build_hook_handler(handler_defs)
+              %Hook{phase: phase, matcher: matcher, handler: handler}
+            end)
+
+          :error ->
+            []
+        end
+      end)
+
+    {:ok, hooks}
+  end
+
+  # Builds a handler function from a list of hook handler definitions.
+  #
+  # For "type: command", returns a function that shells out to the command.
+  # Unknown types return a no-op handler that returns :allow.
+  # When multiple handler definitions are given, the first one wins.
+  @spec build_hook_handler(list()) :: Hook.handler()
+  defp build_hook_handler([%{"type" => "command", "command" => cmd} | _rest]) do
+    fn _tool_input ->
+      case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
+        {_output, 0} -> :allow
+        {output, _code} -> {:block, output}
+      end
+    end
+  end
+
+  defp build_hook_handler(_other) do
+    fn _tool_input -> :allow end
   end
 
   # Fetches a required string field from the YAML map.

@@ -13,12 +13,13 @@ defmodule SkillKit.LoaderTest do
     test "returns {:ok, %Skill{}} for summarize.skill.md — full round-trip" do
       path = Path.join(@fixtures_path, "valid/summarize.skill.md")
       assert {:ok, %Skill{} = skill} = Loader.load_file(path)
-      assert skill.type == :prompt
       assert skill.name == "files:summarize"
       assert skill.namespace == "files"
       assert skill.description == "Summarize a file's contents"
       assert skill.required_scope == ["files:read"]
-      assert skill.source == path
+      assert skill.location == path
+      assert skill.executor == SkillKit.Executor.Shell
+      assert skill.hooks == []
       assert String.contains?(skill.body, "{{content}}")
     end
 
@@ -214,6 +215,64 @@ defmodule SkillKit.LoaderTest do
 
       path = write_tmp_fixture("empty_name.skill.md", content)
       assert {:error, {:missing_field, "name"}} = Loader.load_file(path)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # load_file/1 — hook YAML parsing
+  # ---------------------------------------------------------------------------
+
+  describe "load_file/1 with hooks in frontmatter" do
+    test "parses PreToolUse hooks into %Hook{} structs" do
+      content = """
+      ---
+      name: "secure:check"
+      description: "Security checker"
+      hooks:
+        PreToolUse:
+          - matcher: "Shell"
+            hooks:
+              - type: command
+                command: "./scripts/check.sh"
+      ---
+      Check things.
+      """
+
+      path = write_tmp_fixture("with_hooks.skill.md", content)
+      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert length(skill.hooks) == 1
+
+      [hook] = skill.hooks
+      assert hook.phase == :pre
+      assert Regex.match?(hook.matcher, "Shell")
+    end
+
+    test "parses PostToolUse hooks" do
+      content = """
+      ---
+      name: "audit:log"
+      description: "Audit logger"
+      hooks:
+        PostToolUse:
+          - matcher: ".*"
+            hooks:
+              - type: command
+                command: "./scripts/audit.sh"
+      ---
+      Log everything.
+      """
+
+      path = write_tmp_fixture("post_hooks.skill.md", content)
+      assert {:ok, %Skill{} = skill} = Loader.load_file(path)
+      assert length(skill.hooks) == 1
+
+      [hook] = skill.hooks
+      assert hook.phase == :post
+    end
+
+    test "skills without hooks have empty hooks list" do
+      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      assert {:ok, %Skill{hooks: []}} = Loader.load_file(path)
     end
   end
 
