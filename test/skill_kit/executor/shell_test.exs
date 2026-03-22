@@ -25,6 +25,24 @@ defmodule SkillKit.Executor.ShellTest do
     end
   end
 
+  describe "execute/2 with context options" do
+    test "runs command in specified working directory" do
+      tmp = System.tmp_dir!() |> String.trim_trailing("/")
+      # Resolve any symlinks (e.g. macOS /var -> /private/var) so comparison works
+      {resolved_tmp, 0} = System.cmd("sh", ["-c", "cd #{tmp} && pwd -P"])
+      resolved_tmp = String.trim(resolved_tmp)
+      context = %{cwd: tmp}
+      assert {:ok, output} = Shell.execute("pwd", context)
+      assert String.trim(output) == resolved_tmp
+    end
+
+    test "inherits BEAM cwd when :cwd not in context" do
+      assert {:ok, output} = Shell.execute("pwd", %{})
+      # Should succeed — just proves it doesn't crash without :cwd
+      assert is_binary(output)
+    end
+  end
+
   describe "resume/3" do
     test "delegates to execute on approval — runs the command from state" do
       state = %{command: "echo resumed"}

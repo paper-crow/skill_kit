@@ -12,15 +12,25 @@ defmodule SkillKit.Executor.Shell do
   @behaviour SkillKit.Executor.Behaviour
 
   @impl true
-  def execute(command, _context) do
+  def execute(command, context) do
+    opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
+
     port =
       Port.open(
         {:spawn_executable, System.find_executable("sh")},
-        [:binary, :exit_status, :stderr_to_stdout, args: ["-c", command]]
+        [args: ["-c", command]] ++ opts
       )
 
     collect(port, [])
   end
+
+  defp port_opts(context) do
+    []
+    |> maybe_add_cd(context)
+  end
+
+  defp maybe_add_cd(opts, %{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd} | opts]
+  defp maybe_add_cd(opts, _context), do: opts
 
   defp collect(port, acc) do
     receive do
