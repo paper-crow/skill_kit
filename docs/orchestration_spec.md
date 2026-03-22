@@ -262,7 +262,8 @@ defmodule MyApp.Application do
     {:ok, sup} = Supervisor.start_link(children, strategy: :one_for_one)
 
     Enum.each(primary_agents, fn definition ->
-      DynamicSupervisor.start_child(Agent.Supervisor, {Agent, {definition, depth: 0}})
+      scope = resolve_scope(definition)  # struct with caller identity from user auth, tenant config, etc.
+      DynamicSupervisor.start_child(Agent.Supervisor, {Agent, {definition, depth: 0, scope: scope}})
     end)
 
     {:ok, sup}
@@ -274,7 +275,8 @@ In a multi-tenant application, primary agents are started and stopped dynamicall
 
 ```elixir
 # New tenant session
-DynamicSupervisor.start_child(Agent.Supervisor, {Agent, {tenant_definition, depth: 0}})
+scope = resolve_tenant_scope(tenant)
+DynamicSupervisor.start_child(Agent.Supervisor, {Agent, {tenant_definition, depth: 0, scope: scope}})
 
 # Session ends
 DynamicSupervisor.terminate_child(Agent.Supervisor, agent_pid)
@@ -343,18 +345,20 @@ defmodule Agent.Server do
     :parent_name,      # nil for primary agents, parent's agent_name for subagent-agents
     :definition,
     :depth,            # 0 = primary agent, increments with each agent spawn
+    :scope,            # inherited from parent — struct with caller identity for authorization
     messages: [],      # conversation history — list of SkillKit.LLM.Message structs
     subagents: %{},    # pid → %{task_ref, name, monitor_ref, restart, attempts}
     pending_requests: %{}   # correlation_id → %{payload, on_reply}
   ]
 
-  def init({agent_name, definition, depth, parent_name}) do
+  def init({agent_name, definition, depth, parent_name, scope}) do
     Registry.register(Agent.Registry, {agent_name, :server}, [])
     {:ok, %__MODULE__{
       agent_name: agent_name,
       parent_name: parent_name,
       definition: definition,
-      depth: depth
+      depth: depth,
+      scope: scope
     }}
   end
 
@@ -584,7 +588,7 @@ defmodule Subagent.Skill do
     :registry,
     :skill_name,
     :args,
-    :scopes,
+    :scope,
     :llm_opts
   ]
 
@@ -600,10 +604,10 @@ defmodule Subagent.Skill do
   def handle_info(:run, task) do
     result =
       with {:ok, rendered_body} <- SkillKit.Catalog.activate(
-             task.registry, task.skill_name, task.args, scopes: task.scopes
+             task.registry, task.skill_name, task.args, scope: task.scope
            ),
            {:ok, skill} <- SkillKit.Catalog.get_skill(
-             task.registry, task.skill_name, scopes: task.scopes
+             task.registry, task.skill_name, scope: task.scope
            ),
            {:ok, command} <- get_command(rendered_body, task.llm_opts) do
         context = build_context(task, skill)
@@ -647,7 +651,7 @@ defmodule Subagent.Skill do
   defp build_context(task, skill) do
     %{
       cwd: skill.location && Path.dirname(skill.location),
-      scope: task.scopes
+      scope: task.scope
     }
   end
 end
@@ -794,12 +798,48 @@ end
 
 ---
 
+## Scope
+
+A scope is a struct representing the caller's identity — user, application, tenant, or whatever the host application needs for authorization decisions. It flows down the agent tree unchanged: primary agent receives it at startup, passes it to every subagent it spawns, and subagent-agents pass it further to their children.
+
+The scope struct is opaque to the orchestration layer. It is passed to `SkillKit.Catalog` operations (via the `scope:` option) where the `AuthorizationProvider` behaviour resolves it into granted scope strings for skill authorization.
+
+```
+Application sets scope (from auth, tenant config, etc.)
+  └── Primary Agent (scope)
+      ├── Subagent.Skill (scope) → Catalog.activate(..., scope: scope)
+      └── Subagent.Agent (scope)
+          ├── Subagent.Skill (scope)
+          └── Subagent.Agent (scope)
+              └── ...
+```
+
+The host application defines what the scope struct looks like and implements `SkillKit.AuthorizationProvider` to resolve it:
+
+```elixir
+defmodule MyApp.Scope do
+  defstruct [:user_id, :tenant_id, :roles]
+end
+
+defmodule MyApp.ScopeProvider do
+  @behaviour SkillKit.AuthorizationProvider
+
+  @impl true
+  def resolve_scope(%MyApp.Scope{roles: roles, tenant_id: tenant_id}) do
+    scopes = Enum.flat_map(roles, &role_to_scopes(&1, tenant_id))
+    {:ok, scopes}
+  end
+end
+```
+
+---
+
 ## Subagent Lifecycle
 
 1. Parent agent decides to delegate work
-2. Parent spawns subagent under `Agent.SubagentSupervisor`, passing task and `self()` as parent pid
+2. Parent spawns subagent under `Agent.SubagentSupervisor`, passing task with inherited scope
 3. Subagent runs work (skill via executor, or full agentic loop)
-4. Subagent sends `{:subagent_result, self(), result}` to parent
+4. Subagent sends result to parent via mailbox as `%Message.System{}`
 5. Subagent stops normally
 6. Parent receives result in `handle_info`, closes the loop, continues
 
@@ -843,10 +883,10 @@ The orchestration layer bridges agent workspaces to the SkillKit Catalog and Exe
 ```elixir
 defmodule Agent.SkillLauncher do
 
-  def launch(agent_server, task_id, skill_name, args, scopes) do
+  def launch(agent_server, task_id, skill_name, args, scope) do
     registry = Agent.Server.registry(agent_server)
 
-    case SkillKit.Catalog.get_skill(registry, skill_name, scopes: scopes) do
+    case SkillKit.Catalog.get_skill(registry, skill_name, scope: scope) do
       {:ok, _skill} ->
         task = %Subagent.Skill{
           parent: agent_server,
@@ -854,7 +894,7 @@ defmodule Agent.SkillLauncher do
           registry: registry,
           skill_name: skill_name,
           args: args,
-          scopes: scopes,
+          scope: scope,
           llm_opts: Agent.Server.llm_opts(agent_server)
         }
 
@@ -877,14 +917,14 @@ Each agent's registry is initialized at startup with workspace-scoped skill dire
 defmodule Agent do
   use Supervisor
 
-  def start_link({agent_name, definition, depth, parent_name}) do
-    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name})
+  def start_link({agent_name, definition, depth, parent_name, scope}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope})
   end
 
-  def init({agent_name, definition, depth, parent_name}) do
+  def init({agent_name, definition, depth, parent_name, scope}) do
     children = [
       {Agent.Infrastructure, {agent_name, definition}},
-      {Agent.Core, {agent_name, definition, depth, parent_name}}
+      {Agent.Core, {agent_name, definition, depth, parent_name, scope}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -921,14 +961,14 @@ end
 defmodule Agent.Core do
   use Supervisor
 
-  def start_link({agent_name, definition, depth, parent_name}) do
-    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name})
+  def start_link({agent_name, definition, depth, parent_name, scope}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope})
   end
 
-  def init({agent_name, definition, depth, parent_name}) do
+  def init({agent_name, definition, depth, parent_name, scope}) do
     children = [
       {Agent.Mailbox, {agent_name, definition.mailbox}},
-      {Agent.Server, {agent_name, definition, depth, parent_name}},
+      {Agent.Server, {agent_name, definition, depth, parent_name, scope}},
       {Agent.SubagentSupervisor, agent_name}
     ]
 
