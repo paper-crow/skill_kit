@@ -75,9 +75,8 @@ defmodule SkillKit.Loader do
   def load_file(path) do
     with {:ok, content} <- File.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
-         {:ok, yaml_map} <- parse_yaml(frontmatter),
-         {:ok, skill} <- build_skill(yaml_map, body, path) do
-      {:ok, skill}
+         {:ok, yaml_map} <- parse_yaml(frontmatter) do
+      build_skill(yaml_map, body, path)
     end
   end
 

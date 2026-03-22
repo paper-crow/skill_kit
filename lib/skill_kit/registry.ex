@@ -289,24 +289,20 @@ defmodule SkillKit.Registry do
   # Returns {[%Skill{}], [{source, reason}]}
   @spec load_from_dirs([Path.t()]) :: {[Skill.t()], [{String.t(), term()}]}
   defp load_from_dirs(dirs) do
-    Enum.reduce(dirs, {[], []}, fn dir, {skills_acc, errors_acc} ->
-      pattern = Path.join(dir, "**/*.skill.md")
-      files = Path.wildcard(pattern)
+    dirs
+    |> Enum.flat_map(&discover_skill_files/1)
+    |> Enum.reduce({[], []}, &load_skill_file/2)
+  end
 
-      {new_skills, new_errors} =
-        Enum.reduce(files, {[], []}, fn file, {s_acc, e_acc} ->
-          case Loader.load_file(file) do
-            {:ok, skill} ->
-              {[skill | s_acc], e_acc}
+  defp discover_skill_files(dir) do
+    Path.join(dir, "**/*.skill.md") |> Path.wildcard()
+  end
 
-            {:error, reason} ->
-              source = Path.basename(file)
-              {s_acc, [{source, reason} | e_acc]}
-          end
-        end)
-
-      {skills_acc ++ new_skills, errors_acc ++ new_errors}
-    end)
+  defp load_skill_file(file, {skills_acc, errors_acc}) do
+    case Loader.load_file(file) do
+      {:ok, skill} -> {[skill | skills_acc], errors_acc}
+      {:error, reason} -> {skills_acc, [{Path.basename(file), reason} | errors_acc]}
+    end
   end
 
   # ---------------------------------------------------------------------------
