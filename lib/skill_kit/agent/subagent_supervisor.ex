@@ -11,6 +11,16 @@ defmodule SkillKit.Agent.SubagentSupervisor do
   in init which is reliable for GenServer processes.
   """
 
+  def child_spec({agent_name, registry} = arg) do
+    %{
+      id: {__MODULE__, agent_name, registry},
+      start: {__MODULE__, :start_link, [arg]},
+      type: :supervisor,
+      restart: :permanent,
+      shutdown: :infinity
+    }
+  end
+
   def start_link({agent_name, registry}) do
     DynamicSupervisor.start_link(
       strategy: :one_for_one,
