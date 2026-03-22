@@ -41,20 +41,13 @@ defmodule SkillKit.Frontmatter do
   Returns `{:ok, frontmatter, body}` or `{:error, :invalid_frontmatter}`.
   """
   @spec split(String.t()) :: {:ok, String.t(), String.t()} | {:error, :invalid_frontmatter}
-  def split(content) do
-    rest =
-      if String.starts_with?(content, "---\n") do
-        String.slice(content, 4, byte_size(content))
-      else
-        content
-      end
+  def split("---\n" <> rest), do: do_split(rest)
+  def split(content), do: do_split(content)
 
-    case String.split(rest, ~r/\n---(\n|$)/, parts: 2) do
-      [frontmatter, body] ->
-        {:ok, frontmatter, String.trim(body)}
-
-      _ ->
-        {:error, :invalid_frontmatter}
+  defp do_split(content) do
+    case String.split(content, ~r/\n---(\n|$)/, parts: 2) do
+      [frontmatter, body] -> {:ok, frontmatter, String.trim(body)}
+      _ -> {:error, :invalid_frontmatter}
     end
   end
 
