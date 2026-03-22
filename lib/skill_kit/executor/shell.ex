@@ -53,6 +53,25 @@ defmodule SkillKit.Executor.Shell do
   end
 
   @impl true
+  def tool_definition do
+    %SkillKit.Executor.ToolDefinition{
+      name: "bash",
+      description:
+        "Execute a shell command. Use this to run scripts, read files, write files, and interact with the system.",
+      input_schema: %{
+        "type" => "object",
+        "properties" => %{
+          "command" => %{
+            "type" => "string",
+            "description" => "The shell command to execute"
+          }
+        },
+        "required" => ["command"]
+      }
+    }
+  end
+
+  @impl true
   def resume(%{command: command}, :approved, context) do
     execute(command, context)
   end
