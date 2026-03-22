@@ -83,5 +83,16 @@ defmodule SkillKit.Executor.ShellTest do
       assert {:error, {:denied, "not allowed"}} =
                Shell.resume(state, {:denied, "not allowed"}, %{})
     end
+
+    test "resume with :approved respects cwd in context" do
+      tmp = System.tmp_dir!()
+      # Resolve symlinks for macOS
+      {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
+      resolved_tmp = String.trim(resolved)
+      state = %{command: "pwd"}
+      context = %{cwd: tmp}
+      assert {:ok, output} = Shell.resume(state, :approved, context)
+      assert String.trim(output) == resolved_tmp
+    end
   end
 end
