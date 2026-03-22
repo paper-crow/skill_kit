@@ -54,6 +54,21 @@ defmodule SkillKit.Executor.ShellTest do
       # HOME should still be set — env merges, not replaces
       assert String.trim(output) == System.get_env("HOME")
     end
+
+    test "supports cwd and env together" do
+      tmp = System.tmp_dir!()
+      # Resolve any symlinks (e.g. macOS /var -> /private/var) so comparison works
+      {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
+      resolved_tmp = String.trim(resolved)
+
+      context = %{
+        cwd: tmp,
+        env: [{"SKILL_KIT_COMBO", "works"}]
+      }
+
+      assert {:ok, output} = Shell.execute("echo $SKILL_KIT_COMBO from $(pwd)", context)
+      assert String.trim(output) == "works from #{resolved_tmp}"
+    end
   end
 
   describe "resume/3" do
