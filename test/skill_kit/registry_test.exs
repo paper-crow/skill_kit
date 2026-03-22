@@ -329,6 +329,28 @@ defmodule SkillKit.RegistryTest do
       assert skill.description == "Summarize a file's contents"
       refute skill.description == "Overlapping description"
     end
+
+    test "failing backend logs warning and other backends still load" do
+      name = :"boot_fail_#{:erlang.unique_integer([:positive])}"
+
+      log =
+        capture_log([level: :warning], fn ->
+          start_supervised!({Registry, name: name, backends: [
+            {SkillKit.RegistryTest.FailingBackend, []},
+            {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
+          ]})
+          Process.sleep(10)
+        end)
+
+      # Failing backend logged a warning
+      assert log =~ "SkillKit"
+      assert log =~ "FailingBackend"
+
+      # Other backend's skills are still loaded
+      skills = Registry.list_skills(name)
+      skill_names = Enum.map(skills, & &1.name)
+      assert "files:summarize" in skill_names
+    end
   end
 end
 
@@ -345,5 +367,14 @@ defmodule SkillKit.RegistryTest.OverlappingBackend do
         body: "Different body"
       }
     ]}
+  end
+end
+
+defmodule SkillKit.RegistryTest.FailingBackend do
+  @behaviour SkillKit.Backend
+
+  @impl true
+  def load_skills(_config) do
+    {:error, :database_unavailable}
   end
 end
