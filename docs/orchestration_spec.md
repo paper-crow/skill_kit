@@ -679,7 +679,8 @@ end
 Each agent's registry is initialized at startup with workspace-scoped skill directories:
 
 ```elixir
-# In Agent supervisor init — all children receive agent_name, discover each other via Registry
+# In Agent supervisor init — all children receive agent_name, discover each other via Registry.
+# No dynamic atoms — all processes register under {agent_name, role} tuples.
 defmodule Agent do
   use Supervisor
 
@@ -697,25 +698,33 @@ defmodule Agent do
     ]
 
     children = [
-      {SkillKit.Supervisor,
-        name: :"#{agent_name}_skill_sup",
-        registry_name: :"#{agent_name}_skill_registry",
+      {SkillKit.Supervisor, name: {:via, Registry, {Agent.Registry, {agent_name, :skill_supervisor}}},
+        registry_name: {:via, Registry, {Agent.Registry, {agent_name, :skill_registry}}},
         backends: backends},
       {Agent.Mailbox, {agent_name, definition.mailbox}},
       {Agent.Server, {agent_name, definition, depth, parent_name}},
-      {DynamicSupervisor, name: :"#{agent_name}_subagent_sup"}
+      {Agent.SubagentSupervisor, agent_name}
     ]
-
-    # SubagentSupervisor registers itself — but DynamicSupervisor doesn't call
-    # Registry.register automatically. Agent.Server does this in handle_continue
-    # after all children are started.
 
     Supervisor.init(children, strategy: :rest_for_one)
   end
 end
 ```
 
-The `DynamicSupervisor` is started with an atom name (`:"#{agent_name}_subagent_sup"`) so `Agent.Server` can spawn children directly via the atom name — no Registry lookup needed for the supervisor.
+`Agent.SubagentSupervisor` is a thin wrapper around `DynamicSupervisor` that registers itself via the Registry:
+
+```elixir
+defmodule Agent.SubagentSupervisor do
+  def start_link(agent_name) do
+    DynamicSupervisor.start_link(
+      strategy: :one_for_one,
+      name: {:via, Registry, {Agent.Registry, {agent_name, :subagent_supervisor}}}
+    )
+  end
+end
+```
+
+All processes are discovered via `Registry.lookup(Agent.Registry, {agent_name, role})`. No dynamic atoms anywhere — agent names are strings, roles are static atoms.
 
 ---
 
