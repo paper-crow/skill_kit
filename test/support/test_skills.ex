@@ -1,16 +1,24 @@
-defmodule SkillKit.TestSkills.Echo do
+defmodule SkillKit.TestSkills do
   @moduledoc false
-  @behaviour SkillKit.Skill
 
-  @impl SkillKit.Skill
-  def name, do: "test:echo"
+  alias SkillKit.Skill
 
-  @impl SkillKit.Skill
-  def description, do: "Echoes input"
+  def echo_skill do
+    %Skill{
+      name: "test:echo",
+      namespace: "test",
+      description: "Echoes input",
+      body: "Echo back: $ARGUMENTS",
+      required_scope: ["test:read"]
+    }
+  end
 
-  @impl SkillKit.Skill
-  def required_scope, do: ["test:read"]
-
-  @impl SkillKit.Skill
-  def execute(args, _context), do: {:ok, args}
+  def no_scope_skill do
+    %Skill{
+      name: "test:open",
+      namespace: "test",
+      description: "No scope required",
+      body: "Do the thing"
+    }
+  end
 end

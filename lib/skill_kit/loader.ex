@@ -142,13 +142,12 @@ defmodule SkillKit.Loader do
          {:ok, namespace} <- validate_name_format(name) do
       {:ok,
        %Skill{
-         type: :prompt,
          name: name,
          namespace: namespace,
          description: description,
          required_scope: required_scope,
          body: body,
-         source: source_path
+         location: source_path
        }}
     end
   end

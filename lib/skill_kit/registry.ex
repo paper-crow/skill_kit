@@ -348,13 +348,11 @@ defmodule SkillKit.Registry do
          {:ok, namespace} <- validate_skill_name(name) do
       {:ok,
        %Skill{
-         type: :code,
          name: name,
          namespace: namespace,
          description: mod.description(),
          required_scope: mod.required_scope(),
-         module: mod,
-         source: inspect(mod)
+         location: inspect(mod)
        }}
     end
   end
