@@ -1,8 +1,8 @@
 defmodule SkillKit.LLM.Anthropic.EncoderTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.LLM.Message
   alias SkillKit.LLM.Anthropic.Encoder
+  alias SkillKit.LLM.Message
 
   describe "encode_messages/1" do
     test "encodes a simple user message" do

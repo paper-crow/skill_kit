@@ -1,8 +1,8 @@
 defmodule SkillKit.LLM.Anthropic.DecoderTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.LLM.Message
   alias SkillKit.LLM.Anthropic.Decoder
+  alias SkillKit.LLM.Message
 
   describe "decode_events/1" do
     test "decodes a text-only response" do

@@ -43,7 +43,7 @@ defmodule SkillKit.LLM.AnthropicTest do
       assert {:ok, stream} = Adapter.stream(config, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
 
       events = Enum.to_list(stream)
-      assert length(events) > 0
+      assert events != []
       # Verify we got a message_stop event
       assert Enum.any?(events, &(&1["type"] == "message_stop"))
     end
