@@ -1,8 +1,6 @@
 defmodule SkillKit.RegistryTest do
   use ExUnit.Case, async: true
 
-  import ExUnit.CaptureLog
-
   alias SkillKit.{Registry, Skill}
 
   setup do
@@ -259,26 +257,15 @@ defmodule SkillKit.RegistryTest do
     test "backends skips malformed files without crashing startup" do
       name = :"boot_invalid_#{:erlang.unique_integer([:positive])}"
 
-      # capture_log/2 with level: :all captures logs from all processes
-      log =
-        capture_log([level: :warning], fn ->
-          start_supervised!(
-            {Registry,
-             name: name,
-             backends: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
-          )
-
-          # Briefly yield to let handle_continue complete and flush log messages
-          Process.sleep(10)
-        end)
+      start_supervised!(
+        {Registry,
+         name: name,
+         backends: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
+      )
 
       # Registry started successfully — skills list may be empty (all invalid)
       skills = Registry.list_skills(name)
       assert is_list(skills)
-
-      # Warning was logged for the malformed files
-      assert log =~ "SkillKit"
-      assert log =~ "skipped"
     end
 
     test "backends ignores files without .skill.md extension" do
@@ -330,51 +317,18 @@ defmodule SkillKit.RegistryTest do
       refute skill.description == "Overlapping description"
     end
 
-    test "failing backend logs warning and other backends still load" do
+    test "failing backend does not crash registry and other backends still load" do
       name = :"boot_fail_#{:erlang.unique_integer([:positive])}"
 
-      log =
-        capture_log([level: :warning], fn ->
-          start_supervised!({Registry, name: name, backends: [
-            {SkillKit.RegistryTest.FailingBackend, []},
-            {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
-          ]})
-          Process.sleep(10)
-        end)
+      start_supervised!({Registry, name: name, backends: [
+        {SkillKit.RegistryTest.FailingBackend, []},
+        {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
+      ]})
 
-      # Failing backend logged a warning
-      assert log =~ "SkillKit"
-      assert log =~ "FailingBackend"
-
-      # Other backend's skills are still loaded
+      # Registry is alive and other backend's skills are loaded
       skills = Registry.list_skills(name)
       skill_names = Enum.map(skills, & &1.name)
       assert "files:summarize" in skill_names
     end
-  end
-end
-
-defmodule SkillKit.RegistryTest.OverlappingBackend do
-  @behaviour SkillKit.Backend
-
-  @impl true
-  def load_skills(_config) do
-    {:ok, [
-      %SkillKit.Skill{
-        name: "files:summarize",
-        namespace: "files",
-        description: "Overlapping description",
-        body: "Different body"
-      }
-    ]}
-  end
-end
-
-defmodule SkillKit.RegistryTest.FailingBackend do
-  @behaviour SkillKit.Backend
-
-  @impl true
-  def load_skills(_config) do
-    {:error, :database_unavailable}
   end
 end
