@@ -21,7 +21,7 @@ defmodule SkillKit.LLM do
       SkillKit.LLM.stream(messages, backend: {SkillKit.LLM.Anthropic, config})
   """
 
-  @type message :: map()
+  @type message :: SkillKit.LLM.Message.t()
 
   @callback stream(config :: keyword(), messages :: [message()], opts :: keyword()) ::
               {:ok, Enumerable.t()} | {:error, term()}
