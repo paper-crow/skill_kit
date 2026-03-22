@@ -223,32 +223,52 @@ defmodule Agent.Server do
   defstruct [
     :name,
     :owner_pid,        # nil for primary agents, parent Agent.Server pid for subagent-agents
+    :mailbox_pid,
+    :subagent_supervisor,
     :definition,
     :depth,            # 0 = primary agent, increments with each agent spawn
-    subagents: %{},    # pid → %{task, monitor_ref, restart, attempts}
-    results: %{},      # task_id → result
+    messages: [],      # conversation history — the full message list sent to the LLM
+    subagents: %{},    # pid → %{task_ref, monitor_ref, restart, attempts}
     pending_requests: %{}   # correlation_id → %{payload, on_reply}
   ]
+end
+```
 
-  # Spawn a skill subagent — no depth restriction
-  defp spawn_subagent(state, task, :skill) do
-    do_spawn_skill(state, task)
-  end
+### The Agent Loop
 
-  # Spawn an agent subagent — guarded by depth
-  defp spawn_subagent(%{depth: depth, definition: %{max_agent_depth: max}} = state, task, :agent)
-    when depth < max do
-    do_spawn_agent(state, task, depth + 1)
-  end
+The agent loop runs synchronously within `handle_info`. While the loop is active the GenServer is blocked — incoming messages (user, peer, subagent results) buffer in the mailbox and are processed on the next turn. This is by design: an agent that is "thinking" should not be interrupted mid-turn.
 
-  defp spawn_subagent(%{depth: depth, definition: %{max_agent_depth: max}}, _task, :agent)
-    when depth >= max do
-    {:error, :max_agent_depth_exceeded}
-  end
+To the LLM, everything is a tool — local executors, skill subagents, and agent subagents are all presented as tools. The orchestration layer routes each tool call to the right execution path.
 
-  # Incoming message batch from mailbox — user requests or peer messages
+```
+handle_info({:mailbox_flush, messages}, state)
+  1. Append new messages to state.messages
+  2. Stream LLM (state.messages, llm_opts)
+  3. Append assistant response to state.messages
+  4. Classify tool calls:
+     - Local tool calls → execute immediately, collect tool_results
+     - Subagent tool calls → spawn subagent, return placeholder tool_result:
+         "Delegated to agent '{name}'. Task ref: {ref}.
+          You will receive the result as a message."
+  5. Append all tool_results to state.messages
+  6. If any tool calls were made → goto 2 (LLM sees results, continues)
+  7. No tool calls → turn complete, return updated state
+```
+
+**Subagent results arrive as messages, not tool results.** The delegation tool call is already resolved (with the placeholder). When the subagent finishes, its result enters the conversation as a new message:
+
+```
+"[Background task {ref} complete] Agent '{name}' returned: {result}"
+```
+
+This arrives through the mailbox like any other message, triggers a new turn through the loop, and the LLM incorporates it alongside any user messages that arrived in the meantime. The task ref lets the LLM correlate the result with the original delegation.
+
+The agent's system prompt instructs it how to handle these: proactively inform the user when background work completes.
+
+```elixir
+  # Incoming message batch from mailbox — user requests, peer messages, or subagent results
   def handle_info({:mailbox_flush, messages}, state) do
-    {replies, messages} = Enum.split_with(messages, fn m ->
+    {replies, new_messages} = Enum.split_with(messages, fn m ->
       not is_nil(m.correlation_id) and Map.has_key?(state.pending_requests, m.correlation_id)
     end)
 
@@ -258,28 +278,96 @@ defmodule Agent.Server do
       %{state | pending_requests: pending}
     end)
 
-    {:noreply, run_agent_loop(state, messages)}
+    {:noreply, run_agent_loop(state, new_messages)}
   end
 
-  # Subagent finished normally
+  # Subagent finished — inject result as a conversation message via the mailbox
   def handle_info({:subagent_result, pid, result}, state) do
     {entry, subagents} = Map.pop(state.subagents, pid)
-    state = %{state |
-      subagents: subagents,
-      results: Map.put(state.results, entry.task_id, {:ok, result})
+    state = %{state | subagents: subagents}
+
+    message = %{
+      role: "user",
+      content: "[Background task #{entry.task_ref} complete] " <>
+               "Agent '#{entry.name}' returned: #{inspect(result)}"
     }
-    {:noreply, maybe_continue(state)}
+
+    GenServer.cast(state.mailbox_pid, {:message, wrap_message(message)})
+    {:noreply, state}
   end
 
-  # Subagent process died
+  # Subagent process died — inject error as a conversation message
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
-    case find_by_monitor(state.subagents, ref) do
-      nil          -> {:noreply, state}
-      {pid, entry} -> {:noreply, handle_subagent_down(state, pid, entry, reason)}
+    case pop_by_monitor(state.subagents, ref) do
+      nil ->
+        {:noreply, state}
+
+      {entry, subagents} ->
+        state = %{state | subagents: subagents}
+
+        message = %{
+          role: "user",
+          content: "[Background task #{entry.task_ref} failed] " <>
+                   "Agent '#{entry.name}' crashed: #{inspect(reason)}"
+        }
+
+        GenServer.cast(state.mailbox_pid, {:message, wrap_message(message)})
+        {:noreply, maybe_restart(state, entry, reason)}
     end
+  end
+
+  # The core loop — called from handle_info, runs synchronously
+  defp run_agent_loop(state, new_messages) do
+    state = append_messages(state, new_messages)
+    {:ok, stream} = SkillKit.LLM.stream(state.messages, state.definition.llm_opts)
+    response = collect_response(stream)
+    state = append_assistant(state, response)
+
+    case classify_tool_calls(response) do
+      [] ->
+        # No tool calls — turn complete
+        deliver_response(state, response)
+        state
+
+      tool_calls ->
+        {local, subagent} = Enum.split_with(tool_calls, &local?/1)
+
+        # Execute local tools immediately
+        local_results = Enum.map(local, &execute_local(state, &1))
+
+        # Spawn subagents, get placeholder results
+        {subagent_results, state} = Enum.map_reduce(subagent, state, &spawn_and_acknowledge/2)
+
+        # Append all tool results and loop
+        all_results = local_results ++ subagent_results
+        state = append_tool_results(state, all_results)
+        run_agent_loop(state, [])
+    end
+  end
+
+  # Spawn a subagent — guarded by depth for agent subagents
+  defp spawn_and_acknowledge(tool_call, state) do
+    task_ref = make_ref()
+
+    # ... spawn under SubagentSupervisor, monitor, track in state.subagents ...
+
+    placeholder = %{
+      tool_call_id: tool_call.id,
+      content: "Delegated to agent '#{tool_call.name}'. Task ref: #{inspect(task_ref)}. " <>
+               "You will receive the result as a message."
+    }
+
+    {placeholder, state}
   end
 end
 ```
+
+### Why this works
+
+- **No blocked turns.** Local tool calls resolve immediately. Subagent calls return a placeholder and the LLM continues — it can respond to the user ("I've kicked off that analysis...") while the subagent runs.
+- **No special pending state.** There's no `pending_tool_calls` map to reassemble. Each tool call gets a result in the same turn. Subagent results are new messages, not retroactive tool results.
+- **Natural conversation flow.** The user can send messages while a subagent runs. When the result arrives, the LLM sees both the result and any user messages that came in, and responds with full context.
+- **Crash handling is just messaging.** A crashed subagent produces an error message in the conversation. The LLM decides what to do — retry, report, move on. No special error recovery machinery in the orchestration layer.
 
 ### `Agent.Mailbox`
 
