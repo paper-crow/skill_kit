@@ -34,7 +34,7 @@ Each agent owns a workspace — a directory that defines its scope of responsibi
 │   └── skills/                  # main agent's skills
 └── project-a/                   # project agent
     ├── AGENT.md                 # role: project A manager
-    ├── SOUL.md                  # behavioral norms, responsibilities, reporting chain
+    ├── SOUL.md                  # additional context loaded into the agent's system prompt
     └── skills/                  # project-specific skills
         ├── build/
         │   └── SKILL.md
@@ -45,6 +45,8 @@ Each agent owns a workspace — a directory that defines its scope of responsibi
 ```
 
 The primary agent's catalog includes available agents discovered from workspace paths. When a user asks about project A, the primary agent matches it to the `project-a` agent definition and spawns it as a subagent-agent. The project agent handles the work within its own workspace and reports results back.
+
+`SOUL.md` is optional workspace context — behavioral norms, responsibilities, reporting chain, or any other guidance. If present, its contents are appended to the agent's system prompt (from `AGENT.md` body) when the agent starts. It is loaded from the workspace directory by the skill backend like any other file.
 
 ---
 
@@ -568,13 +570,17 @@ end
 
 Ephemeral. Spawned under `Agent.SubagentSupervisor`. Activates the skill via `Catalog`, renders the body for LLM context, streams through the LLM backend to produce a command, and executes through the `Execution` pipeline.
 
+**Error handling relies on process lifecycle, not timeouts.** If any step fails — skill not found, LLM stream error, executor crash — the subagent either reports the error and stops normally, or crashes. Either way, the parent's monitor fires and the error enters the conversation as a `%Message.System{}`. The parent's LLM decides what to do.
+
+If `SkillKit.Executor.run` returns `{:pending, state}` (approval flow), the subagent holds the suspended execution in its state and waits for a resume signal from the parent. This maps to the existing `SkillKit.Execution` suspend/resume lifecycle.
+
 ```elixir
 defmodule Subagent.Skill do
   use GenServer
 
   defstruct [
-    :parent,
-    :task_id,
+    :parent_name,
+    :task_ref,
     :registry,
     :skill_name,
     :args,
@@ -592,33 +598,50 @@ defmodule Subagent.Skill do
   end
 
   def handle_info(:run, task) do
-    with {:ok, rendered_body} <- SkillKit.Catalog.activate(
-           task.registry, task.skill_name, task.args, scopes: task.scopes
-         ),
-         {:ok, skill} <- SkillKit.Catalog.get_skill(
-           task.registry, task.skill_name, scopes: task.scopes
-         ),
-         {:ok, command} <- get_command(rendered_body, task.llm_opts) do
-      context = build_context(task, skill)
-      result = SkillKit.Executor.run(task.registry, skill, command, context)
-      send(task.parent, {:subagent_result, self(), result})
-    else
-      error -> send(task.parent, {:subagent_result, self(), error})
-    end
+    result =
+      with {:ok, rendered_body} <- SkillKit.Catalog.activate(
+             task.registry, task.skill_name, task.args, scopes: task.scopes
+           ),
+           {:ok, skill} <- SkillKit.Catalog.get_skill(
+             task.registry, task.skill_name, scopes: task.scopes
+           ),
+           {:ok, command} <- get_command(rendered_body, task.llm_opts) do
+        context = build_context(task, skill)
+        SkillKit.Executor.run(task.registry, skill, command, context)
+      end
 
-    {:stop, :normal, task}
+    case result do
+      {:ok, _} = success ->
+        send_to_parent(task, success)
+        {:stop, :normal, task}
+
+      {:error, _} = error ->
+        send_to_parent(task, error)
+        {:stop, :normal, task}
+
+      {:pending, execution} ->
+        # Approval flow — hold suspended execution, wait for resume signal
+        {:noreply, Map.put(task, :suspended_execution, execution)}
+    end
   end
 
-  # Streams the rendered skill body through the LLM backend to produce
-  # a command for the executor. The parent agent passes llm_opts (which
-  # may include a :backend override from the agent definition or skill metadata).
   defp get_command(rendered_body, llm_opts) do
-    messages = [%{"role" => "user", "content" => rendered_body}]
+    messages = [%Message.User{content: rendered_body}]
 
     with {:ok, stream} <- SkillKit.LLM.stream(messages, llm_opts) do
-      command = stream |> Enum.to_list() |> extract_command()
-      {:ok, command}
+      response = stream |> Enum.to_list() |> parse_response()
+      {:ok, extract_command(response)}
     end
+  end
+
+  defp send_to_parent(task, result) do
+    message = %Message.System{
+      content: "[Task #{inspect(task.task_ref)} complete] " <>
+               "Skill '#{task.skill_name}' returned: #{inspect(result)}"
+    }
+
+    [{pid, _}] = Registry.lookup(Agent.Registry, {task.parent_name, :mailbox})
+    GenServer.cast(pid, {:message, message})
   end
 
   defp build_context(task, skill) do
