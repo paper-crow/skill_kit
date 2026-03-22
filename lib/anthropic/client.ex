@@ -10,6 +10,8 @@ defmodule Anthropic.Client do
 
   @api_version "2023-06-01"
 
+  @max_retries 3
+
   @type t :: %__MODULE__{
           api_key: String.t(),
           endpoint: String.t()
@@ -38,6 +40,10 @@ defmodule Anthropic.Client do
   """
   @spec stream(t(), list(map()), keyword()) :: {:ok, Enumerable.t()} | {:error, term()}
   def stream(%__MODULE__{} = client, messages, opts \\ []) do
+    do_stream(client, messages, opts, 0)
+  end
+
+  defp do_stream(client, messages, opts, retry_count) do
     body =
       opts
       |> Keyword.take([:model, :max_tokens, :system, :tools, :temperature, :top_p])
@@ -58,11 +64,30 @@ defmodule Anthropic.Client do
       {:ok, %{status: 200} = resp} ->
         {:ok, sse_stream(resp.body)}
 
+      {:ok, %{status: 429} = resp} when retry_count < @max_retries ->
+        retry_after = parse_retry_after(resp)
+
+        :telemetry.execute(
+          [:skill_kit, :llm, :rate_limited],
+          %{retry_after: retry_after, attempt: retry_count + 1},
+          %{endpoint: client.endpoint}
+        )
+
+        Process.sleep(retry_after)
+        do_stream(client, messages, opts, retry_count + 1)
+
       {:ok, resp} ->
         {:error, {resp.status, resp.body}}
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp parse_retry_after(%{headers: headers}) do
+    case Map.get(headers, "retry-after") do
+      [value | _] -> String.to_integer(value) * 1000
+      _ -> 1000
     end
   end
 

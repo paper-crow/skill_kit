@@ -75,6 +75,34 @@ defmodule Anthropic.ClientTest do
                )
     end
 
+    test "retries on 429 with retry-after header", %{bypass: bypass, client: client} do
+      call_count = :counters.new(1, [:atomics])
+
+      Bypass.expect(bypass, "POST", "/v1/messages", fn conn ->
+        count = :counters.get(call_count, 1) + 1
+        :counters.put(call_count, 1, count)
+
+        if count == 1 do
+          conn
+          |> Plug.Conn.put_resp_header("retry-after", "0")
+          |> Plug.Conn.send_resp(429, ~s({"error":{"type":"rate_limit_error"}}))
+        else
+          conn =
+            conn
+            |> Plug.Conn.put_resp_content_type("text/event-stream")
+            |> Plug.Conn.send_chunked(200)
+
+          {:ok, conn} = Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+          conn
+        end
+      end)
+
+      messages = [%{"role" => "user", "content" => "Hi"}]
+      assert {:ok, stream} = Client.stream(client, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+      assert [%{"type" => "message_stop"}] = Enum.to_list(stream)
+      assert :counters.get(call_count, 1) == 2
+    end
+
     test "sends correct headers and body", %{bypass: bypass, client: client} do
       Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
