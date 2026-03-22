@@ -237,20 +237,7 @@ defmodule SkillKit.Registry do
   def handle_continue(:load_skills, state) do
     backends = Keyword.get(state.opts, :backends, [])
 
-    Enum.each(backends, fn {backend_mod, backend_config} ->
-      case backend_mod.load_skills(backend_config) do
-        {:ok, skills} ->
-          Enum.each(skills, fn skill ->
-            # First-registered-wins: only insert if not already present
-            if :ets.lookup(state.table, skill.name) == [] do
-              :ets.insert(state.table, {skill.name, skill})
-            end
-          end)
-
-        {:error, reason} ->
-          Logger.warning("SkillKit: backend #{inspect(backend_mod)} failed: #{inspect(reason)}")
-      end
-    end)
+    Enum.each(backends, &load_backend(&1, state.table))
 
     {:noreply, state}
   end
@@ -276,6 +263,27 @@ defmodule SkillKit.Registry do
   def handle_call({:unregister, name}, _from, state) do
     :ets.delete(state.table, name)
     {:reply, :ok, state}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Private: Boot-time backend loading
+  # ---------------------------------------------------------------------------
+
+  defp load_backend({backend_mod, backend_config}, table) do
+    case backend_mod.load_skills(backend_config) do
+      {:ok, skills} ->
+        Enum.each(skills, &insert_if_new(table, &1))
+
+      {:error, reason} ->
+        Logger.warning("SkillKit: backend #{inspect(backend_mod)} failed: #{inspect(reason)}")
+    end
+  end
+
+  # First-registered-wins: only insert if not already present
+  defp insert_if_new(table, skill) do
+    if :ets.lookup(table, skill.name) == [] do
+      :ets.insert(table, {skill.name, skill})
+    end
   end
 
   # ---------------------------------------------------------------------------

@@ -37,8 +37,7 @@ defmodule SkillKit.Supervisor do
 
   ## Supervision Strategy
 
-  Uses `:one_for_one` with a single child (`SkillKit.Registry`). `SkillKit.Loader`
-  is a pure module (not a process) so it does not appear in the supervision tree.
+  Uses `:one_for_one` with a single child (`SkillKit.Registry`).
 
   ## Options
 
