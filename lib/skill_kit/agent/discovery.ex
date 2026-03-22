@@ -1,25 +1,12 @@
 defmodule SkillKit.Agent.Discovery do
   @moduledoc """
-  Loads agent definitions from backends.
-
-  Iterates over configured backends, calling `load_agents/1` on those
-  that implement it. First-loaded-wins on name conflicts — backends
-  listed first take priority.
+  Loads agent definitions from backends via Kit unpacking.
   """
 
   alias SkillKit.Agent.Definition
 
   require Logger
 
-  @doc """
-  Loads agent definitions from the given backends.
-
-  Each backend is a `{module, config}` tuple. Backends that don't
-  implement `load_agents/1` are silently skipped. Failed backends
-  are logged and skipped.
-
-  Returns `{:ok, [%Definition{}]}` with first-loaded-wins dedup.
-  """
   @spec discover([{module(), keyword()}]) :: {:ok, [Definition.t()]}
   def discover(backends) do
     {definitions, _seen} =
@@ -37,17 +24,11 @@ defmodule SkillKit.Agent.Discovery do
   end
 
   defp load_from_backend({mod, config}) do
-    Code.ensure_loaded(mod)
-
-    if function_exported?(mod, :load_agents, 1) do
-      case mod.load_agents(config) do
-        {:ok, agents} -> agents
-        {:error, reason} ->
-          Logger.warning("SkillKit: agent backend #{inspect(mod)} failed: #{inspect(reason)}")
-          []
-      end
-    else
-      []
+    case mod.load_kits(config) do
+      {:ok, kits} -> Enum.flat_map(kits, & &1.agents)
+      {:error, reason} ->
+        Logger.warning("SkillKit: agent backend #{inspect(mod)} failed: #{inspect(reason)}")
+        []
     end
   end
 end

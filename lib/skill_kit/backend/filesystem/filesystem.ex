@@ -1,97 +1,72 @@
 defmodule SkillKit.Backend.Filesystem do
   @moduledoc """
-  Backend that loads skills and agent definitions from disk.
-
-  Scans configured directories recursively for `**/*.skill.md` files
-  and for subdirectories containing `AGENT.md` files.
-
-  ## Configuration
-
-      {SkillKit.Backend.Filesystem, dirs: ["/path/to/workspace", "/other/path"]}
-
-  ## Options
-
-  - `:dirs` (required) — list of directory paths to scan
+  Backend that loads kits from filesystem directories.
+  Each directory becomes a Kit containing skills and agent definitions.
   """
 
   @behaviour SkillKit.Backend
 
-  require Logger
-
   alias SkillKit.Agent.Definition
   alias SkillKit.Backend.Filesystem.Parser
+  alias SkillKit.Kit
+
+  require Logger
 
   @impl true
-  def load_skills(config) do
+  def load_kits(config) do
     dirs = Keyword.fetch!(config, :dirs)
 
-    {skills, errors} =
-      dirs
-      |> Enum.flat_map(&discover_skill_files/1)
-      |> Enum.reduce({[], []}, &load_skill_file/2)
-
-    if errors != [] do
-      error_summary =
-        Enum.map_join(errors, ", ", fn {source, reason} ->
-          "#{source}: #{inspect(reason)}"
-        end)
-
-      Logger.warning(
-        "SkillKit: loaded #{length(skills)} skills, #{length(errors)} skipped (#{error_summary})"
-      )
-    end
-
-    {:ok, skills}
-  end
-
-  @impl true
-  def load_agents(config) do
-    dirs = Keyword.get(config, :dirs, [])
-
-    {agents, errors} =
+    kits =
       dirs
       |> Enum.filter(&File.dir?/1)
-      |> Enum.flat_map(&discover_agent_files/1)
-      |> Enum.reduce({[], []}, &load_agent_file/2)
+      |> Enum.map(&load_kit/1)
+
+    {:ok, kits}
+  end
+
+  defp load_kit(dir) do
+    {skills, skill_errors} = load_skills_from(dir)
+    {agents, agent_errors} = load_agents_from(dir)
+    errors = skill_errors ++ agent_errors
 
     if errors != [] do
-      error_summary =
-        Enum.map_join(errors, ", ", fn {source, reason} ->
-          "#{source}: #{inspect(reason)}"
-        end)
-
-      Logger.warning(
-        "SkillKit: loaded #{length(agents)} agents, #{length(errors)} skipped (#{error_summary})"
-      )
+      error_summary = Enum.map_join(errors, ", ", fn {source, reason} ->
+        "#{source}: #{inspect(reason)}"
+      end)
+      Logger.warning("SkillKit: kit '#{Path.basename(dir)}' — #{length(errors)} skipped (#{error_summary})")
     end
 
-    {:ok, agents}
+    %Kit{name: Path.basename(dir), skills: skills, agents: agents}
   end
 
-  defp discover_agent_files(dir) do
+  defp load_skills_from(dir) do
     dir
-    |> File.ls!()
-    |> Enum.map(&Path.join(dir, &1))
-    |> Enum.filter(&File.dir?/1)
-    |> Enum.map(&Path.join(&1, "AGENT.md"))
-    |> Enum.filter(&File.exists?/1)
+    |> Path.join("**/*.skill.md")
+    |> Path.wildcard()
+    |> Enum.reduce({[], []}, fn file, {skills, errors} ->
+      case Parser.load_file(file) do
+        {:ok, skill} -> {[skill | skills], errors}
+        {:error, reason} -> {skills, [{Path.basename(file), reason} | errors]}
+      end
+    end)
   end
 
-  defp load_agent_file(file, {agents_acc, errors_acc}) do
-    case Definition.parse(file) do
-      {:ok, agent} -> {[agent | agents_acc], errors_acc}
-      {:error, reason} -> {agents_acc, [{Path.basename(Path.dirname(file)), reason} | errors_acc]}
-    end
-  end
-
-  defp discover_skill_files(dir) do
-    Path.join(dir, "**/*.skill.md") |> Path.wildcard()
-  end
-
-  defp load_skill_file(file, {skills_acc, errors_acc}) do
-    case Parser.load_file(file) do
-      {:ok, skill} -> {[skill | skills_acc], errors_acc}
-      {:error, reason} -> {skills_acc, [{Path.basename(file), reason} | errors_acc]}
+  defp load_agents_from(dir) do
+    if File.dir?(dir) do
+      dir
+      |> File.ls!()
+      |> Enum.map(&Path.join(dir, &1))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.map(&Path.join(&1, "AGENT.md"))
+      |> Enum.filter(&File.exists?/1)
+      |> Enum.reduce({[], []}, fn file, {agents, errors} ->
+        case Definition.parse(file) do
+          {:ok, agent} -> {[agent | agents], errors}
+          {:error, reason} -> {agents, [{Path.basename(Path.dirname(file)), reason} | errors]}
+        end
+      end)
+    else
+      {[], []}
     end
   end
 end

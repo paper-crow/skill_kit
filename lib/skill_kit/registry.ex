@@ -270,9 +270,11 @@ defmodule SkillKit.Registry do
   # ---------------------------------------------------------------------------
 
   defp load_backend({backend_mod, backend_config}, table) do
-    case backend_mod.load_skills(backend_config) do
-      {:ok, skills} ->
-        Enum.each(skills, &insert_if_new(table, &1))
+    case backend_mod.load_kits(backend_config) do
+      {:ok, kits} ->
+        Enum.each(kits, fn kit ->
+          Enum.each(kit.skills, &insert_if_new(table, &1))
+        end)
 
       {:error, reason} ->
         Logger.warning("SkillKit: backend #{inspect(backend_mod)} failed: #{inspect(reason)}")

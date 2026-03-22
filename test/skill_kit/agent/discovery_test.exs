@@ -56,14 +56,5 @@ defmodule SkillKit.Agent.DiscoveryTest do
 
       File.rm_rf!(tmp)
     end
-
-    test "skips backends that don't implement load_agents" do
-      backends = [
-        {SkillKit.TestBackends.SkillsOnly, []},
-        {Filesystem, dirs: [Path.join(@fixtures_path, "valid")]}
-      ]
-      assert {:ok, definitions} = Discovery.discover(backends)
-      assert definitions != []
-    end
   end
 end

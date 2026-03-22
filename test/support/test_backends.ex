@@ -3,13 +3,18 @@ defmodule SkillKit.RegistryTest.OverlappingBackend do
   @behaviour SkillKit.Backend
 
   @impl true
-  def load_skills(_config) do
+  def load_kits(_config) do
     {:ok, [
-      %SkillKit.Skill{
-        name: "files:summarize",
-        namespace: "files",
-        description: "Overlapping description",
-        body: "Different body"
+      %SkillKit.Kit{
+        name: "overlapping",
+        skills: [
+          %SkillKit.Skill{
+            name: "files:summarize",
+            namespace: "files",
+            description: "Overlapping description",
+            body: "Different body"
+          }
+        ]
       }
     ]}
   end
@@ -20,7 +25,7 @@ defmodule SkillKit.RegistryTest.FailingBackend do
   @behaviour SkillKit.Backend
 
   @impl true
-  def load_skills(_config) do
+  def load_kits(_config) do
     {:error, :database_unavailable}
   end
 end
@@ -30,5 +35,5 @@ defmodule SkillKit.TestBackends.SkillsOnly do
   @behaviour SkillKit.Backend
 
   @impl true
-  def load_skills(_config), do: {:ok, []}
+  def load_kits(_config), do: {:ok, [%SkillKit.Kit{name: "empty"}]}
 end
