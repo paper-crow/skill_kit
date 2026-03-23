@@ -1,12 +1,6 @@
 ---
 name: "system:memory"
 description: "Persistent memory management — read and write memories that persist across conversations"
-hooks:
-  PostToolUse:
-    - matcher: ".*"
-      hooks:
-        - type: command
-          command: "test -f .memory/current.md && wc -l < .memory/current.md | xargs test 50 -lt && { date_str=$(date +%Y-%m-%d); tail -n 30 .memory/current.md > .memory/current.tmp && mv .memory/current.tmp .memory/current.md && echo 'Memory rotated'; } || true"
 ---
 You have persistent memory stored in `.memory/current.md` relative to your workspace.
 
