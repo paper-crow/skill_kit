@@ -49,17 +49,29 @@ defmodule Mix.Tasks.SkillKit.Demo do
     SkillKit.stop_agent(agent)
   end
 
-  defp receive_loop(agent_name) do
+  defp receive_loop(agent_name, delegated \\ false) do
     receive do
       {:skill_kit, ^agent_name, {:delta, text}} ->
         IO.write(text)
-        receive_loop(agent_name)
+        receive_loop(agent_name, delegated)
+
+      {:skill_kit, ^agent_name, {:tool_call, _name, %{"task" => _}}} ->
+        # Subagent delegation detected
+        receive_loop(agent_name, true)
+
+      {:skill_kit, ^agent_name, {:tool_call, _, _}} ->
+        receive_loop(agent_name, delegated)
+
+      {:skill_kit, ^agent_name, {:tool_result, _, _, _}} ->
+        receive_loop(agent_name, delegated)
 
       {:skill_kit, ^agent_name, {:response, _text}} ->
         IO.puts("")
         Mix.shell().info("--- Turn complete ---")
-        # Wait for potential follow-up turns (e.g. subagent results)
-        wait_for_follow_up(agent_name)
+
+        if delegated do
+          wait_for_follow_up(agent_name)
+        end
 
       {:skill_kit, ^agent_name, {:error, reason}} ->
         Mix.shell().error("Error: #{inspect(reason)}")
