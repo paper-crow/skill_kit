@@ -189,7 +189,7 @@ defmodule SkillKit.Agent.ServerTest do
       assert [%Message.User{content: "hello"}] = state.messages
     end
 
-    test "passes system_prompt and max_tokens to LLM", %{
+    test "passes system_prompt and model to LLM", %{
       registry: registry,
       agent_name: agent_name
     } do
@@ -199,8 +199,7 @@ defmodule SkillKit.Agent.ServerTest do
         system_prompt: "You are a calculator.",
         path: "/tmp/test",
         workspace: "/tmp/test",
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096
+        model: "claude-sonnet-4-20250514"
       }
 
       expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->

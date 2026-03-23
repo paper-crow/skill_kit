@@ -16,8 +16,7 @@ defmodule SkillKitTest do
         system_prompt: "You are helpful.",
         path: "/tmp/test",
         workspace: "/tmp/test",
-        model: "test-model",
-        max_tokens: 1024
+        model: "test-model"
       }
 
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
@@ -117,8 +116,7 @@ defmodule SkillKitTest do
         system_prompt: "Test",
         path: "/tmp/test",
         workspace: "/tmp/test",
-        model: "test-model",
-        max_tokens: 100
+        model: "test-model"
       }
 
       # First session — agent gets a message and responds

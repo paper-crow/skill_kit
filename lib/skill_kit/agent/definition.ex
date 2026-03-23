@@ -7,14 +7,11 @@ defmodule SkillKit.Agent.Definition do
   workspace path, and mailbox tuning.
   """
 
-  @default_max_tokens 8096
-
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
           capabilities: [String.t()],
           model: String.t() | nil,
-          max_tokens: pos_integer(),
           system_prompt: String.t(),
           path: String.t(),
           workspace: String.t(),
@@ -31,7 +28,6 @@ defmodule SkillKit.Agent.Definition do
     :path,
     :workspace,
     capabilities: [],
-    max_tokens: @default_max_tokens,
     max_agent_depth: 1,
     mailbox: %{max_messages: 10, flush_interval: 500}
   ]
@@ -68,7 +64,6 @@ defmodule SkillKit.Agent.Definition do
          system_prompt: body,
          path: path,
          workspace: workspace,
-         max_tokens: parse_int(metadata, "max_tokens", @default_max_tokens),
          max_agent_depth: parse_int(metadata, "max_agent_depth", 1),
          mailbox: %{
            max_messages: parse_int(metadata, "mailbox_max_messages", 10),
