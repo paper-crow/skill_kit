@@ -45,7 +45,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         assert [%Message.User{content: "hello"}] =
                  Enum.filter(messages, &match?(%Message.User{}, &1))
 
@@ -96,7 +96,7 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       call_count = :counters.new(1, [:atomics])
 
-      expect(SkillKit.LLM.Mock, :stream, 2, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, 2, fn _messages, _opts ->
         count = :counters.get(call_count, 1) + 1
         :counters.put(call_count, 1, count)
 
@@ -174,7 +174,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         {:error, {400, "credit balance too low"}}
       end)
 
@@ -209,7 +209,7 @@ defmodule SkillKit.Agent.ServerTest do
         max_tokens: 4096
       }
 
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
         assert Keyword.get(opts, :system) == "You are a calculator."
         assert Keyword.get(opts, :max_tokens) == 4096
         assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
@@ -255,7 +255,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
         tools = Keyword.get(opts, :tools, [])
         assert Enum.any?(tools, fn t -> t.name == "bash" end)
         assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
@@ -310,7 +310,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",
@@ -360,7 +360,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         {:error, {500, "internal error"}}
       end)
 
@@ -386,7 +386,7 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       call_count = :counters.new(1, [:atomics])
 
-      expect(SkillKit.LLM.Mock, :stream, 2, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, 2, fn _messages, _opts ->
         count = :counters.get(call_count, 1) + 1
         :counters.put(call_count, 1, count)
 
@@ -495,7 +495,7 @@ defmodule SkillKit.Agent.ServerTest do
       Registry.register(parent_registry, {parent_name, :server}, [])
 
       # Mock: LLM returns a report_result tool call
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",
@@ -556,7 +556,7 @@ defmodule SkillKit.Agent.ServerTest do
       parent_registry = :"orphan_reg_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, keys: :unique, name: parent_registry})
 
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",
@@ -647,7 +647,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",
@@ -696,7 +696,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         last = List.last(messages)
         assert %Message.System{content: content} = last
         assert content =~ "Subagent Complete"

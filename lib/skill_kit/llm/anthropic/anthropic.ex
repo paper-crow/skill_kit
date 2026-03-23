@@ -2,10 +2,9 @@ defmodule SkillKit.LLM.Anthropic do
   @moduledoc """
   Anthropic adapter for `SkillKit.LLM`.
 
-  Translates native `SkillKit.LLM.Message` structs to Anthropic API
-  format via the encoder, delegates streaming to the `Anthropic` client.
-  Response decoding is left to the caller — the stream returns raw
-  SSE events that can be decoded via `SkillKit.LLM.Anthropic.Decoder`.
+  Sensitive config (api_key, endpoint) is resolved from opts first (for
+  direct test calls), then app config, then env vars. Request params
+  (model, max_tokens, temperature) are read from opts.
   """
 
   @behaviour SkillKit.LLM
@@ -13,14 +12,36 @@ defmodule SkillKit.LLM.Anthropic do
   alias SkillKit.LLM.Anthropic.Encoder
 
   @default_model "claude-sonnet-4-20250514"
+  @default_max_tokens 8096
+  @default_endpoint "https://api.anthropic.com"
 
   @impl true
-  def stream(config, messages, opts) do
+  def stream(messages, opts) do
+    api_key = Keyword.get(opts, :api_key) || resolve_api_key()
+    endpoint = Keyword.get(opts, :endpoint, resolve_endpoint())
+    client = Anthropic.Client.new(api_key: api_key, endpoint: endpoint)
+
     encoded_messages = Encoder.encode_messages(messages)
     {tools, opts} = Keyword.pop(opts, :tools, [])
     encoded_tools = Encoder.encode_tools(tools)
-    opts = if encoded_tools != [], do: Keyword.put(opts, :tools, encoded_tools), else: opts
-    opts = if Keyword.get(opts, :model), do: opts, else: Keyword.put(opts, :model, @default_model)
-    Anthropic.stream(config, encoded_messages, opts)
+
+    request_opts =
+      opts
+      |> Keyword.drop([:api_key, :endpoint])
+      |> then(&if(encoded_tools != [], do: Keyword.put(&1, :tools, encoded_tools), else: &1))
+      |> Keyword.put_new(:model, @default_model)
+      |> Keyword.put_new(:max_tokens, @default_max_tokens)
+
+    Anthropic.Client.stream(client, encoded_messages, request_opts)
+  end
+
+  defp resolve_api_key do
+    config = Application.get_env(:skill_kit, __MODULE__, [])
+    Keyword.get(config, :api_key) || System.get_env("ANTHROPIC_API_KEY")
+  end
+
+  defp resolve_endpoint do
+    config = Application.get_env(:skill_kit, __MODULE__, [])
+    Keyword.get(config, :endpoint, @default_endpoint)
   end
 end

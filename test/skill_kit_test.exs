@@ -20,7 +20,7 @@ defmodule SkillKitTest do
         max_tokens: 1024
       }
 
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",
@@ -123,7 +123,7 @@ defmodule SkillKitTest do
       }
 
       # First session — agent gets a message and responds
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",

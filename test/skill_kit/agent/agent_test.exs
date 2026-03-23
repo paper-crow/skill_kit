@@ -55,7 +55,7 @@ defmodule SkillKit.Agent.AgentTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",

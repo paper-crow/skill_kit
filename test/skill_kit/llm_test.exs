@@ -6,36 +6,56 @@ defmodule SkillKit.LLMTest do
   setup :verify_on_exit!
 
   describe "stream/2" do
-    test "dispatches to the configured provider" do
-      Application.put_env(:skill_kit, SkillKit.LLM, {SkillKit.LLM.Mock, [api_key: "sk-test"]})
-
-      on_exit(fn -> Application.delete_env(:skill_kit, SkillKit.LLM) end)
-
-      expect(SkillKit.LLM.Mock, :stream, fn config, messages, opts ->
-        assert config == [api_key: "sk-test"]
+    test "dispatches to the configured default provider" do
+      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         assert messages == [%{"role" => "user", "content" => "Hi"}]
-        assert opts == [model: "claude-sonnet-4-20250514"]
         {:ok, Stream.map([], & &1)}
       end)
 
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:ok, _stream} = SkillKit.LLM.stream(messages, model: "claude-sonnet-4-20250514")
+      assert {:ok, _stream} = SkillKit.LLM.stream(messages)
     end
 
-    test "allows provider override via opts" do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+    test "resolves provider from model URI" do
+      expect(SkillKit.LLM.Mock, :stream, fn messages, opts ->
+        assert messages == [%{"role" => "user", "content" => "Hi"}]
+        assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
         {:ok, Stream.map([], & &1)}
       end)
 
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:ok, _} = SkillKit.LLM.stream(messages, provider: {SkillKit.LLM.Mock, []})
+
+      assert {:ok, _stream} =
+               SkillKit.LLM.stream(messages, model: "mock://claude-sonnet-4-20250514")
     end
 
-    test "falls back to default when no config set" do
-      Application.delete_env(:skill_kit, SkillKit.LLM)
+    test "bare model string uses default provider" do
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
+        assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
+        {:ok, Stream.map([], & &1)}
+      end)
 
-      assert {:ok, {mod, _config}} = SkillKit.LLM.default_provider()
-      assert mod == SkillKit.LLM.Anthropic
+      messages = [%{"role" => "user", "content" => "Hi"}]
+      assert {:ok, _} = SkillKit.LLM.stream(messages, model: "claude-sonnet-4-20250514")
+    end
+
+    test "returns error for unknown provider" do
+      messages = [%{"role" => "user", "content" => "Hi"}]
+      assert {:error, {:unknown_provider, "bogus"}} = SkillKit.LLM.stream(messages, model: "bogus://model")
+    end
+  end
+
+  describe "get_provider/1" do
+    test "finds configured provider by atom" do
+      assert {:ok, SkillKit.LLM.Mock} = SkillKit.LLM.get_provider(:mock)
+    end
+
+    test "finds configured provider by string" do
+      assert {:ok, SkillKit.LLM.Mock} = SkillKit.LLM.get_provider("mock")
+    end
+
+    test "returns error for unknown provider" do
+      assert {:error, {:unknown_provider, :nope}} = SkillKit.LLM.get_provider(:nope)
     end
   end
 end

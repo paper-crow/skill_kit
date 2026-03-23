@@ -32,7 +32,7 @@ defmodule SkillKit.Agent.LoopTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         assert Enum.any?(messages, fn
                  %Message.User{content: "What is 2+2?"} -> true
                  _ -> false
@@ -94,7 +94,7 @@ defmodule SkillKit.Agent.LoopTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
           %{
             "type" => "message_start",

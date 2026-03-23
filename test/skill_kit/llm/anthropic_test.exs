@@ -4,7 +4,7 @@ defmodule SkillKit.LLM.AnthropicTest do
   alias SkillKit.LLM.Anthropic, as: Adapter
   alias SkillKit.LLM.Message
 
-  describe "stream/3" do
+  describe "stream/2" do
     setup do
       bypass = Bypass.open()
       config = [api_key: "sk-test", endpoint: "http://localhost:#{bypass.port}"]
@@ -42,9 +42,8 @@ defmodule SkillKit.LLM.AnthropicTest do
       messages = [%Message.User{content: "Hi"}]
 
       assert {:ok, stream} =
-               Adapter.stream(config, messages,
-                 model: "claude-sonnet-4-20250514",
-                 max_tokens: 1024
+               Adapter.stream(messages,
+                 Keyword.merge(config, model: "claude-sonnet-4-20250514", max_tokens: 1024)
                )
 
       events = Enum.to_list(stream)
