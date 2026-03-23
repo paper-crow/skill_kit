@@ -47,7 +47,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, agent} =
       SkillKit.start_agent(definition,
         sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
-        provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
         caller: self()
       )
 

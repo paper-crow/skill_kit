@@ -69,10 +69,8 @@ defmodule SkillKit.Agent.CoreTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, _sup} =
-        Core.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Core.start_link({agent_name, definition, 0, nil, nil, registry})
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})

@@ -21,7 +21,6 @@ defmodule SkillKit.Agent.Server do
     :depth,
     :scope,
     :registry,
-    :provider,
     :caller,
     :kits,
     :parent_registry,
@@ -40,7 +39,6 @@ defmodule SkillKit.Agent.Server do
           depth: non_neg_integer(),
           scope: term(),
           registry: atom(),
-          provider: {module(), keyword()} | nil,
           caller: pid() | nil,
           kits: list(),
           parent_registry: atom() | nil,
@@ -67,7 +65,6 @@ defmodule SkillKit.Agent.Server do
   def init({agent_name, definition, depth, parent_name, scope, registry, opts}) do
     Registry.register(registry, {agent_name, :server}, [])
 
-    provider = Keyword.get(opts, :provider)
     caller = Keyword.get(opts, :caller)
     kits = Keyword.get(opts, :kits, [])
     parent_registry = Keyword.get(opts, :parent_registry)
@@ -94,7 +91,6 @@ defmodule SkillKit.Agent.Server do
        depth: depth,
        scope: scope,
        registry: registry,
-       provider: provider,
        caller: caller,
        kits: kits,
        parent_registry: parent_registry,
@@ -208,18 +204,7 @@ defmodule SkillKit.Agent.Server do
 
     tools = ToolBuilder.build_tools(state.kits, subagent: state.depth > 0)
 
-    llm_opts =
-      [
-        model: state.definition.model,
-        max_tokens: state.definition.max_tokens,
-        system: state.definition.system_prompt,
-        tools: tools
-      ]
-
-    llm_opts =
-      if state.provider, do: Keyword.put(llm_opts, :provider, state.provider), else: llm_opts
-
-    case SkillKit.LLM.stream(state.messages, llm_opts) do
+    case stream(state, tools) do
       {:ok, stream} ->
         acc = Enum.reduce(stream, Decoder.new_accumulator(), &stream_event(&1, &2, state))
 
@@ -405,9 +390,6 @@ defmodule SkillKit.Agent.Server do
 
     spawn_opts = [sources: state.sources]
 
-    spawn_opts =
-      if state.provider, do: Keyword.put(spawn_opts, :provider, state.provider), else: spawn_opts
-
     case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
       {:ok, agent_ref} ->
         [{server_pid, _}] = Registry.lookup(agent_ref.registry, {subagent_name, :server})
@@ -497,6 +479,14 @@ defmodule SkillKit.Agent.Server do
       [{pid, _}] -> {:ok, pid}
       [] -> :not_found
     end
+  end
+
+  defp stream(state, tools) do
+    SkillKit.LLM.stream(state.messages,
+      model: state.definition.model,
+      system: state.definition.system_prompt,
+      tools: tools
+    )
   end
 
   defp stream_event(event, acc, state) do

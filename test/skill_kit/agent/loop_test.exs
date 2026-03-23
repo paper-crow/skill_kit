@@ -68,8 +68,7 @@ defmodule SkillKit.Agent.LoopTest do
         parent_name: nil,
         scope: nil,
         sources: [],
-        registry: registry,
-        provider: {SkillKit.LLM.Mock, []}
+        registry: registry
       }
 
       {:ok, _sup} = Agent.start_link(opts)
@@ -141,8 +140,7 @@ defmodule SkillKit.Agent.LoopTest do
         parent_name: nil,
         scope: nil,
         sources: [],
-        registry: registry,
-        provider: {SkillKit.LLM.Mock, []}
+        registry: registry
       }
 
       {:ok, _sup} = Agent.start_link(opts)

@@ -9,7 +9,6 @@ defmodule SkillKit do
 
       {:ok, agent} = SkillKit.start_agent(definition,
         sources: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
-        provider: {SkillKit.LLM.Anthropic, [api_key: "sk-..."]},
         caller: self()
       )
 
@@ -59,7 +58,6 @@ defmodule SkillKit do
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
     * `:sources` — list of `{module, config}` skill sources (default: `[]`)
-    * `:provider` — `{module, config}` LLM provider (default: from app config)
     * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
     * `:scope` — granted scopes for authorization (default: `nil`)
 
@@ -68,7 +66,6 @@ defmodule SkillKit do
   def start_agent(definition, opts \\ []) do
     caller = Keyword.get(opts, :caller, self())
     sources = Keyword.get(opts, :sources, [])
-    provider = Keyword.get(opts, :provider)
     conversation_store = Keyword.get(opts, :conversation_store)
     scope = Keyword.get(opts, :scope)
 
@@ -82,7 +79,6 @@ defmodule SkillKit do
       scope: scope,
       sources: sources,
       registry: registry_name,
-      provider: provider,
       caller: caller,
       conversation_store: conversation_store
     }
@@ -128,7 +124,6 @@ defmodule SkillKit do
     parent_name = Keyword.fetch!(parent_opts, :parent_name)
     parent_registry = Keyword.fetch!(parent_opts, :parent_registry)
     sources = Keyword.get(opts, :sources, [])
-    provider = Keyword.get(opts, :provider)
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
@@ -140,7 +135,6 @@ defmodule SkillKit do
       scope: nil,
       sources: sources,
       registry: registry_name,
-      provider: provider,
       caller: nil,
       parent_registry: parent_registry
     }

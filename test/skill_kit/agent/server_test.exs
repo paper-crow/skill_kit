@@ -72,10 +72,8 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -151,10 +149,8 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -178,10 +174,8 @@ defmodule SkillKit.Agent.ServerTest do
         {:error, {400, "credit balance too low"}}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -211,7 +205,6 @@ defmodule SkillKit.Agent.ServerTest do
 
       expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
         assert Keyword.get(opts, :system) == "You are a calculator."
-        assert Keyword.get(opts, :max_tokens) == 4096
         assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
 
         events = [
@@ -237,10 +230,8 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -290,11 +281,9 @@ defmodule SkillKit.Agent.ServerTest do
         }
       ]
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, provider: backend, kits: kits}
+          {agent_name, definition, 0, nil, nil, registry, kits: kits}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -339,11 +328,9 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+          {agent_name, definition, 0, nil, nil, registry, caller: self()}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -364,11 +351,9 @@ defmodule SkillKit.Agent.ServerTest do
         {:error, {500, "internal error"}}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+          {agent_name, definition, 0, nil, nil, registry, caller: self()}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -444,11 +429,9 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+          {agent_name, definition, 0, nil, nil, registry, caller: self()}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -466,10 +449,8 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       :sys.replace_state(pid, fn state -> %{state | halted: true} end)
 
@@ -527,12 +508,10 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
           {agent_name, definition, 1, parent_name, nil, registry,
-           provider: provider, parent_registry: parent_registry}
+           parent_registry: parent_registry}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -588,12 +567,10 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
           {agent_name, definition, 1, "gone-parent", nil, registry,
-           provider: provider, parent_registry: parent_registry}
+           parent_registry: parent_registry}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
@@ -614,11 +591,9 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, ["limited:scope"], registry, provider: provider}
+          {agent_name, definition, 0, nil, ["limited:scope"], registry}
         )
 
       # Verify the server started with scope
@@ -631,10 +606,8 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      provider = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       state = :sys.get_state(pid)
       assert state.scope == nil
@@ -671,10 +644,8 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      backend = {SkillKit.LLM.Mock, []}
-
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -727,13 +698,12 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      provider = {SkillKit.LLM.Mock, []}
       mailbox_config = %{max_messages: 1, flush_interval: 50}
       {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
 
       {:ok, pid} =
         Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+          {agent_name, definition, 0, nil, nil, registry, caller: self()}
         )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)

@@ -51,7 +51,6 @@ defmodule SkillKitTest do
 
       {:ok, agent} =
         SkillKit.start_agent(definition,
-          provider: {SkillKit.LLM.Mock, []},
           caller: self()
         )
 
@@ -75,7 +74,7 @@ defmodule SkillKitTest do
         workspace: "/tmp/test"
       }
 
-      {:ok, agent} = SkillKit.start_agent(definition, provider: {SkillKit.LLM.Mock, []})
+      {:ok, agent} = SkillKit.start_agent(definition)
       SkillKit.stop_agent(agent)
       Process.sleep(50)
 
@@ -91,7 +90,7 @@ defmodule SkillKitTest do
         workspace: "/tmp/test"
       }
 
-      {:ok, agent} = SkillKit.start_agent(definition, provider: {SkillKit.LLM.Mock, []})
+      {:ok, agent} = SkillKit.start_agent(definition)
       assert Process.whereis(agent.registry) != nil
 
       SkillKit.stop_agent(agent)
@@ -149,7 +148,6 @@ defmodule SkillKitTest do
 
       {:ok, agent} =
         SkillKit.start_agent(definition,
-          provider: {SkillKit.LLM.Mock, []},
           conversation_store: store,
           caller: self()
         )

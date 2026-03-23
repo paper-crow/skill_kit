@@ -34,7 +34,6 @@ defmodule SkillKit.Agent do
           :scope => term(),
           :sources => [{module(), keyword()}],
           :registry => atom(),
-          optional(:provider) => {module(), keyword()} | nil,
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
           optional(:conversation_store) => {module(), keyword()} | nil
@@ -59,16 +58,12 @@ defmodule SkillKit.Agent do
 
     kits = load_kits_from_sources(sources)
     definition = resolve_capabilities(definition, kits)
-    provider = Map.get(opts, :provider)
     caller = Map.get(opts, :caller)
 
     parent_registry = Map.get(opts, :parent_registry)
     conversation_store = Map.get(opts, :conversation_store)
 
     server_opts = [kits: kits, sources: sources]
-
-    server_opts =
-      if provider, do: Keyword.put(server_opts, :provider, provider), else: server_opts
 
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
