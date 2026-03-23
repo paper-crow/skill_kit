@@ -59,7 +59,8 @@ defmodule Anthropic.Client do
              {"content-type", "application/json"}
            ],
            json: body,
-           into: :self
+           into: :self,
+           receive_timeout: 300_000
          ) do
       {:ok, %{status: 200} = resp} ->
         {:ok, sse_stream(resp.body)}
