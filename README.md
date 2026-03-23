@@ -32,6 +32,7 @@ SkillKit gives you a composable agent runtime:
 {:ok, agent} = SkillKit.start_agent(definition,
   sources: [{SkillKit.Backend.Filesystem, dirs: ["examples/skills"]}],
   provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
+  conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"},
   caller: self()
 )
 

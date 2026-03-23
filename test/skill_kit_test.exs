@@ -80,5 +80,54 @@ defmodule SkillKitTest do
 
       assert Process.whereis(agent.registry) == nil
     end
+
+    test "conversation_store persists and restores messages" do
+      store_path = Path.join(System.tmp_dir!(), "skill_kit_store_test_#{:erlang.unique_integer([:positive])}")
+      File.mkdir_p!(store_path)
+      on_exit(fn -> File.rm_rf!(store_path) end)
+
+      store = {SkillKit.Conversation.Store.Filesystem, path: store_path}
+
+      definition = %SkillKit.Agent.Definition{
+        name: "store-test-agent",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp/test",
+        workspace: "/tmp/test",
+        model: "test-model",
+        max_tokens: 100
+      }
+
+      # First session — agent gets a message and responds
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hi!"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      {:ok, agent} = SkillKit.start_agent(definition,
+        provider: {SkillKit.LLM.Mock, []},
+        conversation_store: store,
+        caller: self()
+      )
+
+      :ok = SkillKit.send_message(agent, "Hello")
+      assert_receive {:skill_kit, "store-test-agent", {:response, "Hi!"}}, 2000
+
+      # Give the Server time to complete save_conversation after the turn
+      Process.sleep(100)
+      SkillKit.stop_agent(agent)
+      Process.sleep(50)
+
+      # Verify file was written
+      assert {:ok, messages} = SkillKit.Conversation.Store.Filesystem.load("store-test-agent", path: store_path)
+      assert length(messages) == 2
+    end
   end
 end

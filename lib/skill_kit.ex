@@ -76,7 +76,9 @@ defmodule SkillKit do
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
     * `:sources` — list of `{module, config}` skill sources (default: `[]`)
-    * `:provider` — LLM provider module (default: `nil`)
+    * `:provider` — `{module, config}` LLM provider (default: from app config)
+    * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
+    * `:scope` — granted scopes for authorization (default: `nil`)
 
   """
   @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
@@ -84,6 +86,8 @@ defmodule SkillKit do
     caller = Keyword.get(opts, :caller, self())
     sources = Keyword.get(opts, :sources, [])
     provider = Keyword.get(opts, :provider)
+    conversation_store = Keyword.get(opts, :conversation_store)
+    scope = Keyword.get(opts, :scope)
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
@@ -92,11 +96,12 @@ defmodule SkillKit do
       definition: definition,
       depth: 0,
       parent_name: nil,
-      scope: nil,
+      scope: scope,
       sources: sources,
       registry: registry_name,
       provider: provider,
-      caller: caller
+      caller: caller,
+      conversation_store: conversation_store
     }
 
     case Agent.start_link(agent_opts) do

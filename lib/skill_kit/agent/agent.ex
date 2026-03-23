@@ -36,7 +36,8 @@ defmodule SkillKit.Agent do
           :registry => atom(),
           optional(:provider) => {module(), keyword()} | nil,
           optional(:caller) => pid() | nil,
-          optional(:parent_registry) => atom() | nil
+          optional(:parent_registry) => atom() | nil,
+          optional(:conversation_store) => {module(), keyword()} | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()
