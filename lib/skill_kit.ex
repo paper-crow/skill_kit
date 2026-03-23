@@ -59,4 +59,82 @@ defmodule SkillKit do
   from the application environment. This makes it safe to use in libraries and
   umbrella apps without polluting the application configuration namespace.
   """
+
+  alias SkillKit.Agent
+  alias SkillKit.AgentRef
+  alias SkillKit.LLM.Message
+
+  @type agent :: AgentRef.t()
+
+  @doc """
+  Starts a new agent from the given definition.
+
+  Returns `{:ok, agent_ref}` where `agent_ref` is an opaque reference
+  used with `send_message/2` and `stop_agent/1`.
+
+  ## Options
+
+    * `:caller` — the pid to receive streamed events (default: `self()`)
+    * `:sources` — list of `{module, config}` skill sources (default: `[]`)
+    * `:provider` — LLM provider module (default: `nil`)
+
+  """
+  @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
+  def start_agent(definition, opts \\ []) do
+    caller = Keyword.get(opts, :caller, self())
+    sources = Keyword.get(opts, :sources, [])
+    provider = Keyword.get(opts, :provider)
+
+    registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
+
+    {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
+
+    agent_opts = %{
+      agent_name: definition.name,
+      definition: definition,
+      depth: 0,
+      parent_name: nil,
+      scope: nil,
+      sources: sources,
+      registry: registry_name,
+      provider: provider,
+      caller: caller
+    }
+
+    case Agent.start_link(agent_opts) do
+      {:ok, sup_pid} ->
+        {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Sends a user message to the agent referenced by `agent`.
+
+  Returns `:ok` if the message was delivered, or `{:error, :not_found}`
+  if the agent's mailbox process cannot be found.
+  """
+  @spec send_message(agent(), String.t()) :: :ok | {:error, :not_found}
+  def send_message(%AgentRef{} = agent, content) when is_binary(content) do
+    message = %Message.User{content: content}
+
+    case Registry.lookup(agent.registry, {agent.name, :mailbox}) do
+      [{pid, _}] ->
+        GenServer.cast(pid, {:message, message})
+        :ok
+
+      [] ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Stops a running agent and all its child processes.
+  """
+  @spec stop_agent(agent()) :: :ok
+  def stop_agent(%AgentRef{supervisor_pid: pid}) do
+    Supervisor.stop(pid)
+  end
 end

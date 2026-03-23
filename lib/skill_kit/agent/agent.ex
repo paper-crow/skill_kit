@@ -27,13 +27,15 @@ defmodule SkillKit.Agent do
   alias SkillKit.Agent.Infrastructure
 
   @type opts :: %{
-          agent_name: String.t(),
-          definition: SkillKit.Agent.Definition.t(),
-          depth: non_neg_integer(),
-          parent_name: String.t() | nil,
-          scope: term(),
-          sources: [{module(), keyword()}],
-          registry: atom()
+          :agent_name => String.t(),
+          :definition => SkillKit.Agent.Definition.t(),
+          :depth => non_neg_integer(),
+          :parent_name => String.t() | nil,
+          :scope => term(),
+          :sources => [{module(), keyword()}],
+          :registry => atom(),
+          optional(:provider) => {module(), keyword()} | nil,
+          optional(:caller) => pid() | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()
