@@ -27,7 +27,7 @@ mkdir -p .memory && echo "- [$(date +%Y-%m-%d)] <what you learned>" >> .memory/c
 ```
 
 Save immediately when you learn:
-- The user's name or identity
+- Personalization details
 - User preferences and corrections ("don't do X", "always do Y")
 - Project-specific conventions discovered during work
 - Important decisions and their rationale
