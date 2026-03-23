@@ -35,7 +35,8 @@ defmodule SkillKit.Agent do
           :sources => [{module(), keyword()}],
           :registry => atom(),
           optional(:provider) => {module(), keyword()} | nil,
-          optional(:caller) => pid() | nil
+          optional(:caller) => pid() | nil,
+          optional(:parent_registry) => atom() | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()
@@ -59,9 +60,12 @@ defmodule SkillKit.Agent do
     provider = Map.get(opts, :provider)
     caller = Map.get(opts, :caller)
 
-    server_opts = [kits: kits]
+    parent_registry = Map.get(opts, :parent_registry)
+
+    server_opts = [kits: kits, sources: sources]
     server_opts = if provider, do: Keyword.put(server_opts, :provider, provider), else: server_opts
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
+    server_opts = if parent_registry, do: Keyword.put(server_opts, :parent_registry, parent_registry), else: server_opts
 
     children = [
       {Registry, keys: :unique, name: registry},

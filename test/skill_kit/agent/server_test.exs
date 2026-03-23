@@ -313,6 +313,26 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "halted state" do
+    test "halted server ignores mailbox flushes", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
+
+      :sys.replace_state(pid, fn state -> %{state | halted: true} end)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      Process.sleep(50)
+
+      state = :sys.get_state(pid)
+      assert state.messages == []
+      assert state.halted == true
+    end
+  end
+
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
       registry: registry,

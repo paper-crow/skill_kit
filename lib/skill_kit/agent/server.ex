@@ -25,6 +25,9 @@ defmodule SkillKit.Agent.Server do
     :provider,
     :caller,
     :kits,
+    :parent_registry,
+    :sources,
+    halted: false,
     messages: [],
     subagents: %{},
     pending_requests: %{}
@@ -40,6 +43,9 @@ defmodule SkillKit.Agent.Server do
           provider: {module(), keyword()} | nil,
           caller: pid() | nil,
           kits: list(),
+          parent_registry: atom() | nil,
+          sources: list(),
+          halted: boolean(),
           messages: list(),
           subagents: map(),
           pending_requests: map()
@@ -60,6 +66,8 @@ defmodule SkillKit.Agent.Server do
     provider = Keyword.get(opts, :provider)
     caller = Keyword.get(opts, :caller)
     kits = Keyword.get(opts, :kits, [])
+    parent_registry = Keyword.get(opts, :parent_registry)
+    sources = Keyword.get(opts, :sources, [])
 
     {:ok, %__MODULE__{
       agent_name: agent_name,
@@ -70,11 +78,19 @@ defmodule SkillKit.Agent.Server do
       registry: registry,
       provider: provider,
       caller: caller,
-      kits: kits
+      kits: kits,
+      parent_registry: parent_registry,
+      sources: sources,
+      halted: false
     }}
   end
 
   # --- Agent Loop ---
+
+  @impl true
+  def handle_info({:mailbox_flush, _new_messages}, %{halted: true} = state) do
+    {:noreply, state}
+  end
 
   @impl true
   def handle_info({:mailbox_flush, new_messages}, state) do
