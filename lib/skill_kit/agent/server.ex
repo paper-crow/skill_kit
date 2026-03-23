@@ -300,17 +300,21 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp extract_output({:ok, output}), do: output
-  defp extract_output(output) when is_binary(output), do: output
+  defp extract_output({:ok, output}), do: ensure_non_empty(output)
+  defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
   defp extract_output(other), do: inspect(other)
 
   defp extract_error(execution) do
     case execution.results["execute"] do
-      {:error, {output, _code}} -> output
+      {:error, {output, _code}} -> ensure_non_empty(output)
       {:error, reason} -> inspect(reason)
       _ -> "Execution failed"
     end
   end
+
+  defp ensure_non_empty(""), do: "(no output)"
+  defp ensure_non_empty(str) when is_binary(str), do: str
+  defp ensure_non_empty(nil), do: "(no output)"
 
   defp activate_skill(%Message.ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
