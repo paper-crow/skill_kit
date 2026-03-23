@@ -214,7 +214,7 @@ defmodule SkillKit.Execution do
   defp resolve_executor(skill, _opts), do: skill.executor
 
   defp build_pre_context(%{skill: nil, steps: steps} = exec) do
-    {:execute, _, executor} = Enum.find(steps, fn {type, _, _} -> type == :execute end)
+    {:execute, _, executor} = Enum.find(steps, &match?({:execute, _, _}, &1))
 
     %{
       skill: nil,
