@@ -87,6 +87,27 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
       assert length(encoded) == 4
       assert Enum.map(encoded, & &1["role"]) == ["user", "assistant", "user", "assistant"]
     end
+
+    test "handles assistant with nil content followed by tool result in multi-loop conversation" do
+      messages = [
+        %Message.User{content: "review this"},
+        %Message.Assistant{content: "Let me check", tool_calls: [
+          %Message.ToolCall{id: "tc_1", name: "activate_skill", input: %{"name" => "review"}},
+          %Message.ToolCall{id: "tc_2", name: "bash", input: %{"command" => "cat file.ex"}}
+        ]},
+        %Message.ToolResult{tool_call_id: "tc_1", content: "skill loaded"},
+        %Message.ToolResult{tool_call_id: "tc_2", content: "file contents"},
+        %Message.Assistant{content: nil, tool_calls: [
+          %Message.ToolCall{id: "tc_3", name: "bash", input: %{"command" => "cat other.ex"}}
+        ]},
+        %Message.ToolResult{tool_call_id: "tc_3", content: "other contents"}
+      ]
+
+      encoded = Encoder.encode_messages(messages)
+      assert length(encoded) == 5
+      roles = Enum.map(encoded, & &1["role"])
+      assert roles == ["user", "assistant", "user", "assistant", "user"]
+    end
   end
 
   describe "encode_tools/1" do

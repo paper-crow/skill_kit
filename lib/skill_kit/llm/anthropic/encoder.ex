@@ -21,19 +21,21 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
   # Groups consecutive ToolResult messages into lists. All other messages
   # stay as single-element lists.
   defp chunk_tool_results(messages) do
-    Enum.chunk_while(
-      messages,
-      [],
-      fn
-        %Message.ToolResult{} = tr, acc -> {:cont, [tr | acc]}
-        msg, [] -> {:cont, [msg], []}
-        msg, acc -> {:cont, Enum.reverse(acc), [msg]}
-      end,
-      fn
-        [] -> {:cont, []}
-        acc -> {:cont, Enum.reverse(acc), []}
-      end
-    )
+    messages
+    |> Enum.reduce({[], []}, fn
+      %Message.ToolResult{} = tr, {chunks, acc} ->
+        {chunks, [tr | acc]}
+
+      msg, {chunks, []} ->
+        {chunks ++ [[msg]], []}
+
+      msg, {chunks, acc} ->
+        {chunks ++ [Enum.reverse(acc), [msg]], []}
+    end)
+    |> then(fn
+      {chunks, []} -> chunks
+      {chunks, acc} -> chunks ++ [Enum.reverse(acc)]
+    end)
   end
 
   defp encode_chunk([%Message.ToolResult{} | _] = results) do
