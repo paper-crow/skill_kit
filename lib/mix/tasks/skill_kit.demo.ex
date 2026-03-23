@@ -32,7 +32,10 @@ defmodule Mix.Tasks.SkillKit.Demo do
     agent_md = Path.join(:code.priv_dir(:skill_kit), "sample_agent/AGENT.md")
     {:ok, definition} = Definition.parse(agent_md)
 
+    skills_dir = Path.join(:code.priv_dir(:skill_kit), "skills")
+
     {:ok, agent} = SkillKit.start_agent(definition,
+      sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
       provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
       caller: self()
     )
@@ -54,12 +57,26 @@ defmodule Mix.Tasks.SkillKit.Demo do
       {:skill_kit, ^agent_name, {:response, _text}} ->
         IO.puts("")
         Mix.shell().info("--- Turn complete ---")
+        # Wait for potential follow-up turns (e.g. subagent results)
+        wait_for_follow_up(agent_name)
 
       {:skill_kit, ^agent_name, {:error, reason}} ->
         Mix.shell().error("Error: #{inspect(reason)}")
     after
-      60_000 ->
+      120_000 ->
         Mix.shell().error("Timed out waiting for agent response")
+    end
+  end
+
+  defp wait_for_follow_up(agent_name) do
+    receive do
+      {:skill_kit, ^agent_name, {:delta, _text}} = msg ->
+        Mix.shell().info("\n--- New turn (subagent result arrived) ---")
+        send(self(), msg)
+        receive_loop(agent_name)
+    after
+      30_000 ->
+        :ok
     end
   end
 end
