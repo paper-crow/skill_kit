@@ -164,17 +164,7 @@ defmodule SkillKit.Agent.Server do
 
     case SkillKit.LLM.stream(state.messages, llm_opts) do
       {:ok, stream} ->
-        acc =
-          Enum.reduce(stream, Decoder.new_accumulator(), fn event, acc ->
-            {action, acc} = Decoder.decode_event(event, acc)
-
-            case action do
-              {:delta, text} -> notify_caller(state, {:delta, text})
-              :none -> :ok
-            end
-
-            acc
-          end)
+        acc = Enum.reduce(stream, Decoder.new_accumulator(), &stream_event(&1, &2, state))
 
         response = Decoder.finalize(acc)
 
@@ -266,6 +256,17 @@ defmodule SkillKit.Agent.Server do
 
   defp builtin_placeholder(%Message.ToolCall{id: id, name: name}) do
     %Message.ToolResult{tool_call_id: id, content: "Builtin '#{name}' not yet implemented."}
+  end
+
+  defp stream_event(event, acc, state) do
+    {action, acc} = Decoder.decode_event(event, acc)
+
+    case action do
+      {:delta, text} -> notify_caller(state, {:delta, text})
+      :none -> :ok
+    end
+
+    acc
   end
 
   defp notify_caller(%{caller: nil}, _event), do: :ok
