@@ -333,6 +333,86 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "builtins" do
+    test "report_result sends to parent and halts server", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      # Set up a parent registry and register ourselves as the parent
+      parent_registry = :"parent_reg_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, keys: :unique, name: parent_registry})
+      parent_name = "test-parent"
+      Registry.register(parent_registry, {parent_name, :server}, [])
+
+      # Mock: LLM returns a report_result tool call
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "report_result", "input" => %{}}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"result\": \"All good\"}"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link(
+        {agent_name, definition, 1, parent_name, nil, registry,
+         provider: provider, parent_registry: parent_registry}
+      )
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "report your findings"}]})
+
+      # Parent (us) should receive the result
+      assert_receive {:subagent_result, ^pid, "All good"}, 2000
+
+      # Server should be halted
+      Process.sleep(50)
+      state = :sys.get_state(pid)
+      assert state.halted == true
+    end
+
+    test "report_result with missing parent emits telemetry and halts", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      parent_registry = :"orphan_reg_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, keys: :unique, name: parent_registry})
+
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "report_result", "input" => %{}}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"result\": \"orphaned\"}"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link(
+        {agent_name, definition, 1, "gone-parent", nil, registry,
+         provider: provider, parent_registry: parent_registry}
+      )
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "report"}]})
+      Process.sleep(100)
+
+      # Should not crash, should be halted
+      assert Process.alive?(pid)
+      state = :sys.get_state(pid)
+      assert state.halted == true
+    end
+  end
+
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
       registry: registry,

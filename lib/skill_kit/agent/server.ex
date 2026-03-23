@@ -162,6 +162,8 @@ defmodule SkillKit.Agent.Server do
 
   # --- Core Loop ---
 
+  defp run_agent_loop(%{halted: true} = state, _new_messages), do: state
+
   defp run_agent_loop(state, new_messages) do
     state = %{state | messages: state.messages ++ new_messages}
 
@@ -239,7 +241,9 @@ defmodule SkillKit.Agent.Server do
         :executor -> {execute_command(tc, acc), acc}
         :activate_skill -> {activate_skill(tc, acc), acc}
         :subagent -> {subagent_placeholder(tc), acc}
-        :builtin -> {builtin_placeholder(tc), acc}
+        :builtin ->
+          {result, acc} = handle_builtin(tc, acc)
+          {result, acc}
       end
     end)
   end
@@ -270,8 +274,41 @@ defmodule SkillKit.Agent.Server do
     %Message.ToolResult{tool_call_id: id, content: "Subagent '#{name}' delegation not yet implemented."}
   end
 
-  defp builtin_placeholder(%Message.ToolCall{id: id, name: name}) do
-    %Message.ToolResult{tool_call_id: id, content: "Builtin '#{name}' not yet implemented."}
+  defp handle_builtin(%Message.ToolCall{id: id, name: "report_result", input: input}, state) do
+    result = Map.get(input, "result", "")
+
+    case lookup_parent(state) do
+      {:ok, parent_pid} ->
+        send(parent_pid, {:subagent_result, self(), result})
+
+      :not_found ->
+        :telemetry.execute(
+          [:skill_kit, :agent, :orphaned_result],
+          %{},
+          %{agent_name: state.agent_name, parent_name: state.parent_name, result: result}
+        )
+    end
+
+    state = %{state | halted: true}
+    {%Message.ToolResult{tool_call_id: id, content: "Result reported successfully."}, state}
+  end
+
+  defp handle_builtin(%Message.ToolCall{id: id, name: "report_status"}, state) do
+    {%Message.ToolResult{tool_call_id: id, content: "Status acknowledged."}, state}
+  end
+
+  defp handle_builtin(%Message.ToolCall{id: id, name: name}, state) do
+    {%Message.ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true}, state}
+  end
+
+  defp lookup_parent(%{parent_registry: nil}), do: :not_found
+  defp lookup_parent(%{parent_registry: _reg, parent_name: nil}), do: :not_found
+
+  defp lookup_parent(%{parent_registry: reg, parent_name: name}) do
+    case Registry.lookup(reg, {name, :server}) do
+      [{pid, _}] -> {:ok, pid}
+      [] -> :not_found
+    end
   end
 
   defp stream_event(event, acc, state) do
