@@ -56,9 +56,9 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        backends: [],
+        sources: [],
         registry: registry,
-        server_opts: [backend: {SkillKit.LLM.Mock, []}]
+        provider: {SkillKit.LLM.Mock, []}
       }
 
       {:ok, _sup} = Agent.start_link(opts)
@@ -117,9 +117,9 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        backends: [],
+        sources: [],
         registry: registry,
-        server_opts: [backend: {SkillKit.LLM.Mock, []}]
+        provider: {SkillKit.LLM.Mock, []}
       }
 
       {:ok, _sup} = Agent.start_link(opts)

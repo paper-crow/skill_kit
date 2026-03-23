@@ -59,7 +59,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, backend: backend})
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
@@ -107,7 +107,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, backend: backend})
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
@@ -117,6 +117,69 @@ defmodule SkillKit.Agent.ServerTest do
 
       assert length(state.messages) >= 4
       assert :counters.get(call_count, 1) == 2
+    end
+  end
+
+  describe "LLM error handling" do
+    test "gracefully handles LLM stream error without crashing", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        {:error, {400, "credit balance too low"}}
+      end)
+
+      backend = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      Process.sleep(50)
+
+      # Server should still be alive
+      assert Process.alive?(pid)
+      state = :sys.get_state(pid)
+      # User message was appended but no assistant response
+      assert [%Message.User{content: "hello"}] = state.messages
+    end
+
+    test "passes system_prompt and max_tokens to LLM", %{
+      registry: registry,
+      agent_name: agent_name
+    } do
+      definition = %Definition{
+        name: agent_name,
+        description: "Test agent",
+        system_prompt: "You are a calculator.",
+        path: "/tmp/test",
+        workspace: "/tmp/test",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096
+      }
+
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, opts ->
+        assert Keyword.get(opts, :system) == "You are a calculator."
+        assert Keyword.get(opts, :max_tokens) == 4096
+        assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
+
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "4"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      backend = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "2+2"}]})
+      Process.sleep(50)
     end
   end
 
@@ -148,7 +211,7 @@ defmodule SkillKit.Agent.ServerTest do
       }]
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, backend: backend, kits: kits})
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend, kits: kits})
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hi"}]})
@@ -175,7 +238,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, backend: backend})
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       system_msg = %Message.System{content: "[Background task ref_1 complete] Agent 'worker' returned: done"}

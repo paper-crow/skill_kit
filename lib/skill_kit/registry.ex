@@ -24,13 +24,13 @@ defmodule SkillKit.Registry do
 
   ## Boot-time Loading
 
-  When starting the registry via a supervision tree, you can pass `backends`
+  When starting the registry via a supervision tree, you can pass `sources`
   to automatically load skills at boot time:
 
-  - `:backends` — list of `{backend_module, backend_config}` tuples. Each
+  - `:sources` — list of `{backend_module, backend_config}` tuples. Each
     backend module must implement `load_skills/1`, returning `{:ok, [%Skill{}]}`
     or `{:error, reason}`. Backends are iterated in order; first-registered-wins
-    semantics apply when multiple backends provide skills with the same name.
+    semantics apply when multiple sources provide skills with the same name.
     Backend failures are logged as warnings; the registry still starts successfully.
 
   Boot loading happens in `handle_continue/2`, which runs before any external
@@ -86,14 +86,14 @@ defmodule SkillKit.Registry do
 
   - `:name` — the name to register the GenServer under. Defaults to `__MODULE__`
     (`SkillKit.Registry`). Pass a unique atom for test isolation.
-  - `:backends` — list of `{backend_module, backend_config}` tuples for boot-time
+  - `:sources` — list of `{backend_module, backend_config}` tuples for boot-time
     skill loading. Defaults to `[]` (no skills loaded at boot).
 
   ## Examples
 
       iex> {:ok, _pid} = SkillKit.Registry.start_link([])
       iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry)
-      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, backends: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
+      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, sources: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -235,9 +235,9 @@ defmodule SkillKit.Registry do
 
   @impl true
   def handle_continue(:load_skills, state) do
-    backends = Keyword.get(state.opts, :backends, [])
+    sources = Keyword.get(state.opts, :sources, [])
 
-    Enum.each(backends, &load_backend(&1, state.table))
+    Enum.each(sources, &load_backend(&1, state.table))
 
     {:noreply, state}
   end

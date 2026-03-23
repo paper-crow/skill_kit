@@ -27,12 +27,12 @@ defmodule SkillKit.Supervisor do
         {SkillKit.Supervisor, registry_name: MyApp.SkillRegistry}
       ]
 
-  To auto-load skills from directories at boot using backends:
+  To auto-load skills from directories at boot using sources:
 
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          backends: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
+          sources: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
       ]
 
   ## Supervision Strategy
@@ -48,7 +48,7 @@ defmodule SkillKit.Supervisor do
     Defaults to `SkillKit.Registry`. Override this when running multiple
     SkillKit instances in the same node (e.g., in tests or umbrella apps).
 
-  - `:backends` — list of `{module, keyword()}` backend configurations. Each
+  - `:sources` — list of `{module, keyword()}` backend configurations. Each
     backend implements `SkillKit.Backend` and is called at boot to load skills.
     Defaults to `[]`.
   """
@@ -63,7 +63,7 @@ defmodule SkillKit.Supervisor do
   - `:name` — the name to register the Supervisor under. Defaults to `__MODULE__`.
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
-  - `:backends` — list of `{module, keyword()}` backend configurations. Each backend
+  - `:sources` — list of `{module, keyword()}` backend configurations. Each backend
     implements `SkillKit.Backend` and is called at boot to load skills. Defaults to `[]`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
@@ -75,10 +75,10 @@ defmodule SkillKit.Supervisor do
   @impl true
   def init(opts) do
     registry_name = Keyword.get(opts, :registry_name, SkillKit.Registry)
-    backends = Keyword.get(opts, :backends, [])
+    sources = Keyword.get(opts, :sources, [])
 
     children = [
-      {SkillKit.Registry, name: registry_name, backends: backends}
+      {SkillKit.Registry, name: registry_name, sources: sources}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

@@ -227,12 +227,12 @@ defmodule SkillKit.RegistryTest do
     @invalid_fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "invalid"])
     @nested_fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "nested"])
 
-    test "backends loads valid .skill.md files from directory" do
+    test "sources loads valid .skill.md files from directory" do
       name = :"boot_valid_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
         {Registry,
-         name: name, backends: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
+         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
       )
 
       skills = Registry.list_skills(name)
@@ -242,25 +242,25 @@ defmodule SkillKit.RegistryTest do
       assert "tools:greet" in skill_names
     end
 
-    test "backends recursively discovers .skill.md files in subdirectories" do
+    test "sources recursively discovers .skill.md files in subdirectories" do
       name = :"boot_nested_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
         {Registry,
-         name: name, backends: [{SkillKit.Backend.Filesystem, dirs: [@nested_fixtures_path]}]}
+         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@nested_fixtures_path]}]}
       )
 
       assert {:ok, skill} = Registry.get_skill(name, "admin:delete-user")
       assert skill.description == "Delete a user account"
     end
 
-    test "backends skips malformed files without crashing startup" do
+    test "sources skips malformed files without crashing startup" do
       name = :"boot_invalid_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
         {Registry,
          name: name,
-         backends: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
+         sources: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
       )
 
       # Registry started successfully — skills list may be empty (all invalid)
@@ -268,20 +268,20 @@ defmodule SkillKit.RegistryTest do
       assert is_list(skills)
     end
 
-    test "backends ignores files without .skill.md extension" do
+    test "sources ignores files without .skill.md extension" do
       name = :"boot_ignore_#{:erlang.unique_integer([:positive])}"
       # The fixtures root contains ignored.md (no .skill.md extension)
 
       start_supervised!(
         {Registry,
-         name: name, backends: [{SkillKit.Backend.Filesystem, dirs: [@fixtures_root]}]}
+         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@fixtures_root]}]}
       )
 
       # ignored.md has name "should:ignore" — it must NOT be registered
       assert {:error, :not_found} = Registry.get_skill(name, "should:ignore")
     end
 
-    test "empty backends defaults — no skills loaded" do
+    test "empty sources defaults — no skills loaded" do
       name = :"boot_empty_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, name: name})
 
@@ -293,7 +293,7 @@ defmodule SkillKit.RegistryTest do
 
       start_supervised!(
         {Registry,
-         name: name, backends: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
+         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
       )
 
       skills = Registry.list_skills(name)
@@ -303,10 +303,10 @@ defmodule SkillKit.RegistryTest do
       assert "tools:greet" in skill_names
     end
 
-    test "first-registered-wins when backends return duplicate names" do
+    test "first-registered-wins when sources return duplicate names" do
       name = :"boot_dup_#{:erlang.unique_integer([:positive])}"
 
-      start_supervised!({Registry, name: name, backends: [
+      start_supervised!({Registry, name: name, sources: [
         {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]},
         {SkillKit.RegistryTest.OverlappingBackend, []}
       ]})
@@ -317,10 +317,10 @@ defmodule SkillKit.RegistryTest do
       refute skill.description == "Overlapping description"
     end
 
-    test "failing backend does not crash registry and other backends still load" do
+    test "failing backend does not crash registry and other sources still load" do
       name = :"boot_fail_#{:erlang.unique_integer([:positive])}"
 
-      start_supervised!({Registry, name: name, backends: [
+      start_supervised!({Registry, name: name, sources: [
         {SkillKit.RegistryTest.FailingBackend, []},
         {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
       ]})

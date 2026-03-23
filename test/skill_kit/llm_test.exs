@@ -6,7 +6,7 @@ defmodule SkillKit.LLMTest do
   setup :verify_on_exit!
 
   describe "stream/2" do
-    test "dispatches to the configured backend" do
+    test "dispatches to the configured provider" do
       Application.put_env(:skill_kit, SkillKit.LLM, {SkillKit.LLM.Mock, [api_key: "sk-test"]})
 
       on_exit(fn -> Application.delete_env(:skill_kit, SkillKit.LLM) end)
@@ -22,19 +22,19 @@ defmodule SkillKit.LLMTest do
       assert {:ok, _stream} = SkillKit.LLM.stream(messages, model: "claude-sonnet-4-20250514")
     end
 
-    test "allows backend override via opts" do
+    test "allows provider override via opts" do
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         {:ok, Stream.map([], & &1)}
       end)
 
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:ok, _} = SkillKit.LLM.stream(messages, backend: {SkillKit.LLM.Mock, []})
+      assert {:ok, _} = SkillKit.LLM.stream(messages, provider: {SkillKit.LLM.Mock, []})
     end
 
     test "falls back to default when no config set" do
       Application.delete_env(:skill_kit, SkillKit.LLM)
 
-      assert {:ok, {mod, _config}} = SkillKit.LLM.default_backend()
+      assert {:ok, {mod, _config}} = SkillKit.LLM.default_provider()
       assert mod == SkillKit.LLM.Anthropic
     end
   end

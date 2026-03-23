@@ -39,7 +39,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        backends: [],
+        sources: [],
         registry: registry
       }
 
@@ -74,9 +74,9 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        backends: [],
+        sources: [],
         registry: registry,
-        server_opts: [backend: {SkillKit.LLM.Mock, []}]
+        provider: {SkillKit.LLM.Mock, []}
       }
 
       {:ok, _sup} = Agent.start_link(opts)
@@ -108,7 +108,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 2,
         parent_name: "parent-agent",
         scope: scope,
-        backends: [],
+        sources: [],
         registry: registry
       }
 

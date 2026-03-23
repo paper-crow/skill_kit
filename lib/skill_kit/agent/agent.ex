@@ -14,7 +14,7 @@ defmodule SkillKit.Agent do
         depth: 0,
         parent_name: nil,
         scope: %MyApp.Scope{...},
-        backends: [{SkillKit.Backend.Filesystem, dirs: [...]}],
+        sources: [{SkillKit.Backend.Filesystem, dirs: [...]}],
         registry: Agent.Registry
       }
 
@@ -32,7 +32,7 @@ defmodule SkillKit.Agent do
           depth: non_neg_integer(),
           parent_name: String.t() | nil,
           scope: term(),
-          backends: [{module(), keyword()}],
+          sources: [{module(), keyword()}],
           registry: atom()
         }
 
@@ -49,25 +49,28 @@ defmodule SkillKit.Agent do
       depth: depth,
       parent_name: parent_name,
       scope: scope,
-      backends: backends,
+      sources: sources,
       registry: registry
     } = opts
 
-    server_opts = Map.get(opts, :server_opts, [])
+    kits = load_kits_from_sources(sources)
+    provider = Map.get(opts, :provider)
+    caller = Map.get(opts, :caller)
 
-    kits = load_kits_from_backends(backends)
-    server_opts = Keyword.put(server_opts, :kits, kits)
+    server_opts = [kits: kits]
+    server_opts = if provider, do: Keyword.put(server_opts, :provider, provider), else: server_opts
+    server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
     children = [
-      {Infrastructure, {agent_name, definition, backends, registry}},
+      {Infrastructure, {agent_name, definition, sources, registry}},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp load_kits_from_backends(backends) do
-    Enum.flat_map(backends, fn {mod, config} ->
+  defp load_kits_from_sources(sources) do
+    Enum.flat_map(sources, fn {mod, config} ->
       case mod.load_kits(config) do
         {:ok, kits} -> kits
         {:error, _} -> []

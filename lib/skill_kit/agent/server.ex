@@ -22,7 +22,7 @@ defmodule SkillKit.Agent.Server do
     :depth,
     :scope,
     :registry,
-    :backend,
+    :provider,
     :kits,
     messages: [],
     subagents: %{},
@@ -36,7 +36,7 @@ defmodule SkillKit.Agent.Server do
           depth: non_neg_integer(),
           scope: term(),
           registry: atom(),
-          backend: {module(), keyword()} | nil,
+          provider: {module(), keyword()} | nil,
           kits: list(),
           messages: list(),
           subagents: map(),
@@ -55,7 +55,7 @@ defmodule SkillKit.Agent.Server do
   def init({agent_name, definition, depth, parent_name, scope, registry, opts}) do
     Registry.register(registry, {agent_name, :server}, [])
 
-    backend = Keyword.get(opts, :backend)
+    provider = Keyword.get(opts, :provider)
     kits = Keyword.get(opts, :kits, [])
 
     {:ok, %__MODULE__{
@@ -65,7 +65,7 @@ defmodule SkillKit.Agent.Server do
       depth: depth,
       scope: scope,
       registry: registry,
-      backend: backend,
+      provider: provider,
       kits: kits
     }}
   end
@@ -146,38 +146,59 @@ defmodule SkillKit.Agent.Server do
     state = %{state | messages: state.messages ++ new_messages}
 
     tools = ToolBuilder.build_tools(state.kits)
-    llm_opts = build_llm_opts(state) ++ [tools: tools]
 
-    {:ok, stream} = SkillKit.LLM.stream(state.messages, llm_opts)
-    response = stream |> Enum.to_list() |> Decoder.decode_events()
+    llm_opts =
+      [
+        model: state.definition.model,
+        max_tokens: state.definition.max_tokens,
+        system: state.definition.system_prompt,
+        tools: tools
+      ]
 
-    :telemetry.execute(
-      [:skill_kit, :agent, :response],
-      %{},
-      %{agent_name: state.agent_name, response: response}
-    )
+    llm_opts =
+      if state.provider, do: Keyword.put(llm_opts, :provider, state.provider), else: llm_opts
 
-    state = %{state | messages: state.messages ++ [response]}
+    case SkillKit.LLM.stream(state.messages, llm_opts) do
+      {:ok, stream} ->
+        response = stream |> Enum.to_list() |> Decoder.decode_events()
 
-    case response.tool_calls do
-      [] ->
+        :telemetry.execute(
+          [:skill_kit, :agent, :response],
+          %{},
+          %{agent_name: state.agent_name, response: response}
+        )
+
+        state = %{state | messages: state.messages ++ [response]}
+
+        handle_response(response, state)
+
+      {:error, reason} ->
+        :telemetry.execute(
+          [:skill_kit, :agent, :error],
+          %{},
+          %{agent_name: state.agent_name, error: reason}
+        )
+
         state
-
-      tool_calls ->
-        classifier = ToolBuilder.classifier(state.kits)
-        {results, state} = execute_tool_calls(tool_calls, state, classifier)
-
-        Enum.each(results, fn result ->
-          :telemetry.execute(
-            [:skill_kit, :agent, :tool_result],
-            %{},
-            %{agent_name: state.agent_name, tool_call_id: result.tool_call_id, result: result}
-          )
-        end)
-
-        state = %{state | messages: state.messages ++ results}
-        run_agent_loop(state, [])
     end
+  end
+
+  defp handle_response(%{tool_calls: []} = _response, state), do: state
+
+  defp handle_response(%{tool_calls: tool_calls} = _response, state) do
+    classifier = ToolBuilder.classifier(state.kits)
+    {results, state} = execute_tool_calls(tool_calls, state, classifier)
+
+    Enum.each(results, fn result ->
+      :telemetry.execute(
+        [:skill_kit, :agent, :tool_result],
+        %{},
+        %{agent_name: state.agent_name, tool_call_id: result.tool_call_id, result: result}
+      )
+    end)
+
+    state = %{state | messages: state.messages ++ results}
+    run_agent_loop(state, [])
   end
 
   defp execute_tool_calls(tool_calls, state, classifier) do
@@ -225,11 +246,6 @@ defmodule SkillKit.Agent.Server do
 
   defp builtin_placeholder(%Message.ToolCall{id: id, name: name}) do
     %Message.ToolResult{tool_call_id: id, content: "Builtin '#{name}' not yet implemented."}
-  end
-
-  defp build_llm_opts(state) do
-    opts = [model: state.definition.model]
-    if state.backend, do: Keyword.put(opts, :backend, state.backend), else: opts
   end
 
   defp cast_to_mailbox(state, message) do
