@@ -4,6 +4,7 @@ defmodule SkillKit.Agent.ServerTest do
   import Mox
 
   alias SkillKit.Agent.Definition
+  alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
   alias SkillKit.LLM.Message
 
@@ -441,6 +442,58 @@ defmodule SkillKit.Agent.ServerTest do
 
       state = :sys.get_state(pid)
       assert Enum.any?(state.messages, &match?(%Message.System{}, &1))
+    end
+  end
+
+  describe "subagent result handling" do
+    test "builds rich resume message with parent_intent and task", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
+        last = List.last(messages)
+        assert %Message.System{content: content} = last
+        assert content =~ "Subagent Complete"
+        assert content =~ "review the code"
+        assert content =~ "check lib/skill_kit.ex"
+        assert content =~ "Found 2 issues"
+
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Fixing now."}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      mailbox_config = %{max_messages: 1, flush_interval: 50}
+      {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
+
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      fake_subagent_pid = spawn(fn -> Process.sleep(:infinity) end)
+      monitor_ref = Process.monitor(fake_subagent_pid)
+
+      :sys.replace_state(pid, fn state ->
+        %{state | subagents: Map.put(state.subagents, fake_subagent_pid, %{
+          name: "code-reviewer",
+          task: "check lib/skill_kit.ex",
+          monitor_ref: monitor_ref,
+          parent_intent: "I'll review the code",
+          agent_ref: nil
+        })}
+      end)
+
+      send(pid, {:subagent_result, fake_subagent_pid, "Found 2 issues"})
+
+      assert_receive {:skill_kit, ^agent_name, {:delta, "Fixing now."}}, 2000
+      assert_receive {:skill_kit, ^agent_name, {:response, "Fixing now."}}, 2000
     end
   end
 end

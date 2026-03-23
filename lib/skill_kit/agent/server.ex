@@ -113,7 +113,7 @@ defmodule SkillKit.Agent.Server do
     {:noreply, state}
   end
 
-  # Subagent finished — inject result as System message via mailbox
+  # Subagent finished — inject rich resume message via mailbox
   @impl true
   def handle_info({:subagent_result, pid, result}, state) do
     case Map.pop(state.subagents, pid) do
@@ -121,11 +121,22 @@ defmodule SkillKit.Agent.Server do
         {:noreply, state}
 
       {entry, subagents} ->
+        Process.demonitor(entry.monitor_ref, [:flush])
         state = %{state | subagents: subagents}
 
+        intent = entry.parent_intent || "N/A"
+
         message = %Message.System{
-          content: "[Background task #{inspect(entry.task)} complete] " <>
-                   "Agent '#{entry.name}' returned: #{inspect(result)}"
+          content: """
+          [Subagent Complete] #{entry.name} finished the task you delegated.
+
+          **Your plan before delegating:** "#{intent}"
+          **Task you delegated:** "#{entry.task}"
+          **Result:**
+          #{result}
+
+          Continue with your plan.\
+          """
         }
 
         :telemetry.execute(
@@ -151,8 +162,8 @@ defmodule SkillKit.Agent.Server do
         state = %{state | subagents: subagents}
 
         message = %Message.System{
-          content: "[Background task #{inspect(entry.task)} failed] " <>
-                   "Agent '#{entry.name}' crashed: #{inspect(reason)}"
+          content: "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
+                   "Reason: #{inspect(reason)}"
         }
 
         cast_to_mailbox(state, {:message, message})
