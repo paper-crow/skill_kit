@@ -6,13 +6,13 @@ An Elixir framework for building LLM agent systems with skills, tools, and subag
 
 ```bash
 # Set your API key
-echo "ANTHROPIC_API_KEY=sk-..." > .env
+export ANTHROPIC_API_KEY=sk-ant-...
 
 # Interactive chat
-source .env && mix skill_kit.chat
+mix skill_kit.chat
 
 # Single prompt
-source .env && mix skill_kit.demo "What is 2 + 2?"
+mix skill_kit.demo "What is 2 + 2?"
 ```
 
 ## What It Does
