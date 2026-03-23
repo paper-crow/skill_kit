@@ -27,3 +27,5 @@ skill_kit-*.tar
 
 .DS_Store
 /.claude
+.env
+.memory/
