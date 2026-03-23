@@ -331,6 +331,13 @@ defmodule SkillKit.Registry do
           :error
         end
 
+      [bare_name] ->
+        if valid_segment?(bare_name) do
+          {:ok, {bare_name, bare_name}}
+        else
+          :error
+        end
+
       _ ->
         :error
     end

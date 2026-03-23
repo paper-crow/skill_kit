@@ -1,5 +1,5 @@
 ---
-name: "tools:bash"
+name: "bash"
 description: "Shell command execution guidelines"
 ---
 You can execute any shell command including:

@@ -63,9 +63,9 @@ defmodule SkillKit.RegistryTest do
   # ---------------------------------------------------------------------------
 
   describe "register/2 namespace validation" do
-    test "rejects name with no colon", %{registry: registry} do
-      skill = %Skill{name: "badname", namespace: ""}
-      assert {:error, :invalid_namespace} = Registry.register(registry, skill)
+    test "accepts bare name without colon", %{registry: registry} do
+      skill = %Skill{name: "bash", namespace: "bash"}
+      assert :ok = Registry.register(registry, skill)
     end
 
     test "rejects multi-level namespace (a:b:c)", %{registry: registry} do
@@ -109,9 +109,9 @@ defmodule SkillKit.RegistryTest do
     end
 
     test "does not store rejected skill", %{registry: registry} do
-      skill = %Skill{name: "badname", namespace: ""}
+      skill = %Skill{name: "a:b:c", namespace: "a"}
       {:error, :invalid_namespace} = Registry.register(registry, skill)
-      assert {:error, :not_found} = Registry.get_skill(registry, "badname")
+      assert {:error, :not_found} = Registry.get_skill(registry, "a:b:c")
     end
   end
 

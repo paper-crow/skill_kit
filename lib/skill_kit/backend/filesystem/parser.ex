@@ -286,6 +286,13 @@ defmodule SkillKit.Backend.Filesystem.Parser do
           {:error, :invalid_name_format}
         end
 
+      [bare_name] when bare_name != "" ->
+        if Regex.match?(@name_segment_regex, bare_name) do
+          {:ok, bare_name}
+        else
+          {:error, :invalid_name_format}
+        end
+
       _ ->
         {:error, :invalid_name_format}
     end

@@ -73,17 +73,17 @@ defmodule SkillKit.Backend.Filesystem.ParserTest do
   # ---------------------------------------------------------------------------
 
   describe "load_file/1 name format validation" do
-    test "returns {:error, :invalid_name_format} for name with no colon" do
+    test "accepts bare name without colon" do
       content = """
       ---
-      name: "no-colon"
-      description: "Missing colon in name"
+      name: "bash"
+      description: "A bare-named skill"
       ---
       Body text.
       """
 
-      path = write_tmp_fixture("no_colon.skill.md", content)
-      assert {:error, :invalid_name_format} = Parser.load_file(path)
+      path = write_tmp_fixture("bare_name.skill.md", content)
+      assert {:ok, %SkillKit.Skill{name: "bash", namespace: "bash"}} = Parser.load_file(path)
     end
 
     test "returns {:error, :invalid_name_format} for name with empty namespace" do
