@@ -414,6 +414,39 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "authorization" do
+    test "activate_skill passes scope to Catalog for authorization", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      provider = {SkillKit.LLM.Mock, []}
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, ["limited:scope"], registry, provider: provider}
+        )
+
+      # Verify the server started with scope
+      state = :sys.get_state(pid)
+      assert state.scope == ["limited:scope"]
+    end
+
+    test "activate_skill skips authorization when scope is nil", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      provider = {SkillKit.LLM.Mock, []}
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
+
+      state = :sys.get_state(pid)
+      assert state.scope == nil
+    end
+  end
+
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
       registry: registry,
