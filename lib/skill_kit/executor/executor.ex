@@ -14,7 +14,21 @@ defmodule SkillKit.Executor do
   alias SkillKit.Registry
 
   @doc """
-  Convenience function that builds and runs an execution pipeline.
+  Runs a command through the execution pipeline without a specific skill.
+
+  Uses the configured executor from `config :skill_kit, :executor`
+  (defaults to `SkillKit.Executor.Shell`). Hooks from all registered
+  skills are collected and fired.
+  """
+  def run(registry, command, context) do
+    executor = Application.get_env(:skill_kit, :executor, SkillKit.Executor.Shell)
+    all_hooks = collect_hooks(registry)
+    execution = Execution.new(nil, command, context, all_hooks: all_hooks, executor: executor)
+    Execution.run(execution)
+  end
+
+  @doc """
+  Runs a skill's command through the execution pipeline.
 
   Collects hooks from all registered skills, builds the pipeline,
   and runs it in one call.
@@ -36,5 +50,9 @@ defmodule SkillKit.Executor do
     registry
     |> Registry.list_skills()
     |> Enum.flat_map(fn skill -> skill.hooks end)
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
   end
 end

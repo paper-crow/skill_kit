@@ -66,10 +66,11 @@ defmodule SkillKit.Execution do
 
   - `all_hooks:` — list of `SkillKit.Hook.t()` to filter and insert into the pipeline
   """
-  @spec new(SkillKit.Skill.t(), String.t(), map(), keyword()) :: t()
+  @spec new(SkillKit.Skill.t() | nil, String.t(), map(), keyword()) :: t()
   def new(skill, command, context, opts \\ []) do
     all_hooks = Keyword.get(opts, :all_hooks, [])
-    executor_name = Module.split(skill.executor) |> List.last()
+    executor = resolve_executor(skill, opts)
+    executor_name = Module.split(executor) |> List.last()
 
     matching_hooks =
       Enum.filter(all_hooks, fn %Hook{matcher: matcher} ->
@@ -84,7 +85,7 @@ defmodule SkillKit.Execution do
       |> Enum.with_index()
       |> Enum.map(fn {hook, i} -> {:pre_hook, "pre:#{i}", hook} end)
 
-    execute_step = {:execute, "execute", skill.executor}
+    execute_step = {:execute, "execute", executor}
 
     post_steps =
       post_hooks
@@ -208,6 +209,9 @@ defmodule SkillKit.Execution do
   defp update_command(exec, new_cmd) do
     %{exec | command: new_cmd}
   end
+
+  defp resolve_executor(nil, opts), do: Keyword.fetch!(opts, :executor)
+  defp resolve_executor(skill, _opts), do: skill.executor
 
   defp build_pre_context(exec) do
     %{

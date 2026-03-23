@@ -11,7 +11,6 @@ defmodule SkillKit.Agent.Server do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.ToolBuilder
-  alias SkillKit.Executor.Shell
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
 
@@ -264,10 +263,24 @@ defmodule SkillKit.Agent.Server do
   defp execute_command(%Message.ToolCall{id: id, input: input}, state) do
     command = Map.get(input, "command", "")
     context = %{cwd: state.definition.workspace, scope: state.scope}
+    skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    case Shell.execute(command, context) do
-      {:ok, output} -> %Message.ToolResult{tool_call_id: id, content: output}
-      {:error, {output, _code}} -> %Message.ToolResult{tool_call_id: id, content: output, is_error: true}
+    case SkillKit.Executor.run(skill_registry, command, context) do
+      {:ok, execution} -> %Message.ToolResult{tool_call_id: id, content: execution.results["execute"] |> extract_output()}
+      {:error, execution} -> %Message.ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
+      {:pending, _execution} -> %Message.ToolResult{tool_call_id: id, content: "Command requires approval (not yet supported).", is_error: true}
+    end
+  end
+
+  defp extract_output({:ok, output}), do: output
+  defp extract_output(output) when is_binary(output), do: output
+  defp extract_output(other), do: inspect(other)
+
+  defp extract_error(execution) do
+    case execution.results["execute"] do
+      {:error, {output, _code}} -> output
+      {:error, reason} -> inspect(reason)
+      _ -> "Execution failed"
     end
   end
 
