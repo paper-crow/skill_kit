@@ -132,6 +132,39 @@ defmodule SkillKit do
     end
   end
 
+  @doc false
+  @spec start_subagent(Agent.Definition.t(), keyword(), keyword()) :: {:ok, agent()} | {:error, term()}
+  def start_subagent(definition, parent_opts, opts \\ []) do
+    depth = Keyword.fetch!(parent_opts, :depth)
+    parent_name = Keyword.fetch!(parent_opts, :parent_name)
+    parent_registry = Keyword.fetch!(parent_opts, :parent_registry)
+    sources = Keyword.get(opts, :sources, [])
+    provider = Keyword.get(opts, :provider)
+
+    registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
+
+    agent_opts = %{
+      agent_name: definition.name,
+      definition: definition,
+      depth: depth + 1,
+      parent_name: parent_name,
+      scope: nil,
+      sources: sources,
+      registry: registry_name,
+      provider: provider,
+      caller: nil,
+      parent_registry: parent_registry
+    }
+
+    case Agent.start_link(agent_opts) do
+      {:ok, sup_pid} ->
+        {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc """
   Stops a running agent and all its child processes.
   """

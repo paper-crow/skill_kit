@@ -124,7 +124,7 @@ defmodule SkillKit.Agent.Server do
         state = %{state | subagents: subagents}
 
         message = %Message.System{
-          content: "[Background task #{inspect(entry.task_ref)} complete] " <>
+          content: "[Background task #{inspect(entry.task)} complete] " <>
                    "Agent '#{entry.name}' returned: #{inspect(result)}"
         }
 
@@ -132,7 +132,7 @@ defmodule SkillKit.Agent.Server do
           [:skill_kit, :agent, :subagent_result],
           %{},
           %{agent_name: state.agent_name, subagent_name: entry.name,
-            task_ref: entry.task_ref, result: result}
+            task: entry.task, result: result}
         )
 
         cast_to_mailbox(state, {:message, message})
@@ -151,7 +151,7 @@ defmodule SkillKit.Agent.Server do
         state = %{state | subagents: subagents}
 
         message = %Message.System{
-          content: "[Background task #{inspect(entry.task_ref)} failed] " <>
+          content: "[Background task #{inspect(entry.task)} failed] " <>
                    "Agent '#{entry.name}' crashed: #{inspect(reason)}"
         }
 
@@ -167,7 +167,7 @@ defmodule SkillKit.Agent.Server do
   defp run_agent_loop(state, new_messages) do
     state = %{state | messages: state.messages ++ new_messages}
 
-    tools = ToolBuilder.build_tools(state.kits)
+    tools = ToolBuilder.build_tools(state.kits, subagent: state.depth > 0)
 
     llm_opts =
       [
@@ -240,7 +240,9 @@ defmodule SkillKit.Agent.Server do
       case classifier.(tc) do
         :executor -> {execute_command(tc, acc), acc}
         :activate_skill -> {activate_skill(tc, acc), acc}
-        :subagent -> {subagent_placeholder(tc), acc}
+        :subagent ->
+          {result, acc} = spawn_subagent(tc, acc)
+          {result, acc}
         :builtin ->
           {result, acc} = handle_builtin(tc, acc)
           {result, acc}
@@ -270,8 +272,93 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp subagent_placeholder(%Message.ToolCall{id: id, name: name}) do
-    %Message.ToolResult{tool_call_id: id, content: "Subagent '#{name}' delegation not yet implemented."}
+  defp spawn_subagent(%Message.ToolCall{id: id, name: name, input: input}, state) do
+    task = Map.get(input, "task", "")
+
+    if state.depth >= state.definition.max_agent_depth do
+      result = %Message.ToolResult{
+        tool_call_id: id,
+        content: "Cannot spawn subagent: max depth (#{state.definition.max_agent_depth}) reached.",
+        is_error: true
+      }
+      {result, state}
+    else
+      case find_agent_definition(name, state.kits) do
+        nil ->
+          result = %Message.ToolResult{
+            tool_call_id: id,
+            content: "Unknown agent: #{name}",
+            is_error: true
+          }
+          {result, state}
+
+        agent_def ->
+          do_spawn_subagent(id, name, task, agent_def, state)
+      end
+    end
+  end
+
+  defp do_spawn_subagent(id, name, task, agent_def, state) do
+    subagent_name = "#{state.agent_name}/#{name}-#{:erlang.unique_integer([:positive])}"
+    overridden_def = %{agent_def | name: subagent_name}
+
+    parent_opts = [
+      depth: state.depth,
+      parent_name: state.agent_name,
+      parent_registry: state.registry
+    ]
+
+    spawn_opts = [sources: state.sources]
+    spawn_opts = if state.provider, do: Keyword.put(spawn_opts, :provider, state.provider), else: spawn_opts
+
+    case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
+      {:ok, agent_ref} ->
+        [{server_pid, _}] = Registry.lookup(agent_ref.registry, {subagent_name, :server})
+        monitor_ref = Process.monitor(server_pid)
+
+        parent_intent = get_last_assistant_content(state.messages)
+
+        subagents = Map.put(state.subagents, server_pid, %{
+          name: name,
+          task: task,
+          monitor_ref: monitor_ref,
+          parent_intent: parent_intent,
+          agent_ref: agent_ref
+        })
+
+        state = %{state | subagents: subagents}
+
+        SkillKit.send_message(agent_ref, task)
+
+        result = %Message.ToolResult{
+          tool_call_id: id,
+          content: "Delegated to #{name}. You will receive the result when it completes."
+        }
+        {result, state}
+
+      {:error, reason} ->
+        result = %Message.ToolResult{
+          tool_call_id: id,
+          content: "Failed to start subagent #{name}: #{inspect(reason)}",
+          is_error: true
+        }
+        {result, state}
+    end
+  end
+
+  defp find_agent_definition(name, kits) do
+    kits
+    |> Enum.flat_map(& &1.agents)
+    |> Enum.find(& &1.name == name)
+  end
+
+  defp get_last_assistant_content(messages) do
+    messages
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %Message.Assistant{content: content} when is_binary(content) -> content
+      _ -> nil
+    end)
   end
 
   defp handle_builtin(%Message.ToolCall{id: id, name: "report_result", input: input}, state) do
