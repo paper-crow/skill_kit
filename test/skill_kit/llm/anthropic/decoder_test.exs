@@ -137,6 +137,37 @@ defmodule SkillKit.LLM.Anthropic.DecoderTest do
       assert [%{name: "bash"}] = response.tool_calls
     end
 
+    test "accumulates usage from message_start and message_delta" do
+      acc = Decoder.new_accumulator()
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "message_start",
+            "message" => %{
+              "id" => "msg_1",
+              "role" => "assistant",
+              "content" => [],
+              "usage" => %{"input_tokens" => 25, "output_tokens" => 1}
+            }
+          },
+          acc
+        )
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "message_delta",
+            "delta" => %{"stop_reason" => "end_turn"},
+            "usage" => %{"output_tokens" => 15}
+          },
+          acc
+        )
+
+      assert acc.usage["input_tokens"] == 25
+      assert acc.usage["output_tokens"] == 15
+    end
+
     test "finalize builds Assistant with accumulated text and tool calls" do
       acc = Decoder.new_accumulator()
 

@@ -13,7 +13,7 @@ defmodule SkillKit.LLM.Anthropic.Decoder do
   Returns a fresh accumulator for incremental event decoding.
   """
   @spec new_accumulator() :: map()
-  def new_accumulator, do: %{blocks: %{}, text: "", tool_calls: []}
+  def new_accumulator, do: %{blocks: %{}, text: "", tool_calls: [], usage: %{}}
 
   @doc """
   Decodes a single SSE event, returning an action and updated accumulator.
@@ -58,6 +58,16 @@ defmodule SkillKit.LLM.Anthropic.Decoder do
       acc
     end)
     |> finalize()
+  end
+
+  defp process_event(%{"type" => "message_start", "message" => %{"usage" => usage}}, state)
+       when is_map(usage) do
+    %{state | usage: Map.merge(state.usage, usage)}
+  end
+
+  defp process_event(%{"type" => "message_delta", "usage" => usage}, state)
+       when is_map(usage) do
+    %{state | usage: Map.merge(state.usage, usage)}
   end
 
   defp process_event(%{"type" => "content_block_start", "index" => index, "content_block" => block}, state) do

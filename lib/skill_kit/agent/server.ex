@@ -197,6 +197,12 @@ defmodule SkillKit.Agent.Server do
         response = Decoder.finalize(acc)
 
         :telemetry.execute(
+          [:skill_kit, :agent, :usage],
+          acc.usage,
+          %{agent_name: state.agent_name}
+        )
+
+        :telemetry.execute(
           [:skill_kit, :agent, :response],
           %{},
           %{agent_name: state.agent_name, response: response}
@@ -291,9 +297,19 @@ defmodule SkillKit.Agent.Server do
     skill_name = Map.get(input, "name", "")
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    case SkillKit.Catalog.activate(skill_registry, skill_name, %{}) do
+    opts = if state.scope, do: [scopes: state.scope], else: []
+
+    case SkillKit.Catalog.activate(skill_registry, skill_name, %{}, opts) do
       {:ok, rendered_body} ->
         %Message.ToolResult{tool_call_id: id, content: rendered_body}
+
+      {:error, :unauthorized} ->
+        %Message.ToolResult{
+          tool_call_id: id,
+          content: "Unauthorized: insufficient scope for skill #{skill_name}",
+          is_error: true
+        }
+
       {:error, reason} ->
         %Message.ToolResult{tool_call_id: id, content: "Error: #{inspect(reason)}", is_error: true}
     end
