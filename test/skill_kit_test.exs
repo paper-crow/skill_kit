@@ -3,6 +3,8 @@ defmodule SkillKitTest do
 
   import Mox
 
+  alias SkillKit.Conversation.Store.Filesystem
+
   setup :set_mox_global
   setup :verify_on_exit!
 
@@ -162,7 +164,7 @@ defmodule SkillKitTest do
 
       # Verify file was written
       assert {:ok, messages} =
-               SkillKit.Conversation.Store.Filesystem.load("store-test-agent", path: store_path)
+               Filesystem.load("store-test-agent", path: store_path)
 
       assert length(messages) == 2
     end

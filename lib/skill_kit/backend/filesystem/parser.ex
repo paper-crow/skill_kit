@@ -205,31 +205,29 @@ defmodule SkillKit.Backend.Filesystem.Parser do
   # When multiple handler definitions are given, the first one wins.
   @spec build_hook_handler(list()) :: Hook.handler()
   defp build_hook_handler([%{"type" => "command", "command" => cmd} | _rest]) do
-    fn context ->
-      case context do
-        %{result: _} ->
-          # Post-hook: run command, always succeed (post hooks are observational)
-          System.cmd("sh", ["-c", cmd], stderr_to_stdout: true)
-          {:ok, :completed}
-
-        _ ->
-          # Pre-hook: command exit code determines allow/deny
-          case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
-            {_output, 0} -> :allow
-            {output, _code} -> {:deny, output}
-          end
-      end
-    end
+    fn context -> run_command_hook(context, cmd) end
   end
 
   defp build_hook_handler(_other) do
-    fn context ->
-      case context do
-        %{result: _} -> {:ok, :completed}
-        _ -> :allow
-      end
+    fn context -> noop_hook(context) end
+  end
+
+  defp run_command_hook(%{result: _}, cmd) do
+    # Post-hook: run command, always succeed (post hooks are observational)
+    System.cmd("sh", ["-c", cmd], stderr_to_stdout: true)
+    {:ok, :completed}
+  end
+
+  defp run_command_hook(_context, cmd) do
+    # Pre-hook: command exit code determines allow/deny
+    case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
+      {_output, 0} -> :allow
+      {output, _code} -> {:deny, output}
     end
   end
+
+  defp noop_hook(%{result: _}), do: {:ok, :completed}
+  defp noop_hook(_context), do: :allow
 
   # Fetches a required string field from the YAML map.
   # Returns {:error, {:missing_field, key}} if absent, nil, or empty string.

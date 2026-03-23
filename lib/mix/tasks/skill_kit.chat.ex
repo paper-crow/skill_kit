@@ -69,9 +69,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
   end
 
   defp select_agent(agents_dir) do
-    agents = list_agents(agents_dir)
-
-    case agents do
+    case list_agents(agents_dir) do
       [] ->
         Mix.shell().error("No agents found in #{agents_dir}")
         exit({:shutdown, 1})
@@ -80,31 +78,42 @@ defmodule Mix.Tasks.SkillKit.Chat do
         single
 
       agents ->
-        IO.puts(IO.ANSI.format([:bright, "\nAvailable agents:\n"]))
+        print_agent_menu(agents, agents_dir)
+        prompt_agent_choice(agents)
+    end
+  end
 
-        agents
-        |> Enum.with_index(1)
-        |> Enum.each(fn {name, i} ->
-          agent_md = Path.join([agents_dir, name, "AGENT.md"])
+  defp print_agent_menu(agents, agents_dir) do
+    IO.puts(IO.ANSI.format([:bright, "\nAvailable agents:\n"]))
 
-          desc =
-            case Definition.parse(agent_md) do
-              {:ok, d} -> d.description
-              _ -> ""
-            end
+    agents
+    |> Enum.with_index(1)
+    |> Enum.each(fn {name, i} ->
+      desc = agent_description(agents_dir, name)
 
-          IO.puts(
-            IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"])
-          )
-        end)
+      IO.puts(
+        IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"])
+      )
+    end)
 
-        IO.puts("")
-        input = String.trim(IO.gets("Select agent: "))
+    IO.puts("")
+  end
 
-        case Integer.parse(input) do
-          {n, ""} when n >= 1 and n <= length(agents) -> Enum.at(agents, n - 1)
-          _ -> if input in agents, do: input, else: List.first(agents)
-        end
+  defp agent_description(agents_dir, name) do
+    agent_md = Path.join([agents_dir, name, "AGENT.md"])
+
+    case Definition.parse(agent_md) do
+      {:ok, d} -> d.description
+      _ -> ""
+    end
+  end
+
+  defp prompt_agent_choice(agents) do
+    input = String.trim(IO.gets("Select agent: "))
+
+    case Integer.parse(input) do
+      {n, ""} when n >= 1 and n <= length(agents) -> Enum.at(agents, n - 1)
+      _ -> if input in agents, do: input, else: List.first(agents)
     end
   end
 
