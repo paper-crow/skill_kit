@@ -247,16 +247,19 @@ defmodule SkillKit.Agent.Server do
         %{agent_name: acc.agent_name, tool_call: tc}
       )
 
-      case classifier.(tc) do
-        :executor -> {execute_command(tc, acc), acc}
-        :activate_skill -> {activate_skill(tc, acc), acc}
-        :subagent ->
-          {result, acc} = spawn_subagent(tc, acc)
-          {result, acc}
-        :builtin ->
-          {result, acc} = handle_builtin(tc, acc)
-          {result, acc}
-      end
+      notify_caller(acc, {:tool_call, tc.name, tc.input})
+
+      {result, acc} =
+        case classifier.(tc) do
+          :executor -> {execute_command(tc, acc), acc}
+          :activate_skill -> {activate_skill(tc, acc), acc}
+          :subagent -> spawn_subagent(tc, acc)
+          :builtin -> handle_builtin(tc, acc)
+        end
+
+      notify_caller(acc, {:tool_result, tc.name, result.content, result.is_error})
+
+      {result, acc}
     end)
   end
 

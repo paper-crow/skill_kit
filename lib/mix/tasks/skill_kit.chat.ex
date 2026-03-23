@@ -69,6 +69,13 @@ defmodule Mix.Tasks.SkillKit.Chat do
         IO.write(text)
         receive_response(agent_name)
 
+      {:skill_kit, ^agent_name, {:tool_call, name, input}} ->
+        IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
+        receive_response(agent_name)
+
+      {:skill_kit, ^agent_name, {:tool_result, _name, _content, _is_error}} ->
+        receive_response(agent_name)
+
       {:skill_kit, ^agent_name, {:response, _text}} ->
         IO.puts("\n")
         wait_for_follow_up(agent_name)
@@ -80,6 +87,11 @@ defmodule Mix.Tasks.SkillKit.Chat do
         IO.puts("\n[timeout]\n")
     end
   end
+
+  defp format_input("bash", %{"command" => cmd}), do: cmd
+  defp format_input("activate_skill", %{"name" => name}), do: name
+  defp format_input(_name, input) when map_size(input) == 0, do: ""
+  defp format_input(_name, input), do: inspect(input, limit: 3)
 
   defp wait_for_follow_up(agent_name) do
     receive do
