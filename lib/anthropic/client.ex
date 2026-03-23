@@ -44,24 +44,10 @@ defmodule Anthropic.Client do
   end
 
   defp do_stream(client, messages, opts, retry_count) do
-    body =
-      opts
-      |> Keyword.take([:model, :max_tokens, :system, :tools, :temperature, :top_p])
-      |> Map.new()
-      |> Map.put(:messages, messages)
-      |> Map.put(:stream, true)
+    body = build_request_body(messages, opts)
+    result = post_streaming(client, body)
 
-    case Req.post(
-           url: client.endpoint <> "/v1/messages",
-           headers: [
-             {"x-api-key", client.api_key},
-             {"anthropic-version", @api_version},
-             {"content-type", "application/json"}
-           ],
-           json: body,
-           into: :self,
-           receive_timeout: 300_000
-         ) do
+    case result do
       {:ok, %{status: 200} = resp} ->
         {:ok, sse_stream(resp.body)}
 
@@ -78,8 +64,8 @@ defmodule Anthropic.Client do
         do_stream(client, messages, opts, retry_count + 1)
 
       {:ok, resp} ->
-        body = collect_async_body(resp.body)
-        {:error, {resp.status, body}}
+        error_body = collect_async_body(resp.body)
+        {:error, {resp.status, error_body}}
 
       {:error, reason} ->
         {:error, reason}
@@ -91,6 +77,28 @@ defmodule Anthropic.Client do
       [value | _] -> String.to_integer(value) * 1000
       _ -> 1000
     end
+  end
+
+  defp build_request_body(messages, opts) do
+    opts
+    |> Keyword.take([:model, :max_tokens, :system, :tools, :temperature, :top_p])
+    |> Map.new()
+    |> Map.put(:messages, messages)
+    |> Map.put(:stream, true)
+  end
+
+  defp post_streaming(client, body) do
+    Req.post(
+      url: client.endpoint <> "/v1/messages",
+      headers: [
+        {"x-api-key", client.api_key},
+        {"anthropic-version", @api_version},
+        {"content-type", "application/json"}
+      ],
+      json: body,
+      into: :self,
+      receive_timeout: 300_000
+    )
   end
 
   defp collect_async_body(%Req.Response.Async{} = async) do
