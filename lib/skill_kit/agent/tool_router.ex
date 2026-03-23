@@ -4,7 +4,7 @@ defmodule SkillKit.Agent.ToolRouter do
 
   Takes a list of tool calls and routes each to either:
   - A local handler (executes inline, returns result immediately)
-  - A subagent spawner (fire-and-forget, returns placeholder result)
+  - A subagent spawner (async delegation, returns immediate acknowledgment)
 
   Classification and execution are injected as functions — the router
   doesn't know about specific tools. This keeps it testable and
