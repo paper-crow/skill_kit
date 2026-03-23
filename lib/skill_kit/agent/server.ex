@@ -294,7 +294,7 @@ defmodule SkillKit.Agent.Server do
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
     case SkillKit.Executor.run(skill_registry, command, context) do
-      {:ok, execution} -> %Message.ToolResult{tool_call_id: id, content: execution.results["execute"] |> extract_output()}
+      {:ok, execution} -> %Message.ToolResult{tool_call_id: id, content: extract_output(execution.results["execute"])}
       {:error, execution} -> %Message.ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
       {:pending, _execution} -> %Message.ToolResult{tool_call_id: id, content: "Command requires approval (not yet supported).", is_error: true}
     end

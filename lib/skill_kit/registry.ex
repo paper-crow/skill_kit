@@ -215,7 +215,7 @@ defmodule SkillKit.Registry do
   @spec list_skills(GenServer.server(), keyword()) :: [Skill.t()]
   def list_skills(server \\ __MODULE__, opts \\ []) do
     table = get_table(server)
-    all_skills = :ets.tab2list(table) |> Enum.map(fn {_name, skill} -> skill end)
+    all_skills = Enum.map(:ets.tab2list(table), fn {_name, skill} -> skill end)
 
     case Keyword.fetch(opts, :namespace) do
       {:ok, namespace} -> Enum.filter(all_skills, &(&1.namespace == namespace))

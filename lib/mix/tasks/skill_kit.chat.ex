@@ -36,7 +36,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
     unless File.exists?(agent_md) do
       Mix.shell().error("Agent not found: #{agent_name}")
-      Mix.shell().error("Available: #{list_agents(agents_dir) |> Enum.join(", ")}")
+      Mix.shell().error("Available: #{Enum.join(list_agents(agents_dir), ", ")}")
       exit({:shutdown, 1})
     end
 
@@ -83,7 +83,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
         end)
 
         IO.puts("")
-        input = IO.gets("Select agent: ") |> String.trim()
+        input = String.trim(IO.gets("Select agent: "))
 
         case Integer.parse(input) do
           {n, ""} when n >= 1 and n <= length(agents) -> Enum.at(agents, n - 1)
@@ -97,7 +97,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
       {:ok, entries} ->
         entries
         |> Enum.filter(fn name ->
-          Path.join([agents_dir, name, "AGENT.md"]) |> File.exists?()
+          File.exists?(Path.join([agents_dir, name, "AGENT.md"]))
         end)
         |> Enum.sort()
 
