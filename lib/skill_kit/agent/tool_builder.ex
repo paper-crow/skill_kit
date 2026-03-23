@@ -67,7 +67,8 @@ defmodule SkillKit.Agent.ToolBuilder do
 
     %ToolDefinition{
       name: "activate_skill",
-      description: "Load a skill's full instructions into context. Available skills:\n#{skill_descriptions}",
+      description: "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
+        "for a task (e.g. code review, style conventions). Available skills:\n#{skill_descriptions}",
       input_schema: %{
         "type" => "object",
         "properties" => %{
