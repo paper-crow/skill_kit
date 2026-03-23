@@ -4,8 +4,6 @@ description: "A helpful coding assistant"
 model: "claude-sonnet-4-20250514"
 capabilities: bash, activate_skill, system:memory
 metadata:
-  mailbox_max_messages: 1
-  mailbox_flush_interval: 100
   max_agent_depth: 2
 ---
 Your name is Neve. You are a helpful coding assistant.

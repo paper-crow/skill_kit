@@ -112,6 +112,25 @@ then call report_result with your findings.
 
 The parent agent calls the subagent as a tool, continues working, and receives results via a context-rich resume message.
 
+## Telemetry Events
+
+SkillKit emits telemetry events for observability and cost tracking:
+
+| Event | Measurements | Metadata |
+|-------|-------------|----------|
+| `[:skill_kit, :agent, :turn_start]` | — | `agent_name`, `message_count` |
+| `[:skill_kit, :agent, :turn_end]` | `duration` | `agent_name` |
+| `[:skill_kit, :agent, :response]` | — | `agent_name`, `response` |
+| `[:skill_kit, :agent, :usage]` | `input_tokens`, `output_tokens` | `agent_name` |
+| `[:skill_kit, :agent, :tool_call]` | — | `agent_name`, `tool_call` |
+| `[:skill_kit, :agent, :tool_result]` | — | `agent_name`, `tool_call_id`, `result` |
+| `[:skill_kit, :agent, :error]` | — | `agent_name`, `error` |
+| `[:skill_kit, :agent, :subagent_result]` | — | `agent_name`, `subagent_name`, `task`, `result` |
+| `[:skill_kit, :agent, :orphaned_result]` | — | `agent_name`, `parent_name`, `result` |
+| `[:skill_kit, :llm, :rate_limited]` | `retry_after`, `attempt` | `endpoint` |
+
+Attach handlers with `:telemetry.attach/4` or use a GenServer-based handler pattern.
+
 ## Configuration
 
 ```elixir
@@ -130,13 +149,14 @@ See `examples/` for sample agents and skills:
 ```
 examples/
   agents/
-    neve/AGENT.md          # General-purpose coding assistant
-    researcher/AGENT.md    # Research and investigation agent
-    fixer/AGENT.md         # Bug fixing agent
+    neve/AGENT.md           # General-purpose coding assistant
+    researcher/AGENT.md     # Research and investigation agent
+    fixer/AGENT.md          # Bug fixing agent
+    code-reviewer/AGENT.md  # Code review subagent
   skills/
-    bash.skill.md          # Shell command guidelines
-    memory.skill.md        # Persistent memory management
-    code_review.skill.md   # Code review checklist
+    bash.skill.md           # Shell command guidelines
+    memory.skill.md         # Persistent memory management
+    code_review.skill.md    # Code review checklist
     elixir_style.skill.md  # Elixir conventions
 ```
 
