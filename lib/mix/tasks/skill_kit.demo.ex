@@ -10,6 +10,7 @@ defmodule Mix.Tasks.SkillKit.Demo do
   alias SkillKit.Agent.Definition
 
   @shortdoc "Run a single-turn agent conversation"
+  @idle_timeout 10_000
 
   @impl true
   def run(args) do
@@ -44,52 +45,23 @@ defmodule Mix.Tasks.SkillKit.Demo do
     Mix.shell().info("Sent: #{prompt}")
     :ok = SkillKit.send_message(agent, prompt)
 
-    receive_loop(definition.name)
+    receive_events(definition.name)
 
     SkillKit.stop_agent(agent)
   end
 
-  defp receive_loop(agent_name, delegated \\ false) do
+  defp receive_events(agent_name) do
     receive do
-      {:skill_kit, ^agent_name, {:delta, text}} ->
-        IO.write(text)
-        receive_loop(agent_name, delegated)
-
-      {:skill_kit, ^agent_name, {:tool_call, _name, %{"task" => _}}} ->
-        # Subagent delegation detected
-        receive_loop(agent_name, true)
-
-      {:skill_kit, ^agent_name, {:tool_call, _, _}} ->
-        receive_loop(agent_name, delegated)
-
-      {:skill_kit, ^agent_name, {:tool_result, _, _, _}} ->
-        receive_loop(agent_name, delegated)
-
-      {:skill_kit, ^agent_name, {:response, _text}} ->
-        IO.puts("")
-        Mix.shell().info("--- Turn complete ---")
-
-        if delegated do
-          wait_for_follow_up(agent_name)
-        end
-
-      {:skill_kit, ^agent_name, {:error, reason}} ->
-        Mix.shell().error("Error: #{inspect(reason)}")
+      {:skill_kit, ^agent_name, event} ->
+        handle_event(event)
+        receive_events(agent_name)
     after
-      120_000 ->
-        Mix.shell().error("Timed out waiting for agent response")
+      @idle_timeout -> :ok
     end
   end
 
-  defp wait_for_follow_up(agent_name) do
-    receive do
-      {:skill_kit, ^agent_name, {:delta, _text}} = msg ->
-        Mix.shell().info("\n--- New turn (subagent result arrived) ---")
-        send(self(), msg)
-        receive_loop(agent_name)
-    after
-      30_000 ->
-        :ok
-    end
-  end
+  defp handle_event({:delta, text}), do: IO.write(text)
+  defp handle_event({:response, _text}), do: IO.puts("\n--- Turn complete ---")
+  defp handle_event({:error, reason}), do: Mix.shell().error("\nError: #{inspect(reason)}")
+  defp handle_event(_other), do: :ok
 end
