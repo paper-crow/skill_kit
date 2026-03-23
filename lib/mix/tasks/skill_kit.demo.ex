@@ -29,10 +29,10 @@ defmodule Mix.Tasks.SkillKit.Demo do
       exit({:shutdown, 1})
     end
 
-    agent_md = Path.join(:code.priv_dir(:skill_kit), "sample_agent/AGENT.md")
+    agent_md = System.get_env("SKILL_KIT_AGENTS", "examples/agents") |> Path.join("neve/AGENT.md")
     {:ok, definition} = Definition.parse(agent_md)
 
-    skills_dir = Path.join(:code.priv_dir(:skill_kit), "skills")
+    skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
     {:ok, agent} = SkillKit.start_agent(definition,
       sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],

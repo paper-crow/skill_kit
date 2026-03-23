@@ -2,7 +2,9 @@ defmodule Mix.Tasks.SkillKit.Chat do
   @moduledoc """
   Interactive chat session with a SkillKit agent.
 
-      mix skill_kit.chat
+      mix skill_kit.chat            # select agent interactively
+      mix skill_kit.chat neve       # start specific agent
+      mix skill_kit.chat researcher
   """
 
   use Mix.Task
@@ -12,7 +14,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
   @shortdoc "Start an interactive agent chat session"
 
   @impl true
-  def run(_args) do
+  def run(args) do
     Mix.Task.run("app.start")
 
     api_key = System.get_env("ANTHROPIC_API_KEY")
@@ -22,10 +24,23 @@ defmodule Mix.Tasks.SkillKit.Chat do
       exit({:shutdown, 1})
     end
 
-    agent_md = Path.join(:code.priv_dir(:skill_kit), "sample_agent/AGENT.md")
-    {:ok, definition} = Definition.parse(agent_md)
+    agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
+    skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
-    skills_dir = Path.join(:code.priv_dir(:skill_kit), "skills")
+    agent_name = case args do
+      [name | _] -> name
+      [] -> select_agent(agents_dir)
+    end
+
+    agent_md = Path.join([agents_dir, agent_name, "AGENT.md"])
+
+    unless File.exists?(agent_md) do
+      Mix.shell().error("Agent not found: #{agent_name}")
+      Mix.shell().error("Available: #{list_agents(agents_dir) |> Enum.join(", ")}")
+      exit({:shutdown, 1})
+    end
+
+    {:ok, definition} = Definition.parse(agent_md)
 
     {:ok, agent} = SkillKit.start_agent(definition,
       sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
@@ -33,11 +48,61 @@ defmodule Mix.Tasks.SkillKit.Chat do
       caller: self()
     )
 
-    IO.puts("SkillKit Chat — type 'exit' to quit\n")
+    IO.puts(IO.ANSI.format([:bright, "\n#{definition.name}", :reset, :faint, " — #{definition.description}"]))
+    IO.puts(IO.ANSI.format([:faint, "type 'exit' to quit\n"]))
 
     chat_loop(agent, definition.name)
 
     SkillKit.stop_agent(agent)
+  end
+
+  defp select_agent(agents_dir) do
+    agents = list_agents(agents_dir)
+
+    case agents do
+      [] ->
+        Mix.shell().error("No agents found in #{agents_dir}")
+        exit({:shutdown, 1})
+
+      [single] ->
+        single
+
+      agents ->
+        IO.puts(IO.ANSI.format([:bright, "\nAvailable agents:\n"]))
+
+        agents
+        |> Enum.with_index(1)
+        |> Enum.each(fn {name, i} ->
+          agent_md = Path.join([agents_dir, name, "AGENT.md"])
+          desc = case Definition.parse(agent_md) do
+            {:ok, d} -> d.description
+            _ -> ""
+          end
+          IO.puts(IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"]))
+        end)
+
+        IO.puts("")
+        input = IO.gets("Select agent: ") |> String.trim()
+
+        case Integer.parse(input) do
+          {n, ""} when n >= 1 and n <= length(agents) -> Enum.at(agents, n - 1)
+          _ -> if input in agents, do: input, else: List.first(agents)
+        end
+    end
+  end
+
+  defp list_agents(agents_dir) do
+    case File.ls(agents_dir) do
+      {:ok, entries} ->
+        entries
+        |> Enum.filter(fn name ->
+          Path.join([agents_dir, name, "AGENT.md"]) |> File.exists?()
+        end)
+        |> Enum.sort()
+
+      {:error, _} ->
+        []
+    end
   end
 
   defp chat_loop(agent, agent_name) do
