@@ -1,7 +1,6 @@
 ---
 name: "neve"
 description: "A helpful coding assistant"
-model: "claude-sonnet-4-20250514"
 capabilities: bash, activate_skill, system:memory
 metadata:
   max_agent_depth: 2

@@ -1,7 +1,6 @@
 ---
 name: "fixer"
 description: "Fixes bugs and implements changes in code"
-model: "claude-sonnet-4-20250514"
 capabilities: bash, activate_skill, system:memory, dev:elixir-style
 metadata:
   max_agent_depth: 2
