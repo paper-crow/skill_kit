@@ -1,63 +1,46 @@
 defmodule SkillKit do
   @moduledoc """
-  SkillKit — programmatic, scope-based authorization for skills.
+  SkillKit — an Elixir framework for building LLM agent systems.
 
-  SkillKit determines what skills and commands an agent, user, or runtime
-  context can access. It provides a registry for discovering available skills
-  and an authorization layer for controlling access to them.
-
-  ## Architecture
-
-  SkillKit is built in four phases:
-
-  1. **Registry Foundation** (Phase 1) — This phase. A GenServer+ETS-backed
-     skill registry that host applications supervise via `child_spec/1`.
-
-  2. **Skill Loader** (Phase 2) — Loads skill definitions from YAML files on
-     disk, including behaviour-based validation and hot-reload support.
-
-  3. **Authorization Layer** (Phase 3) — Scope-based access control: grants,
-     denials, wildcard matching, and context-based authorization decisions.
-
-  4. **Adapters** (Phase 4) — Integrations with AI provider APIs (Anthropic,
-     OpenAI) that filter tool lists based on authorization decisions.
+  This module is the public API for starting agents, sending messages,
+  and receiving streamed responses.
 
   ## Quick Start
 
-  Add `SkillKit.Supervisor` to your application's supervision tree:
+      {:ok, agent} = SkillKit.start_agent(definition,
+        sources: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
+        provider: {SkillKit.LLM.Anthropic, [api_key: "sk-..."]},
+        caller: self()
+      )
 
-      defmodule MyApp.Application do
-        use Application
+      :ok = SkillKit.send_message(agent, "Hello")
 
-        def start(_type, _args) do
-          children = [
-            {SkillKit.Supervisor, []}
-          ]
-
-          Supervisor.start_link(children, strategy: :one_for_one)
-        end
+      receive do
+        {:skill_kit, agent_name, {:delta, text}} -> IO.write(text)
+        {:skill_kit, agent_name, {:response, text}} -> IO.puts("Done.")
+        {:skill_kit, agent_name, {:error, reason}} -> IO.puts("Error")
       end
 
-  ## Usage
+      SkillKit.stop_agent(agent)
 
-  Once the supervision tree is running (see Quick Start above), you can
-  register and look up skills. The single-argument forms below use the
-  default registry name (`SkillKit.Registry`):
+  ## Events
 
-      skill = %SkillKit.Skill{name: "files:read", namespace: "files"}
-      :ok = SkillKit.Registry.register(skill)
-      {:ok, skill} = SkillKit.Registry.get_skill("files:read")
+  The caller process receives these messages:
 
-  If you started the registry with a custom name, pass it explicitly:
-
-      :ok = SkillKit.Registry.register(MyApp.SkillRegistry, skill)
-      {:ok, skill} = SkillKit.Registry.get_skill(MyApp.SkillRegistry, "files:read")
+    * `{:skill_kit, agent_name, {:delta, text}}` — real-time text fragment
+    * `{:skill_kit, agent_name, {:response, text}}` — complete text at turn end
+    * `{:skill_kit, agent_name, {:tool_call, name, input}}` — tool invocation
+    * `{:skill_kit, agent_name, {:tool_result, name, content, is_error}}` — tool result
+    * `{:skill_kit, agent_name, {:error, reason}}` — LLM or execution error
 
   ## Configuration
 
-  All configuration is passed via `start_link/1` opts — SkillKit never reads
-  from the application environment. This makes it safe to use in libraries and
-  umbrella apps without polluting the application configuration namespace.
+      # Default executor
+      config :skill_kit, :executor, SkillKit.Executor.Shell
+
+      # Default LLM provider
+      config :skill_kit, SkillKit.LLM,
+        {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
   """
 
   alias SkillKit.Agent

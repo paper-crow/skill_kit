@@ -1,5 +1,10 @@
 defmodule SkillKit.Agent.ToolRouter do
   @moduledoc """
+  Injectable tool call router (not currently used by Agent.Server).
+
+  An alternative routing pattern where classification and execution are
+  injected as functions. Agent.Server currently handles routing inline.
+
   Classifies and executes tool calls from the LLM response.
 
   Takes a list of tool calls and routes each to either:

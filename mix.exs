@@ -12,12 +12,9 @@ defmodule SkillKit.MixProject do
       description: description(),
       package: package(),
       name: "SkillKit",
-      source_url: "https://github.com/example/skill_kit",
-      homepage_url: "https://github.com/example/skill_kit",
-      docs: [
-        main: "SkillKit",
-        extras: ["README.md"]
-      ]
+      source_url: "https://github.com/paper-crow/skill_kit",
+      homepage_url: "https://github.com/paper-crow/skill_kit",
+      docs: docs()
     ]
   end
 
@@ -50,14 +47,77 @@ defmodule SkillKit.MixProject do
     ]
   end
 
+  defp docs do
+    [
+      main: "SkillKit",
+      extras: ["README.md"],
+      groups_for_modules: [
+        "Public API": [
+          SkillKit,
+          SkillKit.AgentRef
+        ],
+        "Agent System": [
+          SkillKit.Agent,
+          SkillKit.Agent.Definition,
+          SkillKit.Agent.Server,
+          SkillKit.Agent.Mailbox,
+          SkillKit.Agent.Core,
+          SkillKit.Agent.Infrastructure,
+          SkillKit.Agent.SubagentSupervisor,
+          SkillKit.Agent.ToolBuilder
+        ],
+        "LLM Providers": [
+          SkillKit.LLM,
+          SkillKit.LLM.Message,
+          SkillKit.LLM.Anthropic,
+          SkillKit.LLM.Anthropic.Encoder,
+          SkillKit.LLM.Anthropic.Decoder,
+          SkillKit.LLM.Metadata,
+          Anthropic,
+          Anthropic.Client
+        ],
+        "Skills & Kits": [
+          SkillKit.Skill,
+          SkillKit.Kit,
+          SkillKit.Catalog,
+          SkillKit.Backend,
+          SkillKit.Backend.Filesystem,
+          SkillKit.Backend.Filesystem.Parser,
+          SkillKit.Frontmatter
+        ],
+        "Execution & Hooks": [
+          SkillKit.Executor,
+          SkillKit.Executor.Behaviour,
+          SkillKit.Executor.Shell,
+          SkillKit.Executor.ToolDefinition,
+          SkillKit.Execution,
+          SkillKit.Hook
+        ],
+        "Authorization": [
+          SkillKit.Authorization,
+          SkillKit.AuthorizationProvider,
+          SkillKit.Scope
+        ],
+        "Persistence": [
+          SkillKit.Conversation.Store,
+          SkillKit.Conversation.Store.Filesystem
+        ],
+        "Infrastructure": [
+          SkillKit.Supervisor,
+          SkillKit.Registry
+        ]
+      ]
+    ]
+  end
+
   defp description do
-    "Programmatic, scope-based authorization for determining what skills and commands an agent, user, or runtime context can access."
+    "An Elixir framework for building LLM agent systems with skills, tools, and subagent delegation."
   end
 
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => "https://github.com/example/skill_kit"},
+      links: %{"GitHub" => "https://github.com/paper-crow/skill_kit"},
       maintainers: ["SkillKit Authors"]
     ]
   end
