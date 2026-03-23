@@ -23,6 +23,7 @@ defmodule SkillKit.Agent.Server do
     :scope,
     :registry,
     :provider,
+    :caller,
     :kits,
     messages: [],
     subagents: %{},
@@ -37,6 +38,7 @@ defmodule SkillKit.Agent.Server do
           scope: term(),
           registry: atom(),
           provider: {module(), keyword()} | nil,
+          caller: pid() | nil,
           kits: list(),
           messages: list(),
           subagents: map(),
@@ -56,6 +58,7 @@ defmodule SkillKit.Agent.Server do
     Registry.register(registry, {agent_name, :server}, [])
 
     provider = Keyword.get(opts, :provider)
+    caller = Keyword.get(opts, :caller)
     kits = Keyword.get(opts, :kits, [])
 
     {:ok, %__MODULE__{
@@ -66,6 +69,7 @@ defmodule SkillKit.Agent.Server do
       scope: scope,
       registry: registry,
       provider: provider,
+      caller: caller,
       kits: kits
     }}
   end
@@ -160,7 +164,19 @@ defmodule SkillKit.Agent.Server do
 
     case SkillKit.LLM.stream(state.messages, llm_opts) do
       {:ok, stream} ->
-        response = stream |> Enum.to_list() |> Decoder.decode_events()
+        acc =
+          Enum.reduce(stream, Decoder.new_accumulator(), fn event, acc ->
+            {action, acc} = Decoder.decode_event(event, acc)
+
+            case action do
+              {:delta, text} -> notify_caller(state, {:delta, text})
+              :none -> :ok
+            end
+
+            acc
+          end)
+
+        response = Decoder.finalize(acc)
 
         :telemetry.execute(
           [:skill_kit, :agent, :response],
@@ -179,11 +195,15 @@ defmodule SkillKit.Agent.Server do
           %{agent_name: state.agent_name, error: reason}
         )
 
+        notify_caller(state, {:error, reason})
         state
     end
   end
 
-  defp handle_response(%{tool_calls: []} = _response, state), do: state
+  defp handle_response(%{tool_calls: []} = response, state) do
+    notify_caller(state, {:response, response.content})
+    state
+  end
 
   defp handle_response(%{tool_calls: tool_calls} = _response, state) do
     classifier = ToolBuilder.classifier(state.kits)
@@ -246,6 +266,12 @@ defmodule SkillKit.Agent.Server do
 
   defp builtin_placeholder(%Message.ToolCall{id: id, name: name}) do
     %Message.ToolResult{tool_call_id: id, content: "Builtin '#{name}' not yet implemented."}
+  end
+
+  defp notify_caller(%{caller: nil}, _event), do: :ok
+
+  defp notify_caller(%{caller: pid, agent_name: name}, event) do
+    send(pid, {:skill_kit, name, event})
   end
 
   defp cast_to_mailbox(state, message) do

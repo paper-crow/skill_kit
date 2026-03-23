@@ -219,6 +219,100 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "caller streaming" do
+    test "sends delta and response events to caller pid", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        events = [
+          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hi"}},
+          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => " there"}},
+          %{"type" => "content_block_stop", "index" => 0},
+          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+          %{"type" => "message_stop"}
+        ]
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+
+      assert_receive {:skill_kit, ^agent_name, {:delta, "Hi"}}, 1000
+      assert_receive {:skill_kit, ^agent_name, {:delta, " there"}}, 1000
+      assert_receive {:skill_kit, ^agent_name, {:response, "Hi there"}}, 1000
+    end
+
+    test "sends error event to caller on LLM failure", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
+        {:error, {500, "internal error"}}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+
+      assert_receive {:skill_kit, ^agent_name, {:error, {500, "internal error"}}}, 1000
+      assert Process.alive?(pid)
+    end
+
+    test "streams deltas across tool call loops", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      call_count = :counters.new(1, [:atomics])
+
+      expect(SkillKit.LLM.Mock, :stream, 2, fn _config, _messages, _opts ->
+        count = :counters.get(call_count, 1) + 1
+        :counters.put(call_count, 1, count)
+
+        events = if count == 1 do
+          [
+            %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
+            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "echo", "input" => %{}}},
+            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"command\":\"echo hi\"}"}},
+            %{"type" => "content_block_stop", "index" => 0},
+            %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
+            %{"type" => "message_stop"}
+          ]
+        else
+          [
+            %{"type" => "message_start", "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}},
+            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
+            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Done!"}},
+            %{"type" => "content_block_stop", "index" => 0},
+            %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+            %{"type" => "message_stop"}
+          ]
+        end
+
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      provider = {SkillKit.LLM.Mock, []}
+      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
+
+      assert_receive {:skill_kit, ^agent_name, {:delta, "Done!"}}, 1000
+      assert_receive {:skill_kit, ^agent_name, {:response, "Done!"}}, 1000
+    end
+  end
+
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
       registry: registry,
