@@ -69,4 +69,99 @@ defmodule SkillKit.LLM.Anthropic.DecoderTest do
       assert tc2.id == "tc_2"
     end
   end
+
+  describe "decode_event/2" do
+    test "returns {:delta, text} for text_delta events" do
+      acc = Decoder.new_accumulator()
+
+      {action, _acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hello"}
+          },
+          acc
+        )
+
+      assert {:delta, "Hello"} = action
+    end
+
+    test "returns :none for non-text events" do
+      acc = Decoder.new_accumulator()
+
+      {action, _acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          acc
+        )
+
+      assert action == :none
+    end
+
+    test "accumulates tool use input across events" do
+      acc = Decoder.new_accumulator()
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{
+              "type" => "tool_use",
+              "id" => "tc_1",
+              "name" => "bash",
+              "input" => %{}
+            }
+          },
+          acc
+        )
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"cmd\":\"ls\"}"}
+          },
+          acc
+        )
+
+      {_, acc} =
+        Decoder.decode_event(%{"type" => "content_block_stop", "index" => 0}, acc)
+
+      response = Decoder.finalize(acc)
+      assert [%{name: "bash"}] = response.tool_calls
+    end
+
+    test "finalize builds Assistant with accumulated text and tool calls" do
+      acc = Decoder.new_accumulator()
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hi "}
+          },
+          acc
+        )
+
+      {_, acc} =
+        Decoder.decode_event(
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "there!"}
+          },
+          acc
+        )
+
+      response = Decoder.finalize(acc)
+      assert %Message.Assistant{content: "Hi there!", tool_calls: []} = response
+    end
+  end
 end

@@ -10,25 +10,54 @@ defmodule SkillKit.LLM.Anthropic.Decoder do
   alias SkillKit.LLM.Message
 
   @doc """
+  Returns a fresh accumulator for incremental event decoding.
+  """
+  @spec new_accumulator() :: map()
+  def new_accumulator, do: %{blocks: %{}, text: "", tool_calls: []}
+
+  @doc """
+  Decodes a single SSE event, returning an action and updated accumulator.
+
+  Returns `{{:delta, text}, acc}` when new text is available, or `{:none, acc}` otherwise.
+  """
+  @spec decode_event(map(), map()) :: {{:delta, String.t()}, map()} | {:none, map()}
+  def decode_event(event, acc) do
+    new_acc = process_event(event, acc)
+    delta = String.slice(new_acc.text, String.length(acc.text)..-1//1)
+
+    if delta != "" do
+      {{:delta, delta}, new_acc}
+    else
+      {:none, new_acc}
+    end
+  end
+
+  @doc """
+  Finalizes an accumulator into a `%Message.Assistant{}`.
+  """
+  @spec finalize(map()) :: Message.Assistant.t()
+  def finalize(acc) do
+    content = if acc.text == "", do: nil, else: acc.text
+
+    %Message.Assistant{
+      content: content,
+      tool_calls: Enum.reverse(acc.tool_calls)
+    }
+  end
+
+  @doc """
   Decodes a list of Anthropic SSE events into a single `%Message.Assistant{}`.
 
   Accumulates text deltas and tool use input JSON deltas across events.
   """
   @spec decode_events([map()]) :: Message.Assistant.t()
   def decode_events(events) do
-    state = %{blocks: %{}, text: "", tool_calls: []}
-
-    result =
-      Enum.reduce(events, state, fn event, acc ->
-        process_event(event, acc)
-      end)
-
-    content = if result.text == "", do: nil, else: result.text
-
-    %Message.Assistant{
-      content: content,
-      tool_calls: Enum.reverse(result.tool_calls)
-    }
+    events
+    |> Enum.reduce(new_accumulator(), fn event, acc ->
+      {_action, acc} = decode_event(event, acc)
+      acc
+    end)
+    |> finalize()
   end
 
   defp process_event(%{"type" => "content_block_start", "index" => index, "content_block" => block}, state) do
