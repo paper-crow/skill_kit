@@ -63,7 +63,7 @@ defmodule SkillKit.Agent.ToolBuilder do
 
   defp activate_skill_tool(skills) do
     skill_names = Enum.map(skills, & &1.name)
-    skill_descriptions = Enum.map_join(skills, "\n", fn s -> "- #{s.name}: #{s.description}" end)
+    skill_descriptions = Enum.map_join(skills, "\n", &"- #{&1.name}: #{&1.description}")
 
     %ToolDefinition{
       name: "activate_skill",

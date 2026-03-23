@@ -106,7 +106,7 @@ defmodule SkillKit.Agent do
 
       skills ->
         skill_blocks =
-          Enum.map_join(skills, fn skill -> "\n\n## #{skill.name}\n\n#{skill.body}" end)
+          Enum.map_join(skills, &"\n\n## #{&1.name}\n\n#{&1.body}")
 
         %{definition | system_prompt: definition.system_prompt <> skill_blocks}
     end

@@ -49,7 +49,7 @@ defmodule SkillKit.Executor do
   defp collect_hooks(registry) do
     registry
     |> Registry.list_skills()
-    |> Enum.flat_map(fn skill -> skill.hooks end)
+    |> Enum.flat_map(& &1.hooks)
   rescue
     _ -> []
   catch
