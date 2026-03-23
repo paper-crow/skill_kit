@@ -12,8 +12,7 @@ defmodule SkillKit.Agent.Definition do
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
-          tools: [String.t()],
-          skills: [String.t()],
+          capabilities: [String.t()],
           model: String.t() | nil,
           max_tokens: pos_integer(),
           system_prompt: String.t(),
@@ -31,8 +30,7 @@ defmodule SkillKit.Agent.Definition do
     :system_prompt,
     :path,
     :workspace,
-    tools: [],
-    skills: [],
+    capabilities: [],
     max_tokens: @default_max_tokens,
     max_agent_depth: 1,
     mailbox: %{max_messages: 10, flush_interval: 500}
@@ -65,8 +63,7 @@ defmodule SkillKit.Agent.Definition do
        %__MODULE__{
          name: name,
          description: description,
-         tools: parse_tools(Map.get(yaml, "tools")),
-         skills: parse_tools(Map.get(yaml, "skills")),
+         capabilities: parse_list(Map.get(yaml, "capabilities")),
          model: Map.get(yaml, "model"),
          system_prompt: body,
          path: path,
@@ -88,9 +85,9 @@ defmodule SkillKit.Agent.Definition do
     end
   end
 
-  defp parse_tools(nil), do: []
-  defp parse_tools(tools) when is_binary(tools), do: String.split(tools, ~r/[\s,]+/, trim: true)
-  defp parse_tools(tools) when is_list(tools), do: tools
+  defp parse_list(nil), do: []
+  defp parse_list(items) when is_binary(items), do: String.split(items, ~r/[\s,]+/, trim: true)
+  defp parse_list(items) when is_list(items), do: items
 
   defp parse_int(metadata, key, default) do
     case Map.get(metadata, key) do

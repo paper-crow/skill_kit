@@ -12,7 +12,7 @@ defmodule SkillKit.Agent.DefinitionTest do
 
       assert definition.name == "project-a"
       assert definition.description == "Manages project A. Use when the user asks about project A."
-      assert definition.tools == ["Read", "Grep", "Glob", "Bash"]
+      assert definition.capabilities == ["Read", "Grep", "Glob", "Bash"]
       assert definition.model == "claude-sonnet-4-6"
       assert definition.system_prompt =~ "project A manager"
       assert definition.path == path
@@ -28,7 +28,7 @@ defmodule SkillKit.Agent.DefinitionTest do
 
       assert definition.name == "simple"
       assert definition.description == "A simple agent with defaults."
-      assert definition.tools == []
+      assert definition.capabilities == []
       assert definition.model == nil
       assert definition.system_prompt =~ "Do the thing"
       assert definition.max_agent_depth == 1

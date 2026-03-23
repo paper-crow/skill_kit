@@ -1,0 +1,3 @@
+- [2026-03-22] SkillKit demo tested successfully
+- [2026-03-22] Critical bug in lib/skill_kit.ex: call_agent/4 function called before definition (line 92) - causes runtime crashes
+- [2026-03-22] Critical issue in lib/skill_kit.ex: Registry name collision risk using unique_integer() - could cause agent crashes, should use :erlang.make_ref() instead

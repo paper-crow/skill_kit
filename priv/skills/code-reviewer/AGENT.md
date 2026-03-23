@@ -2,7 +2,7 @@
 name: "code-reviewer"
 description: "Reviews code for issues and reports findings"
 model: "claude-sonnet-4-20250514"
-tools: bash, activate_skill, report_result, report_status
+capabilities: bash, activate_skill, report_result, report_status, dev:code-review
 metadata:
   workspace: /path/to/projects/skill_kit
   max_tokens: 8096

@@ -57,7 +57,7 @@ defmodule Anthropic.ClientTest do
       assert %{"type" => "message_stop"} = List.last(events)
     end
 
-    test "returns error tuple on non-200 response", %{bypass: bypass, client: client} do
+    test "returns error tuple with readable body on non-200 response", %{bypass: bypass, client: client} do
       Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
         Plug.Conn.send_resp(
           conn,
@@ -68,11 +68,14 @@ defmodule Anthropic.ClientTest do
 
       messages = [%{"role" => "user", "content" => "Hi"}]
 
-      assert {:error, {401, _body}} =
+      assert {:error, {401, body}} =
                Client.stream(client, messages,
                  model: "claude-sonnet-4-20250514",
                  max_tokens: 1024
                )
+
+      assert is_binary(body)
+      assert body =~ "authentication_error"
     end
 
     test "retries on 429 with retry-after header", %{bypass: bypass, client: client} do

@@ -1,7 +1,7 @@
 ---
 name: project-a
 description: Manages project A. Use when the user asks about project A.
-tools: Read, Grep, Glob, Bash
+capabilities: Read, Grep, Glob, Bash
 model: claude-sonnet-4-6
 metadata:
   workspace: ~/.agents/project-a

@@ -2,8 +2,7 @@
 name: "sample-agent"
 description: "A sample agent for smoke-testing SkillKit"
 model: "claude-sonnet-4-20250514"
-tools: bash, activate_skill
-skills: system:memory
+capabilities: bash, activate_skill, system:memory
 metadata:
   workspace: /path/to/projects/skill_kit
   mailbox_max_messages: 1

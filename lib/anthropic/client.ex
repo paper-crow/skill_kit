@@ -77,7 +77,8 @@ defmodule Anthropic.Client do
         do_stream(client, messages, opts, retry_count + 1)
 
       {:ok, resp} ->
-        {:error, {resp.status, resp.body}}
+        body = collect_async_body(resp.body)
+        {:error, {resp.status, body}}
 
       {:error, reason} ->
         {:error, reason}
@@ -90,6 +91,12 @@ defmodule Anthropic.Client do
       _ -> 1000
     end
   end
+
+  defp collect_async_body(%Req.Response.Async{} = async) do
+    Enum.reduce(async, "", fn chunk, acc -> acc <> chunk end)
+  end
+
+  defp collect_async_body(body), do: body
 
   defp sse_stream(async_body) do
     Stream.flat_map(async_body, fn chunk ->

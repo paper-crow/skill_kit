@@ -57,7 +57,7 @@ defmodule SkillKit.Agent do
     } = opts
 
     kits = load_kits_from_sources(sources)
-    definition = inject_required_skills(definition, kits)
+    definition = resolve_capabilities(definition, kits)
     provider = Map.get(opts, :provider)
     caller = Map.get(opts, :caller)
 
@@ -77,18 +77,22 @@ defmodule SkillKit.Agent do
     Supervisor.init(children, strategy: :one_for_one)
   end
 
-  defp inject_required_skills(definition, kits) do
-    case definition.skills do
+  defp resolve_capabilities(definition, kits) do
+    all_skills = Enum.flat_map(kits, & &1.skills)
+    skill_names = MapSet.new(all_skills, & &1.name)
+
+    matched_skills =
+      definition.capabilities
+      |> Enum.filter(&MapSet.member?(skill_names, &1))
+      |> Enum.map(fn name -> Enum.find(all_skills, & &1.name == name) end)
+
+    case matched_skills do
       [] ->
         definition
 
-      skill_names ->
-        all_skills = Enum.flat_map(kits, & &1.skills)
-
+      skills ->
         skill_blocks =
-          skill_names
-          |> Enum.map(fn name -> Enum.find(all_skills, & &1.name == name) end)
-          |> Enum.reject(&is_nil/1)
+          skills
           |> Enum.map(fn skill -> "\n\n## #{skill.name}\n\n#{skill.body}" end)
           |> Enum.join()
 
