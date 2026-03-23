@@ -11,7 +11,6 @@ defmodule SkillKit.Agent.LoopTest do
 
   setup do
     registry_name = :"loop_test_registry_#{:erlang.unique_integer([:positive])}"
-    start_supervised!({Registry, keys: :unique, name: registry_name})
 
     agent_name = "loop-test-agent-#{:erlang.unique_integer([:positive])}"
 

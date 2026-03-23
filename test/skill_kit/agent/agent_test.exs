@@ -11,7 +11,6 @@ defmodule SkillKit.Agent.AgentTest do
 
   setup do
     registry_name = :"agent_test_registry_#{:erlang.unique_integer([:positive])}"
-    start_supervised!({Registry, keys: :unique, name: registry_name})
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 

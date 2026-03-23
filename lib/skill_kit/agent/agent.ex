@@ -64,6 +64,7 @@ defmodule SkillKit.Agent do
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
     children = [
+      {Registry, keys: :unique, name: registry},
       {Infrastructure, {agent_name, definition, sources, registry}},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]

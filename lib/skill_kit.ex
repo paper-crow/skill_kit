@@ -87,8 +87,6 @@ defmodule SkillKit do
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
-    {:ok, _} = Registry.start_link(keys: :unique, name: registry_name)
-
     agent_opts = %{
       agent_name: definition.name,
       definition: definition,
@@ -120,13 +118,17 @@ defmodule SkillKit do
   def send_message(%AgentRef{} = agent, content) when is_binary(content) do
     message = %Message.User{content: content}
 
-    case Registry.lookup(agent.registry, {agent.name, :mailbox}) do
-      [{pid, _}] ->
-        GenServer.cast(pid, {:message, message})
-        :ok
+    try do
+      case Registry.lookup(agent.registry, {agent.name, :mailbox}) do
+        [{pid, _}] ->
+          GenServer.cast(pid, {:message, message})
+          :ok
 
-      [] ->
-        {:error, :not_found}
+        [] ->
+          {:error, :not_found}
+      end
+    rescue
+      ArgumentError -> {:error, :not_found}
     end
   end
 
