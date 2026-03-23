@@ -13,7 +13,10 @@ defmodule SkillKit.Agent.SubagentSupervisorTest do
   end
 
   describe "start_link" do
-    test "registers in the agent registry via :via naming", %{registry: registry, agent_name: agent_name} do
+    test "registers in the agent registry via :via naming", %{
+      registry: registry,
+      agent_name: agent_name
+    } do
       {:ok, pid} = SubagentSupervisor.start_link({agent_name, registry})
 
       assert [{^pid, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})

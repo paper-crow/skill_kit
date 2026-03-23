@@ -30,10 +30,14 @@ defmodule SkillKit.Backend.Filesystem do
     errors = skill_errors ++ agent_errors
 
     if errors != [] do
-      error_summary = Enum.map_join(errors, ", ", fn {source, reason} ->
-        "#{source}: #{inspect(reason)}"
-      end)
-      Logger.warning("SkillKit: kit '#{Path.basename(dir)}' — #{length(errors)} skipped (#{error_summary})")
+      error_summary =
+        Enum.map_join(errors, ", ", fn {source, reason} ->
+          "#{source}: #{inspect(reason)}"
+        end)
+
+      Logger.warning(
+        "SkillKit: kit '#{Path.basename(dir)}' — #{length(errors)} skipped (#{error_summary})"
+      )
     end
 
     %Kit{name: Path.basename(dir), skills: skills, agents: agents}

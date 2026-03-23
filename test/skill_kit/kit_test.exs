@@ -8,7 +8,14 @@ defmodule SkillKit.KitTest do
   describe "struct" do
     test "creates kit with skills and agents" do
       skill = %Skill{name: "tools:echo", namespace: "tools", description: "Echo"}
-      agent = %Definition{name: "helper", description: "Helps", system_prompt: "Help.", path: "/tmp", workspace: "/tmp"}
+
+      agent = %Definition{
+        name: "helper",
+        description: "Helps",
+        system_prompt: "Help.",
+        path: "/tmp",
+        workspace: "/tmp"
+      }
 
       kit = %Kit{name: "my-kit", skills: [skill], agents: [agent]}
 

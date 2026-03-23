@@ -66,10 +66,21 @@ defmodule SkillKit.Agent do
     conversation_store = Map.get(opts, :conversation_store)
 
     server_opts = [kits: kits, sources: sources]
-    server_opts = if provider, do: Keyword.put(server_opts, :provider, provider), else: server_opts
+
+    server_opts =
+      if provider, do: Keyword.put(server_opts, :provider, provider), else: server_opts
+
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
-    server_opts = if parent_registry, do: Keyword.put(server_opts, :parent_registry, parent_registry), else: server_opts
-    server_opts = if conversation_store, do: Keyword.put(server_opts, :conversation_store, conversation_store), else: server_opts
+
+    server_opts =
+      if parent_registry,
+        do: Keyword.put(server_opts, :parent_registry, parent_registry),
+        else: server_opts
+
+    server_opts =
+      if conversation_store,
+        do: Keyword.put(server_opts, :conversation_store, conversation_store),
+        else: server_opts
 
     children = [
       {Registry, keys: :unique, name: registry},
@@ -87,7 +98,7 @@ defmodule SkillKit.Agent do
     matched_skills =
       definition.capabilities
       |> Enum.filter(&MapSet.member?(skill_names, &1))
-      |> Enum.map(fn name -> Enum.find(all_skills, & &1.name == name) end)
+      |> Enum.map(fn name -> Enum.find(all_skills, &(&1.name == name)) end)
 
     case matched_skills do
       [] ->

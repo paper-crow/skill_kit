@@ -259,8 +259,7 @@ defmodule SkillKit.RegistryTest do
 
       start_supervised!(
         {Registry,
-         name: name,
-         sources: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
+         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
       )
 
       # Registry started successfully — skills list may be empty (all invalid)
@@ -273,8 +272,7 @@ defmodule SkillKit.RegistryTest do
       # The fixtures root contains ignored.md (no .skill.md extension)
 
       start_supervised!(
-        {Registry,
-         name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@fixtures_root]}]}
+        {Registry, name: name, sources: [{SkillKit.Backend.Filesystem, dirs: [@fixtures_root]}]}
       )
 
       # ignored.md has name "should:ignore" — it must NOT be registered
@@ -306,10 +304,14 @@ defmodule SkillKit.RegistryTest do
     test "first-registered-wins when sources return duplicate names" do
       name = :"boot_dup_#{:erlang.unique_integer([:positive])}"
 
-      start_supervised!({Registry, name: name, sources: [
-        {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]},
-        {SkillKit.RegistryTest.OverlappingBackend, []}
-      ]})
+      start_supervised!(
+        {Registry,
+         name: name,
+         sources: [
+           {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]},
+           {SkillKit.RegistryTest.OverlappingBackend, []}
+         ]}
+      )
 
       {:ok, skill} = Registry.get_skill(name, "files:summarize")
       # The filesystem backend was listed first, so its version wins
@@ -320,10 +322,14 @@ defmodule SkillKit.RegistryTest do
     test "failing backend does not crash registry and other sources still load" do
       name = :"boot_fail_#{:erlang.unique_integer([:positive])}"
 
-      start_supervised!({Registry, name: name, sources: [
-        {SkillKit.RegistryTest.FailingBackend, []},
-        {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
-      ]})
+      start_supervised!(
+        {Registry,
+         name: name,
+         sources: [
+           {SkillKit.RegistryTest.FailingBackend, []},
+           {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
+         ]}
+      )
 
       # Registry is alive and other backend's skills are loaded
       skills = Registry.list_skills(name)

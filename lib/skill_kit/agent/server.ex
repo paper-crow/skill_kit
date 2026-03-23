@@ -57,7 +57,10 @@ defmodule SkillKit.Agent.Server do
   end
 
   def start_link({agent_name, definition, depth, parent_name, scope, registry, opts}) do
-    GenServer.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope, registry, opts})
+    GenServer.start_link(
+      __MODULE__,
+      {agent_name, definition, depth, parent_name, scope, registry, opts}
+    )
   end
 
   @impl true
@@ -83,22 +86,23 @@ defmodule SkillKit.Agent.Server do
           []
       end
 
-    {:ok, %__MODULE__{
-      agent_name: agent_name,
-      parent_name: parent_name,
-      definition: definition,
-      depth: depth,
-      scope: scope,
-      registry: registry,
-      provider: provider,
-      caller: caller,
-      kits: kits,
-      parent_registry: parent_registry,
-      sources: sources,
-      conversation_store: conversation_store,
-      messages: messages,
-      halted: false
-    }}
+    {:ok,
+     %__MODULE__{
+       agent_name: agent_name,
+       parent_name: parent_name,
+       definition: definition,
+       depth: depth,
+       scope: scope,
+       registry: registry,
+       provider: provider,
+       caller: caller,
+       kits: kits,
+       parent_registry: parent_registry,
+       sources: sources,
+       conversation_store: conversation_store,
+       messages: messages,
+       halted: false
+     }}
   end
 
   # --- Agent Loop ---
@@ -120,6 +124,7 @@ defmodule SkillKit.Agent.Server do
     state = run_agent_loop(state, new_messages)
 
     duration = System.monotonic_time() - start_time
+
     :telemetry.execute(
       [:skill_kit, :agent, :turn_end],
       %{duration: duration},
@@ -160,8 +165,12 @@ defmodule SkillKit.Agent.Server do
         :telemetry.execute(
           [:skill_kit, :agent, :subagent_result],
           %{},
-          %{agent_name: state.agent_name, subagent_name: entry.name,
-            task: entry.task, result: result}
+          %{
+            agent_name: state.agent_name,
+            subagent_name: entry.name,
+            task: entry.task,
+            result: result
+          }
         )
 
         cast_to_mailbox(state, {:message, message})
@@ -180,8 +189,9 @@ defmodule SkillKit.Agent.Server do
         state = %{state | subagents: subagents}
 
         message = %Message.System{
-          content: "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
-                   "Reason: #{inspect(reason)}"
+          content:
+            "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
+              "Reason: #{inspect(reason)}"
         }
 
         cast_to_mailbox(state, {:message, message})
@@ -294,9 +304,21 @@ defmodule SkillKit.Agent.Server do
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
     case SkillKit.Executor.run(skill_registry, command, context) do
-      {:ok, execution} -> %Message.ToolResult{tool_call_id: id, content: extract_output(execution.results["execute"])}
-      {:error, execution} -> %Message.ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
-      {:pending, _execution} -> %Message.ToolResult{tool_call_id: id, content: "Command requires approval (not yet supported).", is_error: true}
+      {:ok, execution} ->
+        %Message.ToolResult{
+          tool_call_id: id,
+          content: extract_output(execution.results["execute"])
+        }
+
+      {:error, execution} ->
+        %Message.ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
+
+      {:pending, _execution} ->
+        %Message.ToolResult{
+          tool_call_id: id,
+          content: "Command requires approval (not yet supported).",
+          is_error: true
+        }
     end
   end
 
@@ -334,7 +356,11 @@ defmodule SkillKit.Agent.Server do
         }
 
       {:error, reason} ->
-        %Message.ToolResult{tool_call_id: id, content: "Error: #{inspect(reason)}", is_error: true}
+        %Message.ToolResult{
+          tool_call_id: id,
+          content: "Error: #{inspect(reason)}",
+          is_error: true
+        }
     end
   end
 
@@ -344,9 +370,11 @@ defmodule SkillKit.Agent.Server do
     if state.depth >= state.definition.max_agent_depth do
       result = %Message.ToolResult{
         tool_call_id: id,
-        content: "Cannot spawn subagent: max depth (#{state.definition.max_agent_depth}) reached.",
+        content:
+          "Cannot spawn subagent: max depth (#{state.definition.max_agent_depth}) reached.",
         is_error: true
       }
+
       {result, state}
     else
       case find_agent_definition(name, state.kits) do
@@ -356,6 +384,7 @@ defmodule SkillKit.Agent.Server do
             content: "Unknown agent: #{name}",
             is_error: true
           }
+
           {result, state}
 
         agent_def ->
@@ -375,7 +404,9 @@ defmodule SkillKit.Agent.Server do
     ]
 
     spawn_opts = [sources: state.sources]
-    spawn_opts = if state.provider, do: Keyword.put(spawn_opts, :provider, state.provider), else: spawn_opts
+
+    spawn_opts =
+      if state.provider, do: Keyword.put(spawn_opts, :provider, state.provider), else: spawn_opts
 
     case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
       {:ok, agent_ref} ->
@@ -384,13 +415,14 @@ defmodule SkillKit.Agent.Server do
 
         parent_intent = get_last_assistant_content(state.messages)
 
-        subagents = Map.put(state.subagents, server_pid, %{
-          name: name,
-          task: task,
-          monitor_ref: monitor_ref,
-          parent_intent: parent_intent,
-          agent_ref: agent_ref
-        })
+        subagents =
+          Map.put(state.subagents, server_pid, %{
+            name: name,
+            task: task,
+            monitor_ref: monitor_ref,
+            parent_intent: parent_intent,
+            agent_ref: agent_ref
+          })
 
         state = %{state | subagents: subagents}
 
@@ -400,6 +432,7 @@ defmodule SkillKit.Agent.Server do
           tool_call_id: id,
           content: "Delegated to #{name}. You will receive the result when it completes."
         }
+
         {result, state}
 
       {:error, reason} ->
@@ -408,6 +441,7 @@ defmodule SkillKit.Agent.Server do
           content: "Failed to start subagent #{name}: #{inspect(reason)}",
           is_error: true
         }
+
         {result, state}
     end
   end
@@ -415,7 +449,7 @@ defmodule SkillKit.Agent.Server do
   defp find_agent_definition(name, kits) do
     kits
     |> Enum.flat_map(& &1.agents)
-    |> Enum.find(& &1.name == name)
+    |> Enum.find(&(&1.name == name))
   end
 
   defp get_last_assistant_content(messages) do
@@ -451,7 +485,8 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_builtin(%Message.ToolCall{id: id, name: name}, state) do
-    {%Message.ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true}, state}
+    {%Message.ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true},
+     state}
   end
 
   defp lookup_parent(%{parent_registry: nil}), do: :not_found

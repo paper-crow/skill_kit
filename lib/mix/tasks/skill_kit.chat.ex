@@ -27,10 +27,11 @@ defmodule Mix.Tasks.SkillKit.Chat do
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
-    agent_name = case args do
-      [name | _] -> name
-      [] -> select_agent(agents_dir)
-    end
+    agent_name =
+      case args do
+        [name | _] -> name
+        [] -> select_agent(agents_dir)
+      end
 
     agent_md = Path.join([agents_dir, agent_name, "AGENT.md"])
 
@@ -43,13 +44,23 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, definition} = Definition.parse(agent_md)
     definition = %{definition | workspace: File.cwd!()}
 
-    {:ok, agent} = SkillKit.start_agent(definition,
-      sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
-      provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
-      caller: self()
+    {:ok, agent} =
+      SkillKit.start_agent(definition,
+        sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
+        provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
+        caller: self()
+      )
+
+    IO.puts(
+      IO.ANSI.format([
+        :bright,
+        "\n#{definition.name}",
+        :reset,
+        :faint,
+        " — #{definition.description}"
+      ])
     )
 
-    IO.puts(IO.ANSI.format([:bright, "\n#{definition.name}", :reset, :faint, " — #{definition.description}"]))
     IO.puts(IO.ANSI.format([:faint, "type 'exit' to quit\n"]))
 
     chat_loop(agent, definition.name)
@@ -75,11 +86,16 @@ defmodule Mix.Tasks.SkillKit.Chat do
         |> Enum.with_index(1)
         |> Enum.each(fn {name, i} ->
           agent_md = Path.join([agents_dir, name, "AGENT.md"])
-          desc = case Definition.parse(agent_md) do
-            {:ok, d} -> d.description
-            _ -> ""
-          end
-          IO.puts(IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"]))
+
+          desc =
+            case Definition.parse(agent_md) do
+              {:ok, d} -> d.description
+              _ -> ""
+            end
+
+          IO.puts(
+            IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"])
+          )
         end)
 
         IO.puts("")

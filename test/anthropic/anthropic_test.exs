@@ -15,12 +15,20 @@ defmodule AnthropicTest do
           |> Plug.Conn.put_resp_content_type("text/event-stream")
           |> Plug.Conn.send_chunked(200)
 
-        {:ok, conn} = Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+        {:ok, conn} =
+          Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+
         conn
       end)
 
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:ok, stream} = Anthropic.stream(config, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+
+      assert {:ok, stream} =
+               Anthropic.stream(config, messages,
+                 model: "claude-sonnet-4-20250514",
+                 max_tokens: 1024
+               )
+
       assert [%{"type" => "message_stop"}] = Enum.to_list(stream)
     end
   end

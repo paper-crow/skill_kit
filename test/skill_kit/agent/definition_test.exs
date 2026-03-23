@@ -11,7 +11,10 @@ defmodule SkillKit.Agent.DefinitionTest do
       assert {:ok, definition} = Definition.parse(path)
 
       assert definition.name == "project-a"
-      assert definition.description == "Manages project A. Use when the user asks about project A."
+
+      assert definition.description ==
+               "Manages project A. Use when the user asks about project A."
+
       assert definition.capabilities == ["Read", "Grep", "Glob", "Bash"]
       assert definition.model == "claude-sonnet-4-6"
       assert definition.system_prompt =~ "project A manager"

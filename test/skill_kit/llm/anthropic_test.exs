@@ -40,7 +40,12 @@ defmodule SkillKit.LLM.AnthropicTest do
       end)
 
       messages = [%Message.User{content: "Hi"}]
-      assert {:ok, stream} = Adapter.stream(config, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+
+      assert {:ok, stream} =
+               Adapter.stream(config, messages,
+                 model: "claude-sonnet-4-20250514",
+                 max_tokens: 1024
+               )
 
       events = Enum.to_list(stream)
       assert events != []

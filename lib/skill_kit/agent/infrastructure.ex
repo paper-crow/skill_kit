@@ -18,9 +18,9 @@ defmodule SkillKit.Agent.Infrastructure do
 
     children = [
       {SkillKit.Supervisor,
-        name: {:via, Registry, {registry, {agent_name, :skill_supervisor}}},
-        registry_name: skill_registry_name,
-        sources: sources}
+       name: {:via, Registry, {registry, {agent_name, :skill_supervisor}}},
+       registry_name: skill_registry_name,
+       sources: sources}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

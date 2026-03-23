@@ -34,18 +34,30 @@ defmodule SkillKit.Agent.LoopTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
         assert Enum.any?(messages, fn
-          %Message.User{content: "What is 2+2?"} -> true
-          _ -> false
-        end)
+                 %Message.User{content: "What is 2+2?"} -> true
+                 _ -> false
+               end)
 
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "4"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "4"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
@@ -84,13 +96,25 @@ defmodule SkillKit.Agent.LoopTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "ok"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "ok"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
@@ -130,9 +154,16 @@ defmodule SkillKit.Agent.LoopTest do
       GenServer.cast(mailbox_pid, {:message, %Message.User{content: "hi"}})
       send(mailbox_pid, :flush)
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn_start], _, %{agent_name: ^agent_name}}, 500
-      assert_receive {:telemetry, [:skill_kit, :agent, :response], _, %{agent_name: ^agent_name}}, 500
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn_end], %{duration: _}, %{agent_name: ^agent_name}}, 500
+      assert_receive {:telemetry, [:skill_kit, :agent, :turn_start], _,
+                      %{agent_name: ^agent_name}},
+                     500
+
+      assert_receive {:telemetry, [:skill_kit, :agent, :response], _, %{agent_name: ^agent_name}},
+                     500
+
+      assert_receive {:telemetry, [:skill_kit, :agent, :turn_end], %{duration: _},
+                      %{agent_name: ^agent_name}},
+                     500
 
       :telemetry.detach(handler_id)
     end

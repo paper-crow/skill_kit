@@ -47,7 +47,13 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         %Kit{
           name: "test",
           agents: [
-            %Definition{name: "project-a", description: "Manages project A", system_prompt: ".", path: "/tmp", workspace: "/tmp"}
+            %Definition{
+              name: "project-a",
+              description: "Manages project A",
+              system_prompt: ".",
+              path: "/tmp",
+              workspace: "/tmp"
+            }
           ]
         }
       ]
@@ -82,10 +88,20 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "returns :subagent for agent names" do
-      kits = [%Kit{
-        name: "test",
-        agents: [%Definition{name: "helper", description: ".", system_prompt: ".", path: "/tmp", workspace: "/tmp"}]
-      }]
+      kits = [
+        %Kit{
+          name: "test",
+          agents: [
+            %Definition{
+              name: "helper",
+              description: ".",
+              system_prompt: ".",
+              path: "/tmp",
+              workspace: "/tmp"
+            }
+          ]
+        }
+      ]
 
       classify = ToolBuilder.classifier(kits)
       assert classify.(%{name: "helper"}) == :subagent

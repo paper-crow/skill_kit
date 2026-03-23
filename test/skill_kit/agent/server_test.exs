@@ -46,21 +46,37 @@ defmodule SkillKit.Agent.ServerTest do
       definition: definition
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, messages, _opts ->
-        assert [%Message.User{content: "hello"}] = Enum.filter(messages, &match?(%Message.User{}, &1))
+        assert [%Message.User{content: "hello"}] =
+                 Enum.filter(messages, &match?(%Message.User{}, &1))
 
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hi there!"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hi there!"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
@@ -84,31 +100,62 @@ defmodule SkillKit.Agent.ServerTest do
         count = :counters.get(call_count, 1) + 1
         :counters.put(call_count, 1, count)
 
-        events = if count == 1 do
-          [
-            %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "echo", "input" => %{}}},
-            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"text\": \"hi\"}"}},
-            %{"type" => "content_block_stop", "index" => 0},
-            %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-            %{"type" => "message_stop"}
-          ]
-        else
-          [
-            %{"type" => "message_start", "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}},
-            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Done."}},
-            %{"type" => "content_block_stop", "index" => 0},
-            %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-            %{"type" => "message_stop"}
-          ]
-        end
+        events =
+          if count == 1 do
+            [
+              %{
+                "type" => "message_start",
+                "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+              },
+              %{
+                "type" => "content_block_start",
+                "index" => 0,
+                "content_block" => %{
+                  "type" => "tool_use",
+                  "id" => "tc_1",
+                  "name" => "echo",
+                  "input" => %{}
+                }
+              },
+              %{
+                "type" => "content_block_delta",
+                "index" => 0,
+                "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"text\": \"hi\"}"}
+              },
+              %{"type" => "content_block_stop", "index" => 0},
+              %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
+              %{"type" => "message_stop"}
+            ]
+          else
+            [
+              %{
+                "type" => "message_start",
+                "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}
+              },
+              %{
+                "type" => "content_block_start",
+                "index" => 0,
+                "content_block" => %{"type" => "text", "text" => ""}
+              },
+              %{
+                "type" => "content_block_delta",
+                "index" => 0,
+                "delta" => %{"type" => "text_delta", "text" => "Done."}
+              },
+              %{"type" => "content_block_stop", "index" => 0},
+              %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+              %{"type" => "message_stop"}
+            ]
+          end
 
         {:ok, Stream.map(events, & &1)}
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
@@ -132,7 +179,10 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
@@ -165,18 +215,33 @@ defmodule SkillKit.Agent.ServerTest do
         assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
 
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "4"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "4"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "2+2"}]})
@@ -196,23 +261,42 @@ defmodule SkillKit.Agent.ServerTest do
         assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
 
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "ok"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "ok"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
-      kits = [%SkillKit.Kit{
-        name: "test",
-        skills: [%SkillKit.Skill{name: "tools:echo", namespace: "tools", description: "Echo"}]
-      }]
+      kits = [
+        %SkillKit.Kit{
+          name: "test",
+          skills: [%SkillKit.Skill{name: "tools:echo", namespace: "tools", description: "Echo"}]
+        }
+      ]
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend, kits: kits})
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, provider: backend, kits: kits}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hi"}]})
@@ -228,19 +312,40 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hi"}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => " there"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hi"}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => " there"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
@@ -260,7 +365,12 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
@@ -280,31 +390,67 @@ defmodule SkillKit.Agent.ServerTest do
         count = :counters.get(call_count, 1) + 1
         :counters.put(call_count, 1, count)
 
-        events = if count == 1 do
-          [
-            %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "echo", "input" => %{}}},
-            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"command\":\"echo hi\"}"}},
-            %{"type" => "content_block_stop", "index" => 0},
-            %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-            %{"type" => "message_stop"}
-          ]
-        else
-          [
-            %{"type" => "message_start", "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}},
-            %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-            %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Done!"}},
-            %{"type" => "content_block_stop", "index" => 0},
-            %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-            %{"type" => "message_stop"}
-          ]
-        end
+        events =
+          if count == 1 do
+            [
+              %{
+                "type" => "message_start",
+                "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+              },
+              %{
+                "type" => "content_block_start",
+                "index" => 0,
+                "content_block" => %{
+                  "type" => "tool_use",
+                  "id" => "tc_1",
+                  "name" => "echo",
+                  "input" => %{}
+                }
+              },
+              %{
+                "type" => "content_block_delta",
+                "index" => 0,
+                "delta" => %{
+                  "type" => "input_json_delta",
+                  "partial_json" => "{\"command\":\"echo hi\"}"
+                }
+              },
+              %{"type" => "content_block_stop", "index" => 0},
+              %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
+              %{"type" => "message_stop"}
+            ]
+          else
+            [
+              %{
+                "type" => "message_start",
+                "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}
+              },
+              %{
+                "type" => "content_block_start",
+                "index" => 0,
+                "content_block" => %{"type" => "text", "text" => ""}
+              },
+              %{
+                "type" => "content_block_delta",
+                "index" => 0,
+                "delta" => %{"type" => "text_delta", "text" => "Done!"}
+              },
+              %{"type" => "content_block_stop", "index" => 0},
+              %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
+              %{"type" => "message_stop"}
+            ]
+          end
 
         {:ok, Stream.map(events, & &1)}
       end)
 
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
@@ -321,7 +467,9 @@ defmodule SkillKit.Agent.ServerTest do
       definition: definition
     } do
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider})
 
       :sys.replace_state(pid, fn state -> %{state | halted: true} end)
 
@@ -349,21 +497,44 @@ defmodule SkillKit.Agent.ServerTest do
       # Mock: LLM returns a report_result tool call
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "report_result", "input" => %{}}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"result\": \"All good\"}"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{
+              "type" => "tool_use",
+              "id" => "tc_1",
+              "name" => "report_result",
+              "input" => %{}
+            }
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{
+              "type" => "input_json_delta",
+              "partial_json" => "{\"result\": \"All good\"}"
+            }
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link(
-        {agent_name, definition, 1, parent_name, nil, registry,
-         provider: provider, parent_registry: parent_registry}
-      )
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 1, parent_name, nil, registry,
+           provider: provider, parent_registry: parent_registry}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "report your findings"}]})
@@ -387,21 +558,44 @@ defmodule SkillKit.Agent.ServerTest do
 
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "tool_use", "id" => "tc_1", "name" => "report_result", "input" => %{}}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"result\": \"orphaned\"}"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{
+              "type" => "tool_use",
+              "id" => "tc_1",
+              "name" => "report_result",
+              "input" => %{}
+            }
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{
+              "type" => "input_json_delta",
+              "partial_json" => "{\"result\": \"orphaned\"}"
+            }
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       provider = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link(
-        {agent_name, definition, 1, "gone-parent", nil, registry,
-         provider: provider, parent_registry: parent_registry}
-      )
+
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 1, "gone-parent", nil, registry,
+           provider: provider, parent_registry: parent_registry}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "report"}]})
@@ -455,21 +649,39 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Got it."}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Got it."}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      system_msg = %Message.System{content: "[Background task ref_1 complete] Agent 'worker' returned: done"}
+      system_msg = %Message.System{
+        content: "[Background task ref_1 complete] Agent 'worker' returned: done"
+      }
+
       send(pid, {:mailbox_flush, [system_msg]})
       Process.sleep(50)
 
@@ -493,13 +705,25 @@ defmodule SkillKit.Agent.ServerTest do
         assert content =~ "Found 2 issues"
 
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Fixing now."}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Fixing now."}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
@@ -507,20 +731,28 @@ defmodule SkillKit.Agent.ServerTest do
       mailbox_config = %{max_messages: 1, flush_interval: 50}
       {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
 
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()})
+      {:ok, pid} =
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, provider: provider, caller: self()}
+        )
+
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       fake_subagent_pid = spawn(fn -> Process.sleep(:infinity) end)
       monitor_ref = Process.monitor(fake_subagent_pid)
 
       :sys.replace_state(pid, fn state ->
-        %{state | subagents: Map.put(state.subagents, fake_subagent_pid, %{
-          name: "code-reviewer",
-          task: "check lib/skill_kit.ex",
-          monitor_ref: monitor_ref,
-          parent_intent: "I'll review the code",
-          agent_ref: nil
-        })}
+        %{
+          state
+          | subagents:
+              Map.put(state.subagents, fake_subagent_pid, %{
+                name: "code-reviewer",
+                task: "check lib/skill_kit.ex",
+                monitor_ref: monitor_ref,
+                parent_intent: "I'll review the code",
+                agent_ref: nil
+              })
+        }
       end)
 
       send(pid, {:subagent_result, fake_subagent_pid, "Found 2 issues"})

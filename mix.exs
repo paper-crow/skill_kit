@@ -93,16 +93,16 @@ defmodule SkillKit.MixProject do
           SkillKit.Execution,
           SkillKit.Hook
         ],
-        "Authorization": [
+        Authorization: [
           SkillKit.Authorization,
           SkillKit.AuthorizationProvider,
           SkillKit.Scope
         ],
-        "Persistence": [
+        Persistence: [
           SkillKit.Conversation.Store,
           SkillKit.Conversation.Store.Filesystem
         ],
-        "Infrastructure": [
+        Infrastructure: [
           SkillKit.Supervisor,
           SkillKit.Registry
         ]

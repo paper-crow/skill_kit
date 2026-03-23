@@ -49,7 +49,10 @@ defmodule Anthropic.ClientTest do
       messages = [%{"role" => "user", "content" => "Hi"}]
 
       assert {:ok, stream} =
-               Client.stream(client, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+               Client.stream(client, messages,
+                 model: "claude-sonnet-4-20250514",
+                 max_tokens: 1024
+               )
 
       events = Enum.to_list(stream)
       assert length(events) == 3
@@ -57,7 +60,10 @@ defmodule Anthropic.ClientTest do
       assert %{"type" => "message_stop"} = List.last(events)
     end
 
-    test "returns error tuple with readable body on non-200 response", %{bypass: bypass, client: client} do
+    test "returns error tuple with readable body on non-200 response", %{
+      bypass: bypass,
+      client: client
+    } do
       Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
         Plug.Conn.send_resp(
           conn,
@@ -95,13 +101,21 @@ defmodule Anthropic.ClientTest do
             |> Plug.Conn.put_resp_content_type("text/event-stream")
             |> Plug.Conn.send_chunked(200)
 
-          {:ok, conn} = Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+          {:ok, conn} =
+            Plug.Conn.chunk(conn, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+
           conn
         end
       end)
 
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:ok, stream} = Client.stream(client, messages, model: "claude-sonnet-4-20250514", max_tokens: 1024)
+
+      assert {:ok, stream} =
+               Client.stream(client, messages,
+                 model: "claude-sonnet-4-20250514",
+                 max_tokens: 1024
+               )
+
       assert [%{"type" => "message_stop"}] = Enum.to_list(stream)
       assert :counters.get(call_count, 1) == 2
     end

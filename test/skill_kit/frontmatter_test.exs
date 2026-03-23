@@ -75,7 +75,8 @@ defmodule SkillKit.FrontmatterTest do
 
   describe "parse_file/1" do
     test "reads and parses a file" do
-      path = Path.join(System.tmp_dir!(), "test_frontmatter_#{:erlang.unique_integer([:positive])}.md")
+      path =
+        Path.join(System.tmp_dir!(), "test_frontmatter_#{:erlang.unique_integer([:positive])}.md")
 
       File.write!(path, """
       ---

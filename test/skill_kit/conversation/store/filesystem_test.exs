@@ -4,7 +4,10 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
   alias SkillKit.Conversation.Store.Filesystem
   alias SkillKit.LLM.Message
 
-  @test_path Path.join(System.tmp_dir!(), "skill_kit_conv_test_#{:erlang.unique_integer([:positive])}")
+  @test_path Path.join(
+               System.tmp_dir!(),
+               "skill_kit_conv_test_#{:erlang.unique_integer([:positive])}"
+             )
 
   setup do
     File.rm_rf!(@test_path)

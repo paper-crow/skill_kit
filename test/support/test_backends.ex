@@ -4,19 +4,20 @@ defmodule SkillKit.RegistryTest.OverlappingBackend do
 
   @impl true
   def load_kits(_config) do
-    {:ok, [
-      %SkillKit.Kit{
-        name: "overlapping",
-        skills: [
-          %SkillKit.Skill{
-            name: "files:summarize",
-            namespace: "files",
-            description: "Overlapping description",
-            body: "Different body"
-          }
-        ]
-      }
-    ]}
+    {:ok,
+     [
+       %SkillKit.Kit{
+         name: "overlapping",
+         skills: [
+           %SkillKit.Skill{
+             name: "files:summarize",
+             namespace: "files",
+             description: "Overlapping description",
+             body: "Different body"
+           }
+         ]
+       }
+     ]}
   end
 end
 

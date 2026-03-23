@@ -26,13 +26,14 @@ defmodule SkillKit.Agent.Mailbox do
   def init({agent_name, config, registry}) do
     Registry.register(registry, {agent_name, :mailbox}, [])
 
-    {:ok, %__MODULE__{
-      agent_name: agent_name,
-      registry: registry,
-      max_messages: config.max_messages,
-      flush_interval: config.flush_interval,
-      timer_ref: schedule_flush(config.flush_interval)
-    }}
+    {:ok,
+     %__MODULE__{
+       agent_name: agent_name,
+       registry: registry,
+       max_messages: config.max_messages,
+       flush_interval: config.flush_interval,
+       timer_ref: schedule_flush(config.flush_interval)
+     }}
   end
 
   @impl true

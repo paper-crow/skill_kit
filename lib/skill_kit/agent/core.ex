@@ -18,7 +18,10 @@ defmodule SkillKit.Agent.Core do
   end
 
   def start_link({agent_name, definition, depth, parent_name, scope, registry, opts}) do
-    Supervisor.start_link(__MODULE__, {agent_name, definition, depth, parent_name, scope, registry, opts})
+    Supervisor.start_link(
+      __MODULE__,
+      {agent_name, definition, depth, parent_name, scope, registry, opts}
+    )
   end
 
   @impl true

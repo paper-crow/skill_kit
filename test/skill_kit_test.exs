@@ -20,21 +20,38 @@ defmodule SkillKitTest do
 
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hello"}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => " world"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hello"}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => " world"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
-      {:ok, agent} = SkillKit.start_agent(definition,
-        provider: {SkillKit.LLM.Mock, []},
-        caller: self()
-      )
+      {:ok, agent} =
+        SkillKit.start_agent(definition,
+          provider: {SkillKit.LLM.Mock, []},
+          caller: self()
+        )
 
       assert %SkillKit.AgentRef{name: "api-test-agent"} = agent
 
@@ -82,7 +99,12 @@ defmodule SkillKitTest do
     end
 
     test "conversation_store persists and restores messages" do
-      store_path = Path.join(System.tmp_dir!(), "skill_kit_store_test_#{:erlang.unique_integer([:positive])}")
+      store_path =
+        Path.join(
+          System.tmp_dir!(),
+          "skill_kit_store_test_#{:erlang.unique_integer([:positive])}"
+        )
+
       File.mkdir_p!(store_path)
       on_exit(fn -> File.rm_rf!(store_path) end)
 
@@ -101,21 +123,34 @@ defmodule SkillKitTest do
       # First session — agent gets a message and responds
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "Hi!"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "Hi!"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
-      {:ok, agent} = SkillKit.start_agent(definition,
-        provider: {SkillKit.LLM.Mock, []},
-        conversation_store: store,
-        caller: self()
-      )
+      {:ok, agent} =
+        SkillKit.start_agent(definition,
+          provider: {SkillKit.LLM.Mock, []},
+          conversation_store: store,
+          caller: self()
+        )
 
       :ok = SkillKit.send_message(agent, "Hello")
       assert_receive {:skill_kit, "store-test-agent", {:response, "Hi!"}}, 2000
@@ -126,7 +161,9 @@ defmodule SkillKitTest do
       Process.sleep(50)
 
       # Verify file was written
-      assert {:ok, messages} = SkillKit.Conversation.Store.Filesystem.load("store-test-agent", path: store_path)
+      assert {:ok, messages} =
+               SkillKit.Conversation.Store.Filesystem.load("store-test-agent", path: store_path)
+
       assert length(messages) == 2
     end
   end

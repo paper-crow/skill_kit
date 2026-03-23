@@ -34,7 +34,10 @@ defmodule SkillKit.Agent.MailboxTest do
       assert_receive {:mailbox_flush, ["msg1", "msg2"]}, 200
     end
 
-    test "flushes immediately when max_messages reached", %{registry: registry, agent_name: agent_name} do
+    test "flushes immediately when max_messages reached", %{
+      registry: registry,
+      agent_name: agent_name
+    } do
       Registry.register(registry, {agent_name, :server}, [])
 
       config = %{max_messages: 2, flush_interval: 60_000}

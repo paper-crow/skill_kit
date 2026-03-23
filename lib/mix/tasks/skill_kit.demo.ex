@@ -36,11 +36,12 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
-    {:ok, agent} = SkillKit.start_agent(definition,
-      sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
-      provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
-      caller: self()
-    )
+    {:ok, agent} =
+      SkillKit.start_agent(definition,
+        sources: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
+        provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
+        caller: self()
+      )
 
     Mix.shell().info("Sent: #{prompt}")
     :ok = SkillKit.send_message(agent, prompt)

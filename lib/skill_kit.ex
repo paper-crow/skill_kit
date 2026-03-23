@@ -121,7 +121,8 @@ defmodule SkillKit do
   end
 
   @doc false
-  @spec start_subagent(Agent.Definition.t(), keyword(), keyword()) :: {:ok, agent()} | {:error, term()}
+  @spec start_subagent(Agent.Definition.t(), keyword(), keyword()) ::
+          {:ok, agent()} | {:error, term()}
   def start_subagent(definition, parent_opts, opts \\ []) do
     depth = Keyword.fetch!(parent_opts, :depth)
     parent_name = Keyword.fetch!(parent_opts, :parent_name)

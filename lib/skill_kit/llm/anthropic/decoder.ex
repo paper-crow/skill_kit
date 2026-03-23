@@ -70,11 +70,17 @@ defmodule SkillKit.LLM.Anthropic.Decoder do
     %{state | usage: Map.merge(state.usage, usage)}
   end
 
-  defp process_event(%{"type" => "content_block_start", "index" => index, "content_block" => block}, state) do
+  defp process_event(
+         %{"type" => "content_block_start", "index" => index, "content_block" => block},
+         state
+       ) do
     put_in(state, [:blocks, index], block)
   end
 
-  defp process_event(%{"type" => "content_block_delta", "index" => index, "delta" => delta}, state) do
+  defp process_event(
+         %{"type" => "content_block_delta", "index" => index, "delta" => delta},
+         state
+       ) do
     case delta do
       %{"type" => "text_delta", "text" => text} ->
         %{state | text: state.text <> text}

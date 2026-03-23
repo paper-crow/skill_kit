@@ -15,7 +15,15 @@ defmodule SkillKit.Backend.FilesystemTest do
                            "skills",
                            "invalid"
                          ])
-  @nested_fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "nested"])
+  @nested_fixtures_path Path.join([
+                          __DIR__,
+                          "..",
+                          "..",
+                          "support",
+                          "fixtures",
+                          "skills",
+                          "nested"
+                        ])
   @fixtures_root Path.join([__DIR__, "..", "..", "support", "fixtures", "skills"])
 
   describe "load_kits/1" do

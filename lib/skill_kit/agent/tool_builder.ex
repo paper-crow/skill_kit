@@ -67,8 +67,9 @@ defmodule SkillKit.Agent.ToolBuilder do
 
     %ToolDefinition{
       name: "activate_skill",
-      description: "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
-        "for a task (e.g. code review, style conventions). Available skills:\n#{skill_descriptions}",
+      description:
+        "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
+          "for a task (e.g. code review, style conventions). Available skills:\n#{skill_descriptions}",
       input_schema: %{
         "type" => "object",
         "properties" => %{
@@ -104,7 +105,8 @@ defmodule SkillKit.Agent.ToolBuilder do
     [
       %ToolDefinition{
         name: "report_status",
-        description: "Send a progress update to the parent agent. Use to report intermediate results.",
+        description:
+          "Send a progress update to the parent agent. Use to report intermediate results.",
         input_schema: %{
           "type" => "object",
           "properties" => %{
@@ -115,7 +117,8 @@ defmodule SkillKit.Agent.ToolBuilder do
       },
       %ToolDefinition{
         name: "report_result",
-        description: "Report the final result and complete this task. The agent stops after this.",
+        description:
+          "Report the final result and complete this task. The agent stops after this.",
         input_schema: %{
           "type" => "object",
           "properties" => %{

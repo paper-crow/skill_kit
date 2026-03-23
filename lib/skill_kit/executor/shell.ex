@@ -58,8 +58,8 @@ defmodule SkillKit.Executor.Shell do
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
-        "fetching URLs (curl), git operations, and any system interaction. " <>
-        "The working directory is set to the agent's workspace.",
+          "fetching URLs (curl), git operations, and any system interaction. " <>
+          "The working directory is set to the agent's workspace.",
       input_schema: %{
         "type" => "object",
         "properties" => %{

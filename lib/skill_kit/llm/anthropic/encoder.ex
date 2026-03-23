@@ -70,7 +70,11 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
     %{"role" => "user", "content" => content}
   end
 
-  defp encode_tool_result(%Message.ToolResult{tool_call_id: id, content: content, is_error: is_error}) do
+  defp encode_tool_result(%Message.ToolResult{
+         tool_call_id: id,
+         content: content,
+         is_error: is_error
+       }) do
     result = %{"type" => "tool_result", "tool_use_id" => id, "content" => content}
     if is_error, do: Map.put(result, "is_error", true), else: result
   end
@@ -78,7 +82,11 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
   @doc "Encodes ToolDefinition structs into Anthropic tool format."
   def encode_tools(tools) do
     Enum.map(tools, fn tool ->
-      %{"name" => tool.name, "description" => tool.description, "input_schema" => tool.input_schema}
+      %{
+        "name" => tool.name,
+        "description" => tool.description,
+        "input_schema" => tool.input_schema
+      }
     end)
   end
 end

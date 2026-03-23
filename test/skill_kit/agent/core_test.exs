@@ -47,18 +47,32 @@ defmodule SkillKit.Agent.CoreTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _config, _messages, _opts ->
         events = [
-          %{"type" => "message_start", "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}},
-          %{"type" => "content_block_start", "index" => 0, "content_block" => %{"type" => "text", "text" => ""}},
-          %{"type" => "content_block_delta", "index" => 0, "delta" => %{"type" => "text_delta", "text" => "OK"}},
+          %{
+            "type" => "message_start",
+            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
+          },
+          %{
+            "type" => "content_block_start",
+            "index" => 0,
+            "content_block" => %{"type" => "text", "text" => ""}
+          },
+          %{
+            "type" => "content_block_delta",
+            "index" => 0,
+            "delta" => %{"type" => "text_delta", "text" => "OK"}
+          },
           %{"type" => "content_block_stop", "index" => 0},
           %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
           %{"type" => "message_stop"}
         ]
+
         {:ok, Stream.map(events, & &1)}
       end)
 
       backend = {SkillKit.LLM.Mock, []}
-      {:ok, _sup} = Core.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
+
+      {:ok, _sup} =
+        Core.start_link({agent_name, definition, 0, nil, nil, registry, provider: backend})
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})

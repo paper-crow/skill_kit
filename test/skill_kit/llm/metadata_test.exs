@@ -35,7 +35,9 @@ defmodule SkillKit.LLM.MetadataTest do
 
     test "returns error for unknown provider" do
       metadata = %{"skill_kit:backend:provider" => "unknown_provider"}
-      assert {:error, {:unknown_provider, "unknown_provider"}} = Metadata.extract_backend(metadata)
+
+      assert {:error, {:unknown_provider, "unknown_provider"}} =
+               Metadata.extract_backend(metadata)
     end
 
     test "extracts temperature as float" do
