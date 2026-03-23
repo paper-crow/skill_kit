@@ -17,20 +17,23 @@ Read your memory file:
 cat .memory/current.md 2>/dev/null || echo "No memories yet."
 ```
 
-## When you learn something worth remembering
+## IMPORTANT: Save memories immediately
+
+Any time the user tells you something about themselves, their preferences, their name, or corrects you — save it to memory RIGHT NOW using bash. Do not just acknowledge it. Run the command.
 
 Append to your memory file:
 ```
 mkdir -p .memory && echo "- [$(date +%Y-%m-%d)] <what you learned>" >> .memory/current.md
 ```
 
-Worth remembering:
-- User preferences and corrections
+Save immediately when you learn:
+- The user's name or identity
+- User preferences and corrections ("don't do X", "always do Y")
 - Project-specific conventions discovered during work
 - Important decisions and their rationale
 - Things that surprised you or took multiple attempts
 
-NOT worth remembering:
+Do NOT save:
 - Transient task details
 - Information already in code or git history
 - Debugging steps that led nowhere
