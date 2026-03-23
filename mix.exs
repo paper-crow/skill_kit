@@ -14,7 +14,8 @@ defmodule SkillKit.MixProject do
       name: "SkillKit",
       source_url: "https://github.com/paper-crow/skill_kit",
       homepage_url: "https://github.com/paper-crow/skill_kit",
-      docs: docs()
+      docs: docs(),
+      aliases: aliases()
     ]
   end
 
@@ -106,6 +107,22 @@ defmodule SkillKit.MixProject do
           SkillKit.Supervisor,
           SkillKit.Registry
         ]
+      ]
+    ]
+  end
+
+  def cli do
+    [preferred_envs: [precommit: :test]]
+  end
+
+  defp aliases do
+    [
+      precommit: [
+        "compile --warnings-as-errors",
+        "deps.unlock --unused",
+        "format",
+        "credo --strict",
+        "test"
       ]
     ]
   end

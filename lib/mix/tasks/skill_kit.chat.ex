@@ -91,9 +91,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
     |> Enum.each(fn {name, i} ->
       desc = agent_description(agents_dir, name)
 
-      IO.puts(
-        IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"])
-      )
+      IO.puts(IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"]))
     end)
 
     IO.puts("")
