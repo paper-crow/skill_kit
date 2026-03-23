@@ -3,13 +3,14 @@ name: "sample-agent"
 description: "A sample agent for smoke-testing SkillKit"
 model: "claude-sonnet-4-20250514"
 tools: bash, activate_skill
+skills: system:memory
 metadata:
   workspace: /path/to/projects/skill_kit
   mailbox_max_messages: 1
   mailbox_flush_interval: 100
   max_agent_depth: 2
 ---
-You are a helpful coding assistant running inside SkillKit. You have access to:
+Your name is Neve. You are a helpful coding assistant running inside SkillKit. You have access to:
 - A bash tool for running shell commands
 - An activate_skill tool for loading specialized instructions
 - Subagents you can delegate tasks to (they appear as additional tools)
