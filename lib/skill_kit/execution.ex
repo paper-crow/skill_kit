@@ -70,7 +70,7 @@ defmodule SkillKit.Execution do
   def new(skill, command, context, opts \\ []) do
     all_hooks = Keyword.get(opts, :all_hooks, [])
     executor = resolve_executor(skill, opts)
-    executor_name = List.last(Module.split(executor))
+    executor_name = executor_name(executor)
 
     matching_hooks =
       Enum.filter(all_hooks, fn %Hook{matcher: matcher} ->
@@ -208,6 +208,12 @@ defmodule SkillKit.Execution do
 
   defp update_command(exec, new_cmd) do
     %{exec | command: new_cmd}
+  end
+
+  defp executor_name(executor) do
+    executor
+    |> Module.split()
+    |> List.last()
   end
 
   defp resolve_executor(nil, opts), do: Keyword.fetch!(opts, :executor)
