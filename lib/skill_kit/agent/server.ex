@@ -26,6 +26,7 @@ defmodule SkillKit.Agent.Server do
     :kits,
     :parent_registry,
     :sources,
+    :conversation_store,
     halted: false,
     messages: [],
     subagents: %{},
@@ -44,6 +45,7 @@ defmodule SkillKit.Agent.Server do
           kits: list(),
           parent_registry: atom() | nil,
           sources: list(),
+          conversation_store: {module(), keyword()} | nil,
           halted: boolean(),
           messages: list(),
           subagents: map(),
@@ -67,6 +69,19 @@ defmodule SkillKit.Agent.Server do
     kits = Keyword.get(opts, :kits, [])
     parent_registry = Keyword.get(opts, :parent_registry)
     sources = Keyword.get(opts, :sources, [])
+    conversation_store = Keyword.get(opts, :conversation_store)
+
+    messages =
+      case conversation_store do
+        {mod, config} ->
+          case mod.load(agent_name, config) do
+            {:ok, msgs} -> msgs
+            {:error, _} -> []
+          end
+
+        nil ->
+          []
+      end
 
     {:ok, %__MODULE__{
       agent_name: agent_name,
@@ -80,6 +95,8 @@ defmodule SkillKit.Agent.Server do
       kits: kits,
       parent_registry: parent_registry,
       sources: sources,
+      conversation_store: conversation_store,
+      messages: messages,
       halted: false
     }}
   end
@@ -108,6 +125,8 @@ defmodule SkillKit.Agent.Server do
       %{duration: duration},
       %{agent_name: state.agent_name}
     )
+
+    save_conversation(state)
 
     {:noreply, state}
   end
@@ -470,5 +489,11 @@ defmodule SkillKit.Agent.Server do
       nil -> nil
       {pid, entry} -> {entry, Map.delete(subagents, pid)}
     end
+  end
+
+  defp save_conversation(%{conversation_store: nil}), do: :ok
+
+  defp save_conversation(%{conversation_store: {mod, config}, agent_name: id, messages: msgs}) do
+    mod.save(id, msgs, config)
   end
 end
