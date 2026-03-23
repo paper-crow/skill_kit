@@ -42,7 +42,8 @@ defmodule SkillKit.LLM.AnthropicTest do
       messages = [%Message.User{content: "Hi"}]
 
       assert {:ok, stream} =
-               Adapter.stream(messages,
+               Adapter.stream(
+                 messages,
                  Keyword.merge(config, model: "claude-sonnet-4-20250514", max_tokens: 1024)
                )
 

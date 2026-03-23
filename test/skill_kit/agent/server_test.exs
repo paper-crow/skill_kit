@@ -281,9 +281,7 @@ defmodule SkillKit.Agent.ServerTest do
       ]
 
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, kits: kits}
-        )
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, kits: kits})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -328,9 +326,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, caller: self()}
-        )
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -351,9 +347,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, caller: self()}
-        )
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -429,9 +423,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, caller: self()}
-        )
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -591,9 +583,7 @@ defmodule SkillKit.Agent.ServerTest do
       definition: definition
     } do
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, ["limited:scope"], registry}
-        )
+        Server.start_link({agent_name, definition, 0, nil, ["limited:scope"], registry})
 
       # Verify the server started with scope
       state = :sys.get_state(pid)
@@ -701,9 +691,7 @@ defmodule SkillKit.Agent.ServerTest do
       {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
 
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, caller: self()}
-        )
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 

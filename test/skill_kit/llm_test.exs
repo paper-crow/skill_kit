@@ -41,7 +41,9 @@ defmodule SkillKit.LLMTest do
 
     test "returns error for unknown provider" do
       messages = [%{"role" => "user", "content" => "Hi"}]
-      assert {:error, {:unknown_provider, "bogus"}} = SkillKit.LLM.stream(messages, model: "bogus://model")
+
+      assert {:error, {:unknown_provider, "bogus"}} =
+               SkillKit.LLM.stream(messages, model: "bogus://model")
     end
   end
 

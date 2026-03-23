@@ -93,7 +93,7 @@ defmodule SkillKit.LLM do
   defp llm_config, do: Application.get_env(:skill_kit, __MODULE__, [])
 
   defp providers do
-    Keyword.get(llm_config(), :providers, [anthropic: __MODULE__.Anthropic])
+    Keyword.get(llm_config(), :providers, anthropic: __MODULE__.Anthropic)
   end
 
   defp default_provider do
