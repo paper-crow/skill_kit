@@ -213,6 +213,17 @@ defmodule SkillKit.Execution do
   defp resolve_executor(nil, opts), do: Keyword.fetch!(opts, :executor)
   defp resolve_executor(skill, _opts), do: skill.executor
 
+  defp build_pre_context(%{skill: nil, steps: steps} = exec) do
+    {:execute, _, executor} = Enum.find(steps, fn {type, _, _} -> type == :execute end)
+
+    %{
+      skill: nil,
+      scope: Map.get(exec.context, :scope),
+      command: exec.command,
+      executor: executor
+    }
+  end
+
   defp build_pre_context(exec) do
     %{
       skill: exec.skill,
