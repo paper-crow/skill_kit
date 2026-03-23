@@ -23,13 +23,6 @@ defmodule Mix.Tasks.SkillKit.Demo do
       exit({:shutdown, 1})
     end
 
-    api_key = System.get_env("ANTHROPIC_API_KEY")
-
-    unless api_key do
-      Mix.shell().error("Set ANTHROPIC_API_KEY environment variable")
-      exit({:shutdown, 1})
-    end
-
     agent_md = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve/AGENT.md")
     {:ok, definition} = Definition.parse(agent_md)
     definition = %{definition | workspace: File.cwd!()}

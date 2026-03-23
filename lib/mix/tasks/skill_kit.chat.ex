@@ -17,13 +17,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
   def run(args) do
     Mix.Task.run("app.start")
 
-    api_key = System.get_env("ANTHROPIC_API_KEY")
-
-    unless api_key do
-      Mix.shell().error("Set ANTHROPIC_API_KEY environment variable")
-      exit({:shutdown, 1})
-    end
-
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
