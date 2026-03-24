@@ -58,7 +58,8 @@ defmodule SkillKit.MixProject do
         "guides/backends.md",
         "guides/hooks-and-execution.md",
         "guides/authorization.md",
-        "guides/telemetry.md"
+        "guides/telemetry.md",
+        "guides/conversations.md"
       ],
       groups_for_extras: [
         Guides: Path.wildcard("guides/*.md")
