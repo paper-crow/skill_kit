@@ -34,20 +34,23 @@ defmodule SkillKit.LLM do
 
     case get_provider_and_opts(model_string) do
       {:ok, provider, provider_opts} ->
-        merged = Keyword.merge(provider_opts, opts)
-        meta = %{provider: provider, model: Keyword.get(merged, :model)}
-
-        SkillKit.Telemetry.span([:llm, :stream], meta, fn ->
-          case provider.stream(messages, merged) do
-            {:ok, _} = result -> {result, %{}}
-            {:error, _} = error -> {error, %{error: error}}
-          end
-        end)
+        stream_with_telemetry(provider, messages, Keyword.merge(provider_opts, opts))
 
       {:error, _} = err ->
         SkillKit.Telemetry.event([:llm, :stream, :error], %{}, %{error: err, model: model_string})
         err
     end
+  end
+
+  defp stream_with_telemetry(provider, messages, opts) do
+    meta = %{provider: provider, model: Keyword.get(opts, :model)}
+
+    SkillKit.Telemetry.span([:llm, :stream], meta, fn ->
+      case provider.stream(messages, opts) do
+        {:ok, _} = result -> {result, %{}}
+        {:error, _} = error -> {error, %{error: error}}
+      end
+    end)
   end
 
   @doc "Resolves a model URI to `{:ok, provider, opts}` or `{:error, reason}`."
