@@ -31,9 +31,17 @@ defmodule SkillKit.LLM do
     case get_provider_and_opts(model_string) do
       {:ok, provider, provider_opts} ->
         merged = Keyword.merge(provider_opts, opts)
-        provider.stream(messages, merged)
+        meta = %{provider: provider, model: Keyword.get(merged, :model)}
+
+        SkillKit.Telemetry.span([:llm, :stream], meta, fn ->
+          case provider.stream(messages, merged) do
+            {:ok, _} = result -> {result, %{}}
+            {:error, _} = error -> {error, %{error: error}}
+          end
+        end)
 
       {:error, _} = err ->
+        SkillKit.Telemetry.event([:llm, :stream, :error], %{}, %{error: err})
         err
     end
   end

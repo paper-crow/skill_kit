@@ -52,8 +52,8 @@ defmodule Anthropic.Client do
       {:ok, %{status: 429} = resp} when retry_count < @max_retries ->
         retry_after = parse_retry_after(resp)
 
-        SkillKit.Telemetry.event(
-          [:llm, :rate_limited],
+        Anthropic.Telemetry.event(
+          [:rate_limited],
           %{retry_after: retry_after, attempt: retry_count + 1},
           %{endpoint: client.endpoint}
         )
