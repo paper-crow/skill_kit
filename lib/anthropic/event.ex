@@ -1,5 +1,12 @@
 defmodule Anthropic.Event do
-  @moduledoc false
+  @moduledoc """
+  Parses raw Anthropic SSE event maps into typed event structs.
+
+  Each event arriving over the stream is a JSON-decoded map with a `"type"`
+  key. `parse/1` dispatches on that key and returns the corresponding struct
+  from the `Anthropic.Event.*` namespace, or `:skip` for events that carry
+  no useful data (e.g. `ping`).
+  """
 
   alias Anthropic.Event.ContentBlockDelta
   alias Anthropic.Event.ContentBlockStart
@@ -8,7 +15,20 @@ defmodule Anthropic.Event do
   alias Anthropic.Event.MessageStart
   alias Anthropic.Event.MessageStop
 
-  @spec parse(map()) :: struct() | :skip
+  @type parsed_event ::
+          Anthropic.Event.MessageStart.t()
+          | Anthropic.Event.ContentBlockStart.t()
+          | Anthropic.Event.ContentBlockDelta.t()
+          | Anthropic.Event.ContentBlockStop.t()
+          | Anthropic.Event.MessageDelta.t()
+          | Anthropic.Event.MessageStop.t()
+
+  @doc """
+  Parses a raw SSE event map into a typed struct.
+
+  Returns `:skip` for `ping` events and any unrecognised event types.
+  """
+  @spec parse(map()) :: parsed_event() | :skip
   def parse(%{"type" => "message_start", "message" => msg}) do
     %MessageStart{id: msg["id"], usage: msg["usage"]}
   end
