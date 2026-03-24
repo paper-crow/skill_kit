@@ -16,7 +16,11 @@ defmodule SkillKit.Executor.Behaviour do
   @callback execute(execution :: SkillKit.Execution.t()) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
-  @callback resume(execution :: SkillKit.Execution.t(), state :: any(), decision :: :approved | {:denied, any()}) ::
+  @callback resume(
+              execution :: SkillKit.Execution.t(),
+              state :: any(),
+              decision :: :approved | {:denied, any()}
+            ) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
   @callback tool_definition() :: SkillKit.Executor.ToolDefinition.t()

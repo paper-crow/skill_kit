@@ -11,8 +11,10 @@ defmodule SkillKit.Executor.Shell do
 
   @behaviour SkillKit.Executor.Behaviour
 
+  alias SkillKit.Execution
+
   @impl true
-  def execute(%SkillKit.Execution{command: command, context: context}) do
+  def execute(%Execution{command: command, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =
@@ -74,7 +76,7 @@ defmodule SkillKit.Executor.Shell do
   end
 
   @impl true
-  def resume(%SkillKit.Execution{} = exec, _state, :approved) do
+  def resume(%Execution{} = exec, _state, :approved) do
     execute(exec)
   end
 
