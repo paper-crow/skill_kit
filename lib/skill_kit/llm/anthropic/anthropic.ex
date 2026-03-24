@@ -9,6 +9,7 @@ defmodule SkillKit.LLM.Anthropic do
 
   @behaviour SkillKit.LLM
 
+  alias SkillKit.Event.Streamable
   alias SkillKit.LLM.Anthropic.Encoder
 
   @default_model "claude-sonnet-4-20250514"
@@ -40,7 +41,7 @@ defmodule SkillKit.LLM.Anthropic do
 
   defp to_skill_kit_stream(anthropic_stream) do
     Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, fn event, acc ->
-      SkillKit.Event.Streamable.to_events(event, acc)
+      Streamable.to_events(event, acc)
     end)
   end
 
