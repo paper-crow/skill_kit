@@ -3,7 +3,6 @@ defmodule SkillKit.Agent.ToolBuilderTest do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.ToolBuilder
-  alias SkillKit.Executor.ToolDefinition
   alias SkillKit.Kit
   alias SkillKit.Skill
 
@@ -79,6 +78,34 @@ defmodule SkillKit.Agent.ToolBuilderTest do
       refute Enum.any?(tools, &(&1.name == "report_status"))
       refute Enum.any?(tools, &(&1.name == "report_result"))
     end
+
+    test "activated module-backed skills appear as individual tools" do
+      module_skill = %Skill{
+        name: "scheduler:schedule",
+        namespace: "scheduler",
+        description: "Schedule a task",
+        body: "Use schedule tool",
+        executor: SkillKit.Executor.Shell
+      }
+
+      tools = ToolBuilder.build_tools([], activated_skills: [module_skill])
+      tool_names = Enum.map(tools, & &1.name)
+      assert "schedule" in tool_names
+    end
+
+    test "activated skills with unloadable executors are excluded" do
+      bad_skill = %Skill{
+        name: "broken:thing",
+        namespace: "broken",
+        description: "Won't load",
+        body: "nope",
+        executor: DoesNotExist.Module
+      }
+
+      tools = ToolBuilder.build_tools([], activated_skills: [bad_skill])
+      tool_names = Enum.map(tools, & &1.name)
+      refute "thing" in tool_names
+    end
   end
 
   describe "classifier/1" do
@@ -116,6 +143,24 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     test "returns :executor for everything else" do
       classify = ToolBuilder.classifier([])
       assert classify.(%{name: "bash"}) == :executor
+    end
+
+    test "classifier returns {:module_skill, skill} for activated module-backed skills" do
+      module_skill = %Skill{
+        name: "scheduler:schedule",
+        namespace: "scheduler",
+        description: "Schedule a task",
+        body: "Use schedule tool",
+        executor: SkillKit.Executor.Shell
+      }
+
+      classify = ToolBuilder.classifier([], [module_skill])
+      assert {:module_skill, ^module_skill} = classify.(%{name: "schedule"})
+    end
+
+    test "classifier still returns :executor for unknown tools" do
+      classify = ToolBuilder.classifier([], [])
+      assert :executor = classify.(%{name: "bash"})
     end
   end
 end

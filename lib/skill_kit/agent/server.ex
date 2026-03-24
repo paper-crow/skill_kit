@@ -244,7 +244,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%{tool_calls: tool_calls} = _response, state) do
-    classifier = ToolBuilder.classifier(state.kits)
+    classifier = ToolBuilder.classifier(state.kits, Map.get(state, :activated_skills, []))
     {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
     Enum.each(results, fn result ->

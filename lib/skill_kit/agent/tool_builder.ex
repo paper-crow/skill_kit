@@ -13,6 +13,7 @@ defmodule SkillKit.Agent.ToolBuilder do
   alias SkillKit.Agent.Definition
   alias SkillKit.Executor.ToolDefinition
   alias SkillKit.Kit
+  alias SkillKit.Skill
 
   @subagent_builtins MapSet.new(["report_status", "report_result"])
 
@@ -22,43 +23,93 @@ defmodule SkillKit.Agent.ToolBuilder do
   Options:
   - `:executors` — list of executor modules (default: `[SkillKit.Executor.Shell]`)
   - `:subagent` — if true, includes report_status/report_result (default: false)
+  - `:activated_skills` — list of `%Skill{}` structs with module-backed executors
   """
   @spec build_tools([Kit.t()], keyword()) :: [ToolDefinition.t()]
   def build_tools(kits, opts \\ []) do
     executors = Keyword.get(opts, :executors, [SkillKit.Executor.Shell])
     subagent = Keyword.get(opts, :subagent, false)
+    activated_skills = Keyword.get(opts, :activated_skills, [])
 
     all_skills = Enum.flat_map(kits, & &1.skills)
     all_agents = Enum.flat_map(kits, & &1.agents)
 
     executor_tools = Enum.map(executors, & &1.tool_definition())
-    skill_tool = if all_skills != [], do: [activate_skill_tool(all_skills)], else: []
+
+    activated_tools =
+      activated_skills
+      |> Enum.filter(&Code.ensure_loaded?(&1.executor))
+      |> Enum.map(&skill_to_tool/1)
+
+    visible_skills =
+      Enum.filter(all_skills, fn skill ->
+        skill.executor == SkillKit.Executor.Shell or Code.ensure_loaded?(skill.executor)
+      end)
+
+    skill_tool = if visible_skills != [], do: [activate_skill_tool(visible_skills)], else: []
     agent_tools = Enum.map(all_agents, &agent_to_tool/1)
     builtins = if subagent, do: builtin_tools(), else: []
 
-    executor_tools ++ skill_tool ++ agent_tools ++ builtins
+    executor_tools ++ activated_tools ++ skill_tool ++ agent_tools ++ builtins
   end
 
   @doc """
   Returns a classifier function for routing tool calls.
 
-  Returns one of: :executor, :activate_skill, :subagent, :builtin
+  Returns one of: :executor, :activate_skill, :subagent, :builtin,
+  or `{:module_skill, skill}` for activated module-backed skills.
   """
-  @spec classifier([Kit.t()]) :: (map() -> :executor | :activate_skill | :subagent | :builtin)
-  def classifier(kits) do
+  @spec classifier([Kit.t()], [Skill.t()]) ::
+          (map() ->
+             :executor
+             | :activate_skill
+             | :subagent
+             | :builtin
+             | {:module_skill, Skill.t()})
+  def classifier(kits, activated_skills \\ []) do
     agent_names =
       kits
       |> Enum.flat_map(& &1.agents)
       |> MapSet.new(& &1.name)
+
+    module_skill_map = Map.new(activated_skills, &{skill_short_name(&1.name), &1})
 
     fn %{name: name} ->
       cond do
         name == "activate_skill" -> :activate_skill
         MapSet.member?(@subagent_builtins, name) -> :builtin
         MapSet.member?(agent_names, name) -> :subagent
+        Map.has_key?(module_skill_map, name) -> {:module_skill, module_skill_map[name]}
         true -> :executor
       end
     end
+  end
+
+  @doc """
+  Extracts the short name from a namespaced skill name.
+
+  ## Examples
+
+      iex> ToolBuilder.skill_short_name("scheduler:schedule")
+      "schedule"
+
+      iex> ToolBuilder.skill_short_name("standalone")
+      "standalone"
+  """
+  @spec skill_short_name(String.t()) :: String.t()
+  def skill_short_name(name) do
+    case String.split(name, ":", parts: 2) do
+      [_ns, short] -> short
+      [short] -> short
+    end
+  end
+
+  defp skill_to_tool(skill) do
+    %ToolDefinition{
+      name: skill_short_name(skill.name),
+      description: skill.description,
+      input_schema: %{"type" => "object"}
+    }
   end
 
   defp activate_skill_tool(skills) do
