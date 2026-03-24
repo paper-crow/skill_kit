@@ -27,7 +27,10 @@ defmodule Anthropic.ClientTest do
       {:ok, bypass: bypass, client: client}
     end
 
-    test "streams parsed SSE events from messages endpoint", %{bypass: bypass, client: client} do
+    test "streams typed SSE event structs from messages endpoint", %{
+      bypass: bypass,
+      client: client
+    } do
       Bypass.expect_once(bypass, "POST", "/v1/messages", fn conn ->
         conn =
           conn
@@ -56,8 +59,8 @@ defmodule Anthropic.ClientTest do
 
       events = Enum.to_list(stream)
       assert length(events) == 3
-      assert %{"type" => "message_start"} = List.first(events)
-      assert %{"type" => "message_stop"} = List.last(events)
+      assert %Anthropic.Event.MessageStart{} = List.first(events)
+      assert %Anthropic.Event.MessageStop{} = List.last(events)
     end
 
     test "returns error tuple with readable body on non-200 response", %{
@@ -116,7 +119,7 @@ defmodule Anthropic.ClientTest do
                  max_tokens: 1024
                )
 
-      assert [%{"type" => "message_stop"}] = Enum.to_list(stream)
+      assert [%Anthropic.Event.MessageStop{}] = Enum.to_list(stream)
       assert :counters.get(call_count, 1) == 2
     end
 

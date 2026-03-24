@@ -50,7 +50,7 @@ defmodule SkillKit.LLM.AnthropicTest do
       events = Enum.to_list(stream)
       assert events != []
       # Verify we got a message_stop event
-      assert Enum.any?(events, &(&1["type"] == "message_stop"))
+      assert Enum.any?(events, &match?(%Anthropic.Event.MessageStop{}, &1))
     end
   end
 end
