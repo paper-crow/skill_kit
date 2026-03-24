@@ -34,8 +34,8 @@ defmodule SkillKit do
 
   ## Configuration
 
-      # Default executor
-      config :skill_kit, :executor, SkillKit.Executor.Shell
+      # Default handler
+      config :skill_kit, :handler, SkillKit.Handler.Shell
 
       # Default LLM provider
       config :skill_kit, SkillKit.LLM,

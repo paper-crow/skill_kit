@@ -1,8 +1,8 @@
-defmodule SkillKit.Executor.ToolDefinitionTest do
+defmodule SkillKit.Handler.ToolDefinitionTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Executor.Shell
-  alias SkillKit.Executor.ToolDefinition
+  alias SkillKit.Handler.Shell
+  alias SkillKit.Handler.ToolDefinition
 
   describe "ToolDefinition struct" do
     test "creates with required fields" do

@@ -10,7 +10,7 @@ defmodule SkillKit.Kit do
 
   When a module does `use SkillKit.Kit`, it becomes both a
   `SkillKit.Backend` (can load skills from `*.skill.md` files) and a
-  `SkillKit.Executor.Behaviour` (can execute them).
+  `SkillKit.Handler.Behaviour` (can execute them).
 
   The kit name is inferred from the module's last segment, downcased and
   underscored. Override with `name: "custom_name"`.
@@ -50,7 +50,7 @@ defmodule SkillKit.Kit do
 
     quote do
       @behaviour SkillKit.Backend
-      @behaviour SkillKit.Executor.Behaviour
+      @behaviour SkillKit.Handler.Behaviour
 
       @kit_name unquote(kit_name)
       @skills_dir unquote(skills_dir)
@@ -60,16 +60,16 @@ defmodule SkillKit.Kit do
         SkillKit.Kit.do_load_kits(@kit_name, @skills_dir, __MODULE__, config)
       end
 
-      @impl SkillKit.Executor.Behaviour
+      @impl SkillKit.Handler.Behaviour
       def resume(_execution, _state, _decision) do
         {:error, :not_resumable}
       end
 
-      @impl SkillKit.Executor.Behaviour
+      @impl SkillKit.Handler.Behaviour
       def tool_definition do
-        %SkillKit.Executor.ToolDefinition{
+        %SkillKit.Handler.ToolDefinition{
           name: @kit_name,
-          description: "Kit executor for #{@kit_name}",
+          description: "Kit handler for #{@kit_name}",
           input_schema: %{}
         }
       end
@@ -79,8 +79,8 @@ defmodule SkillKit.Kit do
   end
 
   @doc false
-  def do_load_kits(kit_name, skills_dir, executor_module, config) do
-    case load_skill_files(skills_dir, kit_name, executor_module, config) do
+  def do_load_kits(kit_name, skills_dir, handler_module, config) do
+    case load_skill_files(skills_dir, kit_name, handler_module, config) do
       {:ok, skills} ->
         kit = %__MODULE__{name: kit_name, skills: skills}
         {:ok, [kit]}
@@ -107,25 +107,25 @@ defmodule SkillKit.Kit do
     |> Macro.underscore()
   end
 
-  defp load_skill_files(dir, kit_name, executor_module, config) do
+  defp load_skill_files(dir, kit_name, handler_module, config) do
     pattern = Path.join(dir, "*.skill.md")
 
     pattern
     |> Path.wildcard()
     |> Enum.sort()
     |> Enum.reduce_while({:ok, []}, fn path, {:ok, acc} ->
-      case parse_skill_file(path, kit_name, executor_module, config) do
+      case parse_skill_file(path, kit_name, handler_module, config) do
         {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
         {:error, _} = error -> {:halt, error}
       end
     end)
   end
 
-  defp parse_skill_file(path, kit_name, executor_module, config) do
+  defp parse_skill_file(path, kit_name, handler_module, config) do
     with {:ok, content} <- File.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
          {:ok, yaml_map} <- parse_yaml(frontmatter) do
-      build_kit_skill(yaml_map, body, path, kit_name, executor_module, config)
+      build_kit_skill(yaml_map, body, path, kit_name, handler_module, config)
     end
   end
 
@@ -150,7 +150,7 @@ defmodule SkillKit.Kit do
     YamlElixir.read_from_string(yaml_str, atoms: false)
   end
 
-  defp build_kit_skill(yaml_map, body, source_path, kit_name, executor_module, config) do
+  defp build_kit_skill(yaml_map, body, source_path, kit_name, handler_module, config) do
     with {:ok, bare_name} <- fetch_required_string(yaml_map, "name"),
          {:ok, description} <- fetch_required_string(yaml_map, "description") do
       qualified_name = "#{kit_name}:#{bare_name}"
@@ -164,7 +164,7 @@ defmodule SkillKit.Kit do
          description: description,
          body: body,
          location: source_path,
-         executor: executor_module,
+         handler: handler_module,
          metadata: merged_metadata
        }}
     end

@@ -1,17 +1,17 @@
 defmodule SkillKit.Agent.ToolBuilder do
   @moduledoc """
-  Assembles the tool list for the LLM from executors, kits, and builtins.
+  Assembles the tool list for the LLM from handlers, kits, and builtins.
 
   Skills are NOT tools — they're context loaded via `activate_skill`.
   The tool list consists of:
-  - Executor tools (bash) — from executor modules' `tool_definition/0`
+  - Handler tools (bash) — from handler modules' `tool_definition/0`
   - `activate_skill` — loads a skill's instructions into context
   - Agent delegation tools — from kit agent definitions
   - Built-in tools — report_status/report_result for subagent-agents
   """
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Executor.ToolDefinition
+  alias SkillKit.Handler.ToolDefinition
   alias SkillKit.Kit
   alias SkillKit.Skill
 
@@ -21,47 +21,47 @@ defmodule SkillKit.Agent.ToolBuilder do
   Builds the full tool list for the LLM.
 
   Options:
-  - `:executors` — list of executor modules (default: `[SkillKit.Executor.Shell]`)
+  - `:handlers` — list of handler modules (default: `[SkillKit.Handler.Shell]`)
   - `:subagent` — if true, includes report_status/report_result (default: false)
-  - `:activated_skills` — list of `%Skill{}` structs with module-backed executors
+  - `:activated_skills` — list of `%Skill{}` structs with module-backed handlers
   """
   @spec build_tools([Kit.t()], keyword()) :: [ToolDefinition.t()]
   def build_tools(kits, opts \\ []) do
-    executors = Keyword.get(opts, :executors, [SkillKit.Executor.Shell])
+    handlers = Keyword.get(opts, :handlers, [SkillKit.Handler.Shell])
     subagent = Keyword.get(opts, :subagent, false)
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
     all_skills = Enum.flat_map(kits, & &1.skills)
     all_agents = Enum.flat_map(kits, & &1.agents)
 
-    executor_tools = Enum.map(executors, & &1.tool_definition())
+    handler_tools = Enum.map(handlers, & &1.tool_definition())
 
     activated_tools =
       activated_skills
-      |> Enum.filter(&Code.ensure_loaded?(&1.executor))
+      |> Enum.filter(&Code.ensure_loaded?(&1.handler))
       |> Enum.map(&skill_to_tool/1)
 
     visible_skills =
       Enum.filter(all_skills, fn skill ->
-        skill.executor == SkillKit.Executor.Shell or Code.ensure_loaded?(skill.executor)
+        skill.handler == SkillKit.Handler.Shell or Code.ensure_loaded?(skill.handler)
       end)
 
     skill_tool = if visible_skills != [], do: [activate_skill_tool(visible_skills)], else: []
     agent_tools = Enum.map(all_agents, &agent_to_tool/1)
     builtins = if subagent, do: builtin_tools(), else: []
 
-    executor_tools ++ activated_tools ++ skill_tool ++ agent_tools ++ builtins
+    handler_tools ++ activated_tools ++ skill_tool ++ agent_tools ++ builtins
   end
 
   @doc """
   Returns a classifier function for routing tool calls.
 
-  Returns one of: :executor, :activate_skill, :subagent, :builtin,
+  Returns one of: :handler, :activate_skill, :subagent, :builtin,
   or `{:module_skill, skill}` for activated module-backed skills.
   """
   @spec classifier([Kit.t()], [Skill.t()]) ::
           (map() ->
-             :executor
+             :handler
              | :activate_skill
              | :subagent
              | :builtin
@@ -80,7 +80,7 @@ defmodule SkillKit.Agent.ToolBuilder do
         MapSet.member?(@subagent_builtins, name) -> :builtin
         MapSet.member?(agent_names, name) -> :subagent
         Map.has_key?(module_skill_map, name) -> {:module_skill, module_skill_map[name]}
-        true -> :executor
+        true -> :handler
       end
     end
   end

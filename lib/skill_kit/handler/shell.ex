@@ -1,6 +1,6 @@
-defmodule SkillKit.Executor.Shell do
+defmodule SkillKit.Handler.Shell do
   @moduledoc """
-  Default executor that runs commands via the system shell.
+  Default handler that runs commands via the system shell.
 
   Executes the command string using `Port.open/2` with `:stderr_to_stdout`.
   Returns stdout on success, or `{output, exit_code}` on failure.
@@ -9,7 +9,7 @@ defmodule SkillKit.Executor.Shell do
   concept, so resuming just re-executes the command from the Execution struct.
   """
 
-  @behaviour SkillKit.Executor.Behaviour
+  @behaviour SkillKit.Handler.Behaviour
 
   alias SkillKit.Execution
 
@@ -56,7 +56,7 @@ defmodule SkillKit.Executor.Shell do
 
   @impl true
   def tool_definition do
-    %SkillKit.Executor.ToolDefinition{
+    %SkillKit.Handler.ToolDefinition{
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>

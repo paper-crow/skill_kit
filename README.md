@@ -135,8 +135,8 @@ Attach handlers with `:telemetry.attach/4` or use a GenServer-based handler patt
 ## Configuration
 
 ```elixir
-# Default executor (swappable)
-config :skill_kit, :executor, SkillKit.Executor.Shell
+# Default handler (swappable)
+config :skill_kit, :handler, SkillKit.Handler.Shell
 
 # Default LLM provider
 config :skill_kit, SkillKit.LLM,

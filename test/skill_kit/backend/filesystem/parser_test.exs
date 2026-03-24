@@ -20,7 +20,7 @@ defmodule SkillKit.Backend.Filesystem.ParserTest do
       assert skill.description == "Summarize a file's contents"
       assert skill.required_scope == ["files:read"]
       assert skill.location == path
-      assert skill.executor == SkillKit.Executor.Shell
+      assert skill.handler == SkillKit.Handler.Shell
       assert skill.hooks == []
       assert String.contains?(skill.body, "{{content}}")
     end

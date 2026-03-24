@@ -1,5 +1,5 @@
-defmodule SkillKit.Executor.ToolDefinition do
-  @moduledoc "Describes an executor as a tool the LLM can call."
+defmodule SkillKit.Handler.ToolDefinition do
+  @moduledoc "Describes a handler as a tool the LLM can call."
 
   @type t :: %__MODULE__{
           name: String.t(),

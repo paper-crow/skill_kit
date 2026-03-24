@@ -9,7 +9,7 @@ defmodule SkillKit.ExecutionTest do
       namespace: "test",
       description: "Test skill",
       body: "Do something",
-      executor: Keyword.get(opts, :executor, SkillKit.Executor.Shell),
+      handler: Keyword.get(opts, :handler, SkillKit.Handler.Shell),
       hooks: Keyword.get(opts, :hooks, [])
     }
   end
@@ -25,7 +25,7 @@ defmodule SkillKit.ExecutionTest do
       assert is_nil(exec.suspended_at)
     end
 
-    test "builds pipeline with pre and post hooks filtered by executor name" do
+    test "builds pipeline with pre and post hooks filtered by handler name" do
       pre = %Hook{phase: :pre, matcher: ~r/Shell/, handler: fn _ctx -> :allow end}
       post = %Hook{phase: :post, matcher: ~r/Shell/, handler: fn ctx -> ctx.result end}
       non_matching = %Hook{phase: :pre, matcher: ~r/Docker/, handler: fn _ctx -> :allow end}
@@ -102,8 +102,8 @@ defmodule SkillKit.ExecutionTest do
       assert {:error, %Execution{status: :failed}} = Execution.run(exec)
     end
 
-    test "executor {:pending, state} suspends execution" do
-      s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
+    test "handler {:pending, state} suspends execution" do
+      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
       exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       assert {:pending, %Execution{status: :suspended} = result} = Execution.run(exec)
@@ -162,8 +162,8 @@ defmodule SkillKit.ExecutionTest do
   end
 
   describe "resume/2" do
-    test "resumes suspended executor and completes" do
-      s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
+    test "resumes suspended handler and completes" do
+      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
       exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       {:pending, suspended} = Execution.run(exec)
@@ -174,8 +174,8 @@ defmodule SkillKit.ExecutionTest do
       assert result.results["execute"] == {:ok, "approved result"}
     end
 
-    test "resumes denied executor and fails" do
-      s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
+    test "resumes denied handler and fails" do
+      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
       exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       {:pending, suspended} = Execution.run(exec)
@@ -187,8 +187,8 @@ defmodule SkillKit.ExecutionTest do
 
   # Test helper modules
 
-  defmodule PendingExecutor do
-    @behaviour SkillKit.Executor.Behaviour
+  defmodule PendingHandler do
+    @behaviour SkillKit.Handler.Behaviour
 
     @impl true
     def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
@@ -199,7 +199,7 @@ defmodule SkillKit.ExecutionTest do
 
     @impl true
     def tool_definition do
-      %SkillKit.Executor.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
+      %SkillKit.Handler.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
     end
   end
 
