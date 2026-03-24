@@ -31,7 +31,9 @@ defmodule SkillKit.ExecutionTest do
       non_matching = %Hook{phase: :pre, matcher: ~r/Docker/, handler: fn _ctx -> :allow end}
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
+
+      exec =
+        Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
 
       # Should have pre + execute + post = 3 steps (non_matching filtered out)
       assert length(exec.steps) == 3

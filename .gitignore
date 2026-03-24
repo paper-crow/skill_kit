@@ -26,6 +26,8 @@ skill_kit-*.tar
 .worktrees/
 
 .DS_Store
-/.claude
+/.claude/settings.local.json
+/.claude/worktrees/
+CLAUDE.local.md
 .env
 .memory/
