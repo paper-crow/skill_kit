@@ -10,6 +10,11 @@ defmodule Mix.Tasks.SkillKit.Chat do
   use Mix.Task
 
   alias SkillKit.Agent.Definition
+  alias SkillKit.Event.Delta
+  alias SkillKit.Event.Error
+  alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.ToolResult
 
   @shortdoc "Start an interactive agent chat session"
 
@@ -146,22 +151,22 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   defp receive_response(agent_name) do
     receive do
-      {:skill_kit, ^agent_name, {:delta, text}} ->
+      %Delta{agent: ^agent_name, text: text} ->
         IO.write(text)
         receive_response(agent_name)
 
-      {:skill_kit, ^agent_name, {:tool_call, name, input}} ->
+      %ToolCallComplete{agent: ^agent_name, name: name, input: input} ->
         IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
         receive_response(agent_name)
 
-      {:skill_kit, ^agent_name, {:tool_result, _name, _content, _is_error}} ->
+      %ToolResult{agent: ^agent_name} ->
         receive_response(agent_name)
 
-      {:skill_kit, ^agent_name, {:response, _text}} ->
+      %AssistantMessage{agent: ^agent_name} ->
         IO.puts("\n")
         wait_for_follow_up(agent_name)
 
-      {:skill_kit, ^agent_name, {:error, reason}} ->
+      %Error{agent: ^agent_name, reason: reason} ->
         IO.puts("\n[error] #{inspect(reason)}\n")
     after
       120_000 ->
@@ -176,7 +181,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   defp wait_for_follow_up(agent_name) do
     receive do
-      {:skill_kit, ^agent_name, {:delta, _text}} = msg ->
+      %Delta{agent: ^agent_name} = msg ->
         IO.puts("--- subagent result arrived ---")
         send(self(), msg)
         receive_response(agent_name)
