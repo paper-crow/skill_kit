@@ -44,7 +44,9 @@ defmodule SkillKit do
 
   alias SkillKit.Agent
   alias SkillKit.AgentRef
-  alias SkillKit.LLM.Message
+  alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
 
   @type agent :: AgentRef.t()
 
@@ -100,7 +102,7 @@ defmodule SkillKit do
   """
   @spec send_message(agent(), String.t()) :: :ok | {:error, :not_found}
   def send_message(%AgentRef{} = agent, content) when is_binary(content) do
-    message = %Message.User{content: content}
+    message = %UserMessage{content: content}
 
     try do
       case Registry.lookup(agent.registry, {agent.name, :mailbox}) do
@@ -132,7 +134,7 @@ defmodule SkillKit do
       {:error, :timeout} = SkillKit.send_message_sync(agent, "Hi", 100)
   """
   @spec send_message_sync(agent(), String.t(), timeout()) ::
-          {:ok, String.t() | nil} | {:error, term()}
+          {:ok, AssistantMessage.t()} | {:error, term()}
   def send_message_sync(%AgentRef{} = agent, content, timeout \\ 5000) do
     case send_message(agent, content) do
       :ok -> await_response(agent.name, timeout)
@@ -142,8 +144,8 @@ defmodule SkillKit do
 
   defp await_response(agent_name, timeout) do
     receive do
-      {:skill_kit, ^agent_name, {:response, text}} -> {:ok, text}
-      {:skill_kit, ^agent_name, {:error, reason}} -> {:error, reason}
+      %AssistantMessage{agent: ^agent_name} = msg -> {:ok, msg}
+      %EventError{agent: ^agent_name, reason: reason} -> {:error, reason}
     after
       timeout -> {:error, :timeout}
     end

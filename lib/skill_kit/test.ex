@@ -71,7 +71,7 @@ if Mix.env() == :test do
     @spec expect_response(struct()) :: :ok
     def expect_response(response) do
       Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn _messages, _opts ->
-        Anthropic.Test.to_stream(response)
+        build_event_stream(response)
       end)
 
       :ok
@@ -86,7 +86,7 @@ if Mix.env() == :test do
     def assert_response(response, assertion_fn) do
       Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn messages, opts ->
         assertion_fn.(messages, opts)
-        Anthropic.Test.to_stream(response)
+        build_event_stream(response)
       end)
 
       :ok
@@ -107,7 +107,7 @@ if Mix.env() == :test do
       Mox.expect(SkillKit.LLM.Mock, :stream, count, fn _messages, _opts ->
         index = :counters.get(counter, 1) + 1
         :counters.put(counter, 1, index)
-        Anthropic.Test.to_stream(Map.fetch!(responses_map, index))
+        build_event_stream(Map.fetch!(responses_map, index))
       end)
 
       :ok
@@ -119,6 +119,31 @@ if Mix.env() == :test do
     @spec expect_error(integer(), String.t()) :: :ok
     def expect_error(status, message) do
       expect_response(%Error{status: status, message: message})
+    end
+
+    defp build_event_stream(%SkillKit.Response.Text{content: text}) do
+      events = [
+        %SkillKit.Event.Delta{text: text},
+        %SkillKit.Event.Done{stop_reason: :end_turn}
+      ]
+
+      {:ok, Stream.map(events, & &1)}
+    end
+
+    defp build_event_stream(%SkillKit.Response.ToolCall{name: name, input: input}) do
+      id = "tc_test_#{:erlang.unique_integer([:positive])}"
+
+      events = [
+        %SkillKit.Event.ToolCallStart{id: id, name: name},
+        %SkillKit.Event.ToolCallComplete{id: id, name: name, input: input},
+        %SkillKit.Event.Done{stop_reason: :tool_use}
+      ]
+
+      {:ok, Stream.map(events, & &1)}
+    end
+
+    defp build_event_stream(%SkillKit.Response.Error{status: status, message: message}) do
+      {:error, {status, message}}
     end
   end
 end
