@@ -182,8 +182,6 @@ defmodule SkillKitTest do
       {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
       assert {:ok, "Hello world"} = SkillKit.send_message_sync(agent, "Hi")
-
-      SkillKit.stop_agent(agent)
     end
 
     test "returns {:error, reason} for LLM errors" do
@@ -200,8 +198,6 @@ defmodule SkillKitTest do
       {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
       assert {:error, {500, "internal error"}} = SkillKit.send_message_sync(agent, "Hi")
-
-      SkillKit.stop_agent(agent)
     end
 
     test "deltas arrive at caller before send_message_sync returns" do
@@ -222,8 +218,6 @@ defmodule SkillKitTest do
 
       # Deltas should be in the mailbox — they arrived before :response
       assert_receive {:skill_kit, "sync-delta-agent", {:delta, "Hello world"}}
-
-      SkillKit.stop_agent(agent)
     end
 
     test "returns {:error, :timeout} when timeout expires" do
@@ -243,8 +237,6 @@ defmodule SkillKitTest do
       {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
       assert {:error, :timeout} = SkillKit.send_message_sync(agent, "Hi", 100)
-
-      SkillKit.stop_agent(agent)
     end
   end
 end
