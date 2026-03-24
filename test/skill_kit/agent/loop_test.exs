@@ -120,12 +120,12 @@ defmodule SkillKit.Agent.LoopTest do
       test_pid = self()
       handler_id = "loop-test-#{agent_name}"
 
-      :telemetry.attach_many(
+      SkillKit.Telemetry.attach_many(
         handler_id,
         [
-          [:skill_kit, :agent, :turn_start],
+          [:skill_kit, :agent, :turn, :start],
           [:skill_kit, :agent, :response],
-          [:skill_kit, :agent, :turn_end]
+          [:skill_kit, :agent, :turn, :stop]
         ],
         fn event, measurements, metadata, _config ->
           send(test_pid, {:telemetry, event, measurements, metadata})
@@ -152,18 +152,18 @@ defmodule SkillKit.Agent.LoopTest do
       GenServer.cast(mailbox_pid, {:message, %Message.User{content: "hi"}})
       send(mailbox_pid, :flush)
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn_start], _,
+      assert_receive {:telemetry, [:skill_kit, :agent, :turn, :start], _,
                       %{agent_name: ^agent_name}},
                      500
 
       assert_receive {:telemetry, [:skill_kit, :agent, :response], _, %{agent_name: ^agent_name}},
                      500
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn_end], %{duration: _},
+      assert_receive {:telemetry, [:skill_kit, :agent, :turn, :stop], %{duration: _},
                       %{agent_name: ^agent_name}},
                      500
 
-      :telemetry.detach(handler_id)
+      SkillKit.Telemetry.detach(handler_id)
     end
   end
 end

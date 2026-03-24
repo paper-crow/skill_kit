@@ -14,6 +14,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Execution
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
+  alias SkillKit.Telemetry
 
   defstruct [
     :agent_name,
@@ -113,22 +114,15 @@ defmodule SkillKit.Agent.Server do
 
   @impl true
   def handle_info({:mailbox_flush, new_messages}, state) do
-    :telemetry.execute(
-      [:skill_kit, :agent, :turn_start],
-      %{},
-      %{agent_name: state.agent_name, message_count: length(new_messages)}
-    )
+    start_time =
+      Telemetry.start(
+        [:agent, :turn],
+        %{agent_name: state.agent_name, message_count: length(new_messages)}
+      )
 
-    start_time = System.monotonic_time()
     state = run_agent_loop(state, new_messages)
 
-    duration = System.monotonic_time() - start_time
-
-    :telemetry.execute(
-      [:skill_kit, :agent, :turn_end],
-      %{duration: duration},
-      %{agent_name: state.agent_name}
-    )
+    Telemetry.stop([:agent, :turn], start_time, %{agent_name: state.agent_name})
 
     save_conversation(state)
 
@@ -161,16 +155,12 @@ defmodule SkillKit.Agent.Server do
           """
         }
 
-        :telemetry.execute(
-          [:skill_kit, :agent, :subagent_result],
-          %{},
-          %{
-            agent_name: state.agent_name,
-            subagent_name: entry.name,
-            task: entry.task,
-            result: result
-          }
-        )
+        Telemetry.event([:agent, :subagent_result], %{}, %{
+          agent_name: state.agent_name,
+          subagent_name: entry.name,
+          task: entry.task,
+          result: result
+        })
 
         cast_to_mailbox(state, {:message, message})
         {:noreply, state}
@@ -217,28 +207,19 @@ defmodule SkillKit.Agent.Server do
 
         response = Decoder.finalize(acc)
 
-        :telemetry.execute(
-          [:skill_kit, :agent, :usage],
-          acc.usage,
-          %{agent_name: state.agent_name}
-        )
+        Telemetry.event([:agent, :usage], acc.usage, %{agent_name: state.agent_name})
 
-        :telemetry.execute(
-          [:skill_kit, :agent, :response],
-          %{},
-          %{agent_name: state.agent_name, response: response}
-        )
+        Telemetry.event([:agent, :response], %{}, %{
+          agent_name: state.agent_name,
+          response: response
+        })
 
         state = %{state | messages: state.messages ++ [response]}
 
         handle_response(response, state)
 
       {:error, reason} ->
-        :telemetry.execute(
-          [:skill_kit, :agent, :error],
-          %{},
-          %{agent_name: state.agent_name, error: reason}
-        )
+        Telemetry.event([:agent, :error], %{}, %{agent_name: state.agent_name, error: reason})
 
         notify_caller(state, {:error, reason})
         state
@@ -255,11 +236,11 @@ defmodule SkillKit.Agent.Server do
     {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
     Enum.each(results, fn result ->
-      :telemetry.execute(
-        [:skill_kit, :agent, :tool_result],
-        %{},
-        %{agent_name: state.agent_name, tool_call_id: result.tool_call_id, result: result}
-      )
+      Telemetry.event([:agent, :tool_result], %{}, %{
+        agent_name: state.agent_name,
+        tool_call_id: result.tool_call_id,
+        result: result
+      })
     end)
 
     state = %{state | messages: state.messages ++ results}
@@ -268,11 +249,7 @@ defmodule SkillKit.Agent.Server do
 
   defp execute_tool_calls(tool_calls, state, classifier) do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
-      :telemetry.execute(
-        [:skill_kit, :agent, :tool_call],
-        %{},
-        %{agent_name: acc.agent_name, tool_call: tc}
-      )
+      Telemetry.event([:agent, :tool_call], %{}, %{agent_name: acc.agent_name, tool_call: tc})
 
       notify_caller(acc, {:tool_call, tc.name, tc.input})
 
@@ -492,11 +469,11 @@ defmodule SkillKit.Agent.Server do
         send(parent_pid, {:subagent_result, self(), result})
 
       :not_found ->
-        :telemetry.execute(
-          [:skill_kit, :agent, :orphaned_result],
-          %{},
-          %{agent_name: state.agent_name, parent_name: state.parent_name, result: result}
-        )
+        Telemetry.event([:agent, :orphaned_result], %{}, %{
+          agent_name: state.agent_name,
+          parent_name: state.parent_name,
+          result: result
+        })
     end
 
     state = %{state | halted: true}

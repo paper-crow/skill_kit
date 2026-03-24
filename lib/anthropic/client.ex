@@ -26,7 +26,6 @@ defmodule Anthropic.Client do
   @doc "Creates a new client from a keyword list. `:api_key` is required."
   @spec new(keyword()) :: t()
   def new(opts) do
-    _ = Keyword.fetch!(opts, :api_key)
     struct!(__MODULE__, opts)
   end
 
@@ -45,17 +44,16 @@ defmodule Anthropic.Client do
 
   defp do_stream(client, messages, opts, retry_count) do
     body = build_request_body(messages, opts)
-    result = post_streaming(client, body)
 
-    case result do
+    case post_streaming(client, body) do
       {:ok, %{status: 200} = resp} ->
         {:ok, sse_stream(resp.body)}
 
       {:ok, %{status: 429} = resp} when retry_count < @max_retries ->
         retry_after = parse_retry_after(resp)
 
-        :telemetry.execute(
-          [:skill_kit, :llm, :rate_limited],
+        SkillKit.Telemetry.event(
+          [:llm, :rate_limited],
           %{retry_after: retry_after, attempt: retry_count + 1},
           %{endpoint: client.endpoint}
         )
