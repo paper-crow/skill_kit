@@ -5,12 +5,14 @@ defmodule SkillKit.Handler do
   Public entry point for executing skill input through the pipeline.
   Accepts input as a map (e.g., `%{"command" => "echo hi"}`) or a
   bare command string (wrapped automatically). Collects hooks from
-  all registered skills, builds the execution pipeline, and runs it.
+  all registered skills, filters them by handler, builds the step
+  list, and runs the pipeline.
 
   For callers that need pipeline inspection or suspension support,
   use `SkillKit.Pipeline` directly.
   """
 
+  alias SkillKit.Hook
   alias SkillKit.Pipeline
   alias SkillKit.Registry
 
@@ -23,9 +25,14 @@ defmodule SkillKit.Handler do
   def run(registry, input, context) do
     handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
     hooks = collect_and_filter_hooks(registry, handler)
-    input = wrap_input(input)
-    pipeline = Pipeline.new(nil, input, context, hooks: hooks, handler: handler)
-    Pipeline.run(pipeline)
+
+    %Pipeline{
+      skill: nil,
+      input: wrap_input(input),
+      context: context,
+      steps: build_steps(hooks, handler)
+    }
+    |> Pipeline.run()
   end
 
   @doc """
@@ -36,9 +43,14 @@ defmodule SkillKit.Handler do
   """
   def run(registry, skill, input, context) do
     hooks = collect_and_filter_hooks(registry, skill.handler)
-    input = wrap_input(input)
-    pipeline = Pipeline.new(skill, input, context, hooks: hooks)
-    Pipeline.run(pipeline)
+
+    %Pipeline{
+      skill: skill,
+      input: wrap_input(input),
+      context: context,
+      steps: build_steps(hooks, skill.handler)
+    }
+    |> Pipeline.run()
   end
 
   @doc """
@@ -62,5 +74,16 @@ defmodule SkillKit.Handler do
     _ -> []
   catch
     :exit, _ -> []
+  end
+
+  defp build_steps(hooks, handler) do
+    pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
+    post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
+
+    pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+  end
+
+  defp index_steps(hooks, type, prefix) do
+    Enum.with_index(hooks, fn %Hook{} = hook, i -> {type, "#{prefix}:#{i}", hook} end)
   end
 end

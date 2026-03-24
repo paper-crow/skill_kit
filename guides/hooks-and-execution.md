@@ -42,12 +42,18 @@ A pre-hook may return:
 
 ### Construction
 
-`Pipeline.new/4` accepts a skill (or `nil`), an input map, a context map, and
-options. The `all_hooks:` option supplies every hook to consider — `new/4`
-filters them to those whose `:matcher` regex matches the handler's module name.
+`SkillKit.Handler.run/3,4` builds the pipeline struct directly. It collects
+hooks from the registry, filters them by handler name, builds the step list,
+and constructs a `%Pipeline{}`:
 
 ```elixir
-execution = Pipeline.new(skill, input, context, all_hooks: hooks)
+# Handler.run/4 does this internally:
+%Pipeline{
+  skill: skill,
+  input: input,
+  context: context,
+  steps: pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+}
 ```
 
 ### Step Names
@@ -179,8 +185,8 @@ config :skill_kit, handler: MyApp.Handler.Sandbox
 ## How Hooks Are Collected
 
 Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3` calls
-`SkillKit.Registry.list_skills/2` and flat-maps each skill's `:hooks` list into a
-single collection before passing it to `SkillKit.Pipeline.new/4`.
+`SkillKit.Registry.list_skills/2`, flat-maps each skill's `:hooks` list, filters
+by handler name, and builds the step list for the `%SkillKit.Pipeline{}` struct.
 
 The matcher regex is tested against only the last segment of the handler module
 name. A hook with `~r/Shell/` matches `SkillKit.Handler.Shell` but not

@@ -1,24 +1,26 @@
 defmodule SkillKit.Pipeline do
   @moduledoc """
-  A named, resumable pipeline for executing a skill input through lifecycle hooks.
+  A named, resumable pipeline for executing skill input through lifecycle hooks.
 
-  Inspired by `Ecto.Multi`, a `Pipeline` separates construction from execution.
-  Each step in the pipeline is a named entry — pre-hooks, the execute step, and
-  post-hooks. Steps are walked sequentially; results are recorded in a map keyed
-  by step name.
+  A pipeline is a data structure holding a list of steps (pre-hooks, an execute
+  step, and post-hooks), input, context, and accumulated results. It is built
+  by `SkillKit.Handler` and executed by `run/1`.
 
-  The pipeline can suspend at any step via `{:pending, state}` and be resumed
-  from that exact point with `resume/2`.
+  Steps are walked sequentially; results are recorded in a map keyed by step
+  name. The pipeline can suspend at any step via `{:pending, state}` and be
+  resumed from that exact point with `resume/2`.
 
   ## Status transitions
 
-  - `:pending`   — initial state after `new/4`
+  - `:pending`   — initial state
   - `:running`   — actively processing steps
   - `:suspended` — paused at a step awaiting a decision
   - `:complete`  — all steps succeeded
   - `:failed`    — a step returned an error or denial
 
   ## Step naming
+
+  Steps are named by `SkillKit.Handler` during construction:
 
   - Pre-hooks: `"pre:0"`, `"pre:1"`, ...
   - Execute:   `"execute"`
@@ -55,40 +57,6 @@ defmodule SkillKit.Pipeline do
     results: %{},
     status: :pending
   ]
-
-  @doc """
-  Builds a `Pipeline` for `skill`, `input`, and `context`.
-
-  ## Options
-
-    * `:hooks` — pre-filtered list of `SkillKit.Hook.t()` (already matched
-      against the handler). Defaults to `[]`.
-    * `:handler` — handler module override (required when `skill` is `nil`)
-  """
-  @spec new(SkillKit.Skill.t() | nil, map(), map(), keyword()) :: t()
-  def new(skill, input, context, opts \\ []) do
-    hooks = Keyword.get(opts, :hooks, [])
-    handler = resolve_handler(skill, opts)
-    steps = build_steps(hooks, handler)
-
-    %__MODULE__{
-      skill: skill,
-      input: input,
-      context: context,
-      steps: steps
-    }
-  end
-
-  defp build_steps(hooks, handler) do
-    pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
-    post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
-
-    pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
-  end
-
-  defp index_steps(hooks, type, prefix) do
-    Enum.with_index(hooks, fn hook, i -> {type, "#{prefix}:#{i}", hook} end)
-  end
 
   @doc """
   Walks all pipeline steps sequentially, recording results by step name.
@@ -191,9 +159,6 @@ defmodule SkillKit.Pipeline do
   defp update_input(exec, new_input) do
     %{exec | input: new_input}
   end
-
-  defp resolve_handler(nil, opts), do: Keyword.fetch!(opts, :handler)
-  defp resolve_handler(skill, _opts), do: skill.handler
 
   defp build_pre_context(%{skill: nil, steps: steps} = exec) do
     {:execute, _, handler} = Enum.find(steps, &match?({:execute, _, _}, &1))
