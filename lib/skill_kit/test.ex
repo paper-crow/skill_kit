@@ -14,8 +14,57 @@ if Mix.env() == :test do
     This imports `SkillKit.Test` and sets up `Mox.verify_on_exit!/1`.
     """
 
+    alias SkillKit.Agent.Definition
+    alias SkillKit.Agent.Server
     alias SkillKit.Response.Error
     alias SkillKit.Response.Respondable
+
+    defmacro __using__(_opts) do
+      quote do
+        import SkillKit.Test
+        setup :verify_on_exit!
+      end
+    end
+
+    @doc """
+    Starts a bare Server process for unit testing.
+
+    Returns `{:ok, server_pid, context}` where context contains `:registry`,
+    `:agent_name`, and `:definition`.
+    """
+    @spec start_server(keyword()) :: {:ok, pid(), map()}
+    def start_server(opts \\ []) do
+      agent_name =
+        Keyword.get(opts, :agent_name, "test-agent-#{:erlang.unique_integer([:positive])}")
+
+      caller = Keyword.get(opts, :caller, self())
+      scope = Keyword.get(opts, :scope)
+      kits = Keyword.get(opts, :kits, [])
+
+      definition =
+        Keyword.get_lazy(opts, :definition, fn ->
+          %Definition{
+            name: agent_name,
+            description: "Test agent",
+            system_prompt: "You are a test agent.",
+            path: "/tmp/test",
+            workspace: "/tmp/test"
+          }
+        end)
+
+      registry_name = :"test_registry_#{:erlang.unique_integer([:positive])}"
+      ExUnit.Callbacks.start_supervised!({Registry, keys: :unique, name: registry_name})
+
+      server_opts = [caller: caller, kits: kits]
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, scope, registry_name, server_opts})
+
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      context = %{registry: registry_name, agent_name: agent_name, definition: definition}
+      {:ok, pid, context}
+    end
 
     @doc """
     Sets up a single Mox expectation that returns the given response.

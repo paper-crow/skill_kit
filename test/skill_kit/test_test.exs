@@ -96,4 +96,36 @@ defmodule SkillKit.TestTest do
       assert {:error, {500, "internal error"}} = SkillKit.LLM.Mock.stream([], [])
     end
   end
+
+  describe "start_server/1" do
+    setup :verify_on_exit!
+
+    test "starts a registered Server with unique registry" do
+      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hi"})
+
+      {:ok, pid, context} = SkillKit.Test.start_server(caller: self())
+
+      assert Process.alive?(pid)
+      assert is_atom(context.registry)
+      assert is_binary(context.agent_name)
+
+      send(pid, {:mailbox_flush, [%SkillKit.LLM.Message.User{content: "hello"}]})
+
+      assert_receive {:skill_kit, _, {:response, "Hi"}}, 1000
+    end
+
+    test "accepts custom options" do
+      {:ok, pid, context} =
+        SkillKit.Test.start_server(
+          agent_name: "custom-agent",
+          scope: ["test:read"]
+        )
+
+      assert Process.alive?(pid)
+      assert context.agent_name == "custom-agent"
+
+      state = :sys.get_state(pid)
+      assert state.scope == ["test:read"]
+    end
+  end
 end
