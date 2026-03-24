@@ -17,7 +17,6 @@ if Mix.env() == :test do
     alias SkillKit.Agent.Definition
     alias SkillKit.Agent.Server
     alias SkillKit.Response.Error
-    alias SkillKit.Response.Respondable
 
     defmacro __using__(_opts) do
       quote do
@@ -72,7 +71,7 @@ if Mix.env() == :test do
     @spec expect_response(struct()) :: :ok
     def expect_response(response) do
       Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn _messages, _opts ->
-        Respondable.to_stream(response)
+        Anthropic.Test.to_stream(response)
       end)
 
       :ok
@@ -87,7 +86,7 @@ if Mix.env() == :test do
     def assert_response(response, assertion_fn) do
       Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn messages, opts ->
         assertion_fn.(messages, opts)
-        Respondable.to_stream(response)
+        Anthropic.Test.to_stream(response)
       end)
 
       :ok
@@ -108,7 +107,7 @@ if Mix.env() == :test do
       Mox.expect(SkillKit.LLM.Mock, :stream, count, fn _messages, _opts ->
         index = :counters.get(counter, 1) + 1
         :counters.put(counter, 1, index)
-        Respondable.to_stream(Map.fetch!(responses_map, index))
+        Anthropic.Test.to_stream(Map.fetch!(responses_map, index))
       end)
 
       :ok
