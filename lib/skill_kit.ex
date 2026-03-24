@@ -116,6 +116,39 @@ defmodule SkillKit do
     end
   end
 
+  @doc """
+  Sends a message and blocks until the agent responds.
+
+  Returns `{:ok, text}` on success, `{:error, reason}` on LLM error,
+  or `{:error, :timeout}` if the turn doesn't complete within `timeout` ms.
+
+  Must be called from the process registered as `:caller` in `start_agent/2`.
+  Intermediate events (`:delta`, `:tool_call`, `:tool_result`) remain in
+  the caller's mailbox and are not consumed.
+
+  ## Examples
+
+      {:ok, "Hello!"} = SkillKit.send_message_sync(agent, "Hi")
+      {:error, :timeout} = SkillKit.send_message_sync(agent, "Hi", 100)
+  """
+  @spec send_message_sync(agent(), String.t(), timeout()) ::
+          {:ok, String.t() | nil} | {:error, term()}
+  def send_message_sync(%AgentRef{} = agent, content, timeout \\ 5000) do
+    case send_message(agent, content) do
+      :ok -> await_response(agent.name, timeout)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp await_response(agent_name, timeout) do
+    receive do
+      {:skill_kit, ^agent_name, {:response, text}} -> {:ok, text}
+      {:skill_kit, ^agent_name, {:error, reason}} -> {:error, reason}
+    after
+      timeout -> {:error, :timeout}
+    end
+  end
+
   @doc false
   @spec start_subagent(Agent.Definition.t(), keyword(), keyword()) ::
           {:ok, agent()} | {:error, term()}
