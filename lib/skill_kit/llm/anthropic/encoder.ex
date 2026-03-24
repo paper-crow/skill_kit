@@ -11,7 +11,7 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
   Consecutive ToolResult messages are grouped into a single user message
   with tool_result content blocks, as required by the Anthropic API.
   """
-  @spec encode_messages([Types.message()]) :: [map()]
+  @spec encode_messages([SkillKit.LLM.message()]) :: [map()]
   def encode_messages(messages) do
     messages
     |> chunk_tool_results()
