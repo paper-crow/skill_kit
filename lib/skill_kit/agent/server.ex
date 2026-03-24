@@ -11,6 +11,7 @@ defmodule SkillKit.Agent.Server do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.ToolBuilder
+  alias SkillKit.Execution
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
 
@@ -29,7 +30,8 @@ defmodule SkillKit.Agent.Server do
     halted: false,
     messages: [],
     subagents: %{},
-    pending_requests: %{}
+    pending_requests: %{},
+    activated_skills: []
   ]
 
   @type t :: %__MODULE__{
@@ -47,7 +49,8 @@ defmodule SkillKit.Agent.Server do
           halted: boolean(),
           messages: list(),
           subagents: map(),
-          pending_requests: map()
+          pending_requests: map(),
+          activated_skills: [SkillKit.Skill.t()]
         }
 
   def start_link({agent_name, definition, depth, parent_name, scope, registry}) do
@@ -202,7 +205,11 @@ defmodule SkillKit.Agent.Server do
   defp run_agent_loop(state, new_messages) do
     state = %{state | messages: state.messages ++ new_messages}
 
-    tools = ToolBuilder.build_tools(state.kits, subagent: state.depth > 0)
+    tools =
+      ToolBuilder.build_tools(state.kits,
+        subagent: state.depth > 0,
+        activated_skills: state.activated_skills
+      )
 
     case stream(state, tools) do
       {:ok, stream} ->
@@ -244,7 +251,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%{tool_calls: tool_calls} = _response, state) do
-    classifier = ToolBuilder.classifier(state.kits, Map.get(state, :activated_skills, []))
+    classifier = ToolBuilder.classifier(state.kits, state.activated_skills)
     {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
     Enum.each(results, fn result ->
@@ -272,7 +279,8 @@ defmodule SkillKit.Agent.Server do
       {result, acc} =
         case classifier.(tc) do
           :executor -> {execute_command(tc, acc), acc}
-          :activate_skill -> {activate_skill(tc, acc), acc}
+          {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
+          :activate_skill -> activate_skill(tc, acc)
           :subagent -> spawn_subagent(tc, acc)
           :builtin -> handle_builtin(tc, acc)
         end
@@ -330,21 +338,55 @@ defmodule SkillKit.Agent.Server do
 
     case SkillKit.Catalog.activate(skill_registry, skill_name, %{}, opts) do
       {:ok, rendered_body} ->
-        %Message.ToolResult{tool_call_id: id, content: rendered_body}
+        skill = find_skill_by_name(skill_name, state)
+        already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))
+
+        state =
+          if skill && skill.executor != SkillKit.Executor.Shell && !already_activated do
+            %{state | activated_skills: [skill | state.activated_skills]}
+          else
+            state
+          end
+
+        {%Message.ToolResult{tool_call_id: id, content: rendered_body}, state}
 
       {:error, :unauthorized} ->
-        %Message.ToolResult{
-          tool_call_id: id,
-          content: "Unauthorized: insufficient scope for skill #{skill_name}",
-          is_error: true
-        }
+        {%Message.ToolResult{
+           tool_call_id: id,
+           content: "Unauthorized: insufficient scope for skill #{skill_name}",
+           is_error: true
+         }, state}
 
       {:error, reason} ->
-        %Message.ToolResult{
-          tool_call_id: id,
-          content: "Error: #{inspect(reason)}",
-          is_error: true
-        }
+        {%Message.ToolResult{
+           tool_call_id: id,
+           content: "Error: #{inspect(reason)}",
+           is_error: true
+         }, state}
+    end
+  end
+
+  defp find_skill_by_name(name, state) do
+    state.kits
+    |> Enum.flat_map(& &1.skills)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  defp execute_module_skill(%Message.ToolCall{id: id, input: input}, skill, state) do
+    source_config = Map.get(skill.metadata, "source_config", [])
+
+    context =
+      %{cwd: state.definition.workspace, scope: state.scope, agent_name: state.agent_name}
+      |> Map.merge(Map.new(source_config))
+
+    execution = %Execution{skill: skill, input: input, context: context}
+
+    case skill.executor.execute(execution) do
+      {:ok, result} ->
+        %Message.ToolResult{tool_call_id: id, content: to_string(result)}
+
+      {:error, reason} ->
+        %Message.ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
     end
   end
 
