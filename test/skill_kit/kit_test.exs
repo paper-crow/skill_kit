@@ -15,8 +15,8 @@ defmodule SkillKit.KitTest do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
-  alias SkillKit.Pipeline
   alias SkillKit.KitTest.TestKit
+  alias SkillKit.Pipeline
   alias SkillKit.Skill
 
   describe "use SkillKit.Kit" do
