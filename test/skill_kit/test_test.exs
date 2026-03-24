@@ -5,6 +5,7 @@ defmodule SkillKit.TestTest do
 
   alias SkillKit.LLM.Anthropic.Decoder
   alias SkillKit.LLM.Message
+  alias SkillKit.LLM.Mock
   alias SkillKit.Response.Error
   alias SkillKit.Response.Text
   alias SkillKit.Response.ToolCall
@@ -15,7 +16,7 @@ defmodule SkillKit.TestTest do
     test "sets up Mox expectation for Text" do
       SkillKit.Test.expect_response(%Text{content: "Hello"})
 
-      {:ok, stream} = SkillKit.LLM.Mock.stream([], [])
+      {:ok, stream} = Mock.stream([], [])
       events = Enum.to_list(stream)
       result = Decoder.decode_events(events)
 
@@ -25,7 +26,7 @@ defmodule SkillKit.TestTest do
     test "sets up Mox expectation for ToolCall" do
       SkillKit.Test.expect_response(%ToolCall{name: "bash", input: %{"cmd" => "ls"}})
 
-      {:ok, stream} = SkillKit.LLM.Mock.stream([], [])
+      {:ok, stream} = Mock.stream([], [])
       events = Enum.to_list(stream)
       result = Decoder.decode_events(events)
 
@@ -36,7 +37,7 @@ defmodule SkillKit.TestTest do
     test "sets up Mox expectation for Error" do
       SkillKit.Test.expect_response(%Error{status: 429, message: "rate limited"})
 
-      assert {:error, {429, "rate limited"}} = SkillKit.LLM.Mock.stream([], [])
+      assert {:error, {429, "rate limited"}} = Mock.stream([], [])
     end
   end
 
@@ -50,7 +51,7 @@ defmodule SkillKit.TestTest do
         send(test_pid, {:asserted, messages, opts})
       end)
 
-      {:ok, _stream} = SkillKit.LLM.Mock.stream([%{role: "user"}], model: "test")
+      {:ok, _stream} = Mock.stream([%{role: "user"}], model: "test")
 
       assert_receive {:asserted, [%{role: "user"}], [model: "test"]}
     end
@@ -58,7 +59,7 @@ defmodule SkillKit.TestTest do
     test "returns correct response after assertion" do
       SkillKit.Test.assert_response(%Text{content: "Hello"}, fn _messages, _opts -> :ok end)
 
-      {:ok, stream} = SkillKit.LLM.Mock.stream([], [])
+      {:ok, stream} = Mock.stream([], [])
       result = Decoder.decode_events(Enum.to_list(stream))
 
       assert %Message.Assistant{content: "Hello"} = result
@@ -75,13 +76,13 @@ defmodule SkillKit.TestTest do
       ])
 
       # First call returns tool call
-      {:ok, stream1} = SkillKit.LLM.Mock.stream([], [])
+      {:ok, stream1} = Mock.stream([], [])
       result1 = Decoder.decode_events(Enum.to_list(stream1))
       assert %Message.Assistant{tool_calls: [tc]} = result1
       assert tc.name == "echo"
 
       # Second call returns text
-      {:ok, stream2} = SkillKit.LLM.Mock.stream([], [])
+      {:ok, stream2} = Mock.stream([], [])
       result2 = Decoder.decode_events(Enum.to_list(stream2))
       assert %Message.Assistant{content: "Done!"} = result2
     end
@@ -93,7 +94,7 @@ defmodule SkillKit.TestTest do
     test "sets up Mox expectation returning error tuple" do
       SkillKit.Test.expect_error(500, "internal error")
 
-      assert {:error, {500, "internal error"}} = SkillKit.LLM.Mock.stream([], [])
+      assert {:error, {500, "internal error"}} = Mock.stream([], [])
     end
   end
 
@@ -101,7 +102,7 @@ defmodule SkillKit.TestTest do
     setup :verify_on_exit!
 
     test "starts a registered Server with unique registry" do
-      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hi"})
+      SkillKit.Test.expect_response(%Text{content: "Hi"})
 
       {:ok, pid, context} = SkillKit.Test.start_server(caller: self())
 
@@ -109,7 +110,7 @@ defmodule SkillKit.TestTest do
       assert is_atom(context.registry)
       assert is_binary(context.agent_name)
 
-      send(pid, {:mailbox_flush, [%SkillKit.LLM.Message.User{content: "hello"}]})
+      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
 
       assert_receive {:skill_kit, _, {:response, "Hi"}}, 1000
     end
