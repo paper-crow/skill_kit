@@ -1,4 +1,4 @@
-defmodule SkillKit.Scope do
+defmodule SkillKit.Scope.Validation do
   @moduledoc """
   Pure-function scope validation and wildcard matching for SkillKit.
 
@@ -28,22 +28,22 @@ defmodule SkillKit.Scope do
 
   ## Examples
 
-      iex> SkillKit.Scope.valid?("admin:read")
+      iex> SkillKit.Scope.Validation.valid?("admin:read")
       true
 
-      iex> SkillKit.Scope.valid?("admin:*")
+      iex> SkillKit.Scope.Validation.valid?("admin:*")
       true
 
-      iex> SkillKit.Scope.valid?("*")
+      iex> SkillKit.Scope.Validation.valid?("*")
       false
 
-      iex> SkillKit.Scope.covers?("admin:*", "admin:read")
+      iex> SkillKit.Scope.Validation.covers?("admin:*", "admin:read")
       true
 
-      iex> SkillKit.Scope.covers?("ski:*", "skills:read")
+      iex> SkillKit.Scope.Validation.covers?("ski:*", "skills:read")
       false
 
-      iex> SkillKit.Scope.any_covers?(["admin:*", "other:read"], "admin:write")
+      iex> SkillKit.Scope.Validation.any_covers?(["admin:*", "other:read"], "admin:write")
       true
   """
 

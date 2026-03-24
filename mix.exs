@@ -15,7 +15,8 @@ defmodule SkillKit.MixProject do
       source_url: "https://github.com/paper-crow/skill_kit",
       homepage_url: "https://github.com/paper-crow/skill_kit",
       docs: docs(),
-      aliases: aliases()
+      aliases: aliases(),
+      consolidate_protocols: Mix.env() != :test
     ]
   end
 

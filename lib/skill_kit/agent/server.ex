@@ -18,6 +18,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Pipeline
+  alias SkillKit.Scope
   alias SkillKit.Telemetry
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
@@ -317,7 +318,7 @@ defmodule SkillKit.Agent.Server do
     skill_name = Map.get(input, "name", "")
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    opts = if state.scope, do: [scopes: state.scope], else: []
+    opts = if state.scope, do: [scopes: Scope.permissions(state.scope)], else: []
 
     case SkillKit.Catalog.activate(skill_registry, skill_name, %{}, opts) do
       {:ok, rendered_body} ->

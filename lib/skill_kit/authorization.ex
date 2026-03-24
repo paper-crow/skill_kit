@@ -11,7 +11,7 @@ defmodule SkillKit.Authorization do
   Authorization uses ALL-of multi-scope semantics: a caller must hold **every**
   required scope in order to be authorized. Holding any subset is insufficient.
 
-  Scope coverage uses `SkillKit.Scope.any_covers?/2` (OR primitive): a single
+  Scope coverage uses `SkillKit.Scope.Validation.any_covers?/2` (OR primitive): a single
   granted wildcard scope (e.g. `"admin:*"`) can satisfy a required exact scope
   (e.g. `"admin:read"`). ALL-of wraps this OR primitive across each required scope.
 
@@ -38,7 +38,7 @@ defmodule SkillKit.Authorization do
       false = SkillKit.Authorization.authorized?(skill, [])
   """
 
-  alias SkillKit.Scope
+  alias SkillKit.Scope.Validation
   alias SkillKit.Skill
 
   # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ defmodule SkillKit.Authorization do
 
   def authorize(%Skill{required_scope: required} = skill, granted_scopes)
       when is_list(granted_scopes) do
-    if Enum.all?(required, &Scope.any_covers?(granted_scopes, &1)) do
+    if Enum.all?(required, &Validation.any_covers?(granted_scopes, &1)) do
       {:ok, skill}
     else
       {:error, :unauthorized}
