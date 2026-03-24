@@ -123,7 +123,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Handler.Behaviour,
           SkillKit.Handler.Shell,
           SkillKit.Handler.ToolDefinition,
-          SkillKit.Execution,
+          SkillKit.Pipeline,
           SkillKit.Hook
         ],
         Authorization: [

@@ -8,7 +8,7 @@ human-in-the-loop approval flows.
 ## Overview
 
 When `SkillKit.Handler.run/3,4` is called, it collects all hooks from every
-registered skill, builds an `Execution` pipeline with hooks filtered to those
+registered skill, builds a `Pipeline` with hooks filtered to those
 matching the handler (ordered as pre-steps, the execute step, and post-steps),
 and walks it sequentially, recording each step's result by name.
 
@@ -42,12 +42,12 @@ A pre-hook may return:
 
 ### Construction
 
-`Execution.new/4` accepts a skill (or `nil`), an input map, a context map, and
+`Pipeline.new/4` accepts a skill (or `nil`), an input map, a context map, and
 options. The `all_hooks:` option supplies every hook to consider — `new/4`
 filters them to those whose `:matcher` regex matches the handler's module name.
 
 ```elixir
-execution = Execution.new(skill, input, context, all_hooks: hooks)
+execution = Pipeline.new(skill, input, context, all_hooks: hooks)
 ```
 
 ### Step Names
@@ -73,7 +73,7 @@ Results accumulate in `execution.results`, a map keyed by step name.
 ### Running
 
 ```elixir
-case Execution.run(execution) do
+case Pipeline.run(execution) do
   {:ok, exec}      -> exec.results["execute"]   # success
   {:error, exec}   -> exec.results             # inspect failures
   {:pending, exec} -> exec                      # hold for resumption
@@ -91,10 +91,10 @@ Every handler and hook ultimately returns one of three tagged tuples:
 
 ## Suspension and Resumption
 
-When a step returns `{:pending, state}`, `Execution.run/1` returns
+When a step returns `{:pending, state}`, `Pipeline.run/1` returns
 `{:pending, execution}` immediately. The pipeline does not advance further.
 
-To continue, call `Handler.resume/2` (or `Execution.resume/2` directly):
+To continue, call `Handler.resume/2` (or `Pipeline.resume/2` directly):
 
 ```elixir
 {:pending, exec} = Handler.run(registry, skill, input, context)
@@ -115,10 +115,10 @@ for execute steps, or re-invoking the hook function for hook steps. The
 Custom handlers implement `SkillKit.Handler.Behaviour`:
 
 ```elixir
-@callback execute(execution :: SkillKit.Execution.t()) ::
+@callback execute(execution :: SkillKit.Pipeline.t()) ::
             {:ok, any()} | {:error, any()} | {:pending, any()}
 
-@callback resume(execution :: SkillKit.Execution.t(), state :: any(),
+@callback resume(execution :: SkillKit.Pipeline.t(), state :: any(),
                  decision :: :approved | {:denied, any()}) ::
             {:ok, any()} | {:error, any()} | {:pending, any()}
 
@@ -135,10 +135,10 @@ struct, the `state` saved at suspension, and the caller's decision.
 defmodule MyApp.Handler.Sandbox do
   @behaviour SkillKit.Handler.Behaviour
 
-  alias SkillKit.Execution
+  alias SkillKit.Pipeline
 
   @impl true
-  def execute(%Execution{input: %{"command" => command}} = exec) do
+  def execute(%Pipeline{input: %{"command" => command}} = exec) do
     case MyApp.Sandbox.check_policy(command) do
       :allow   -> {:ok, MyApp.Sandbox.run(command)}
       :needs_approval -> {:pending, %{command: command}}
@@ -147,7 +147,7 @@ defmodule MyApp.Handler.Sandbox do
   end
 
   @impl true
-  def resume(%Execution{} = exec, %{command: command}, :approved) do
+  def resume(%Pipeline{} = exec, %{command: command}, :approved) do
     {:ok, MyApp.Sandbox.run(command)}
   end
 
@@ -180,7 +180,7 @@ config :skill_kit, handler: MyApp.Handler.Sandbox
 
 Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3` calls
 `SkillKit.Registry.list_skills/2` and flat-maps each skill's `:hooks` list into a
-single collection before passing it to `SkillKit.Execution.new/4`.
+single collection before passing it to `SkillKit.Pipeline.new/4`.
 
 The matcher regex is tested against only the last segment of the handler module
 name. A hook with `~r/Shell/` matches `SkillKit.Handler.Shell` but not

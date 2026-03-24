@@ -6,15 +6,15 @@ defmodule SkillKit.Handler.Shell do
   Returns stdout on success, or `{output, exit_code}` on failure.
 
   `resume/3` delegates to `execute/1` — shell commands have no approval
-  concept, so resuming just re-executes the command from the Execution struct.
+  concept, so resuming just re-executes the command from the Pipeline struct.
   """
 
   @behaviour SkillKit.Handler.Behaviour
 
-  alias SkillKit.Execution
+  alias SkillKit.Pipeline
 
   @impl true
-  def execute(%Execution{input: %{"command" => command}, context: context}) do
+  def execute(%Pipeline{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =
@@ -76,7 +76,7 @@ defmodule SkillKit.Handler.Shell do
   end
 
   @impl true
-  def resume(%Execution{} = exec, _state, :approved) do
+  def resume(%Pipeline{} = exec, _state, :approved) do
     execute(exec)
   end
 

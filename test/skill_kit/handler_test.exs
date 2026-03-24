@@ -19,7 +19,7 @@ defmodule SkillKit.HandlerTest do
   end
 
   describe "run/4" do
-    test "executes a command and returns {:ok, %Execution{}}", %{registry: registry} do
+    test "executes a command and returns {:ok, %Pipeline{}}", %{registry: registry} do
       assert {:ok, result} = Handler.run(registry, skill(), "echo hello", %{})
       assert result.status == :complete
       assert result.results["execute"] == {:ok, "hello\n"}
@@ -74,7 +74,7 @@ defmodule SkillKit.HandlerTest do
   end
 
   describe "resume/2" do
-    test "delegates to Execution.resume/2", %{registry: registry} do
+    test "delegates to Pipeline.resume/2", %{registry: registry} do
       pending_skill = %Skill{
         name: "test:pending",
         namespace: "test",
@@ -92,10 +92,10 @@ defmodule SkillKit.HandlerTest do
   defmodule PendingHandler do
     @behaviour SkillKit.Handler.Behaviour
     @impl true
-    def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
+    def execute(%SkillKit.Pipeline{}), do: {:pending, %{awaiting: :approval}}
     @impl true
-    def resume(%SkillKit.Execution{}, _state, :approved), do: {:ok, "approved"}
-    def resume(%SkillKit.Execution{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
+    def resume(%SkillKit.Pipeline{}, _state, :approved), do: {:ok, "approved"}
+    def resume(%SkillKit.Pipeline{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
     @impl true
     def tool_definition do

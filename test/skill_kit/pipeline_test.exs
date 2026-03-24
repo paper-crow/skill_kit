@@ -1,7 +1,9 @@
-defmodule SkillKit.ExecutionTest do
+defmodule SkillKit.PipelineTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Execution, Hook, Skill}
+  alias SkillKit.Hook
+  alias SkillKit.Pipeline
+  alias SkillKit.Skill
 
   defp skill(opts \\ []) do
     %Skill{
@@ -15,9 +17,9 @@ defmodule SkillKit.ExecutionTest do
   end
 
   describe "new/4" do
-    test "builds an execution with execute step when no hooks" do
+    test "builds a pipeline with execute step when no hooks" do
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo hello"}, %{})
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{})
 
       assert exec.status == :pending
       assert length(exec.steps) == 1
@@ -33,7 +35,7 @@ defmodule SkillKit.ExecutionTest do
       s = skill()
 
       exec =
-        Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
+        Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
 
       # Should have pre + execute + post = 3 steps (non_matching filtered out)
       assert length(exec.steps) == 3
@@ -43,9 +45,9 @@ defmodule SkillKit.ExecutionTest do
   describe "run/1" do
     test "executes simple command through Shell and completes" do
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo hello"}, %{})
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{})
 
-      assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
+      assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["execute"] == {:ok, "hello\n"}
     end
 
@@ -57,9 +59,9 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [deny_hook])
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [deny_hook])
 
-      assert {:error, %Execution{status: :failed} = result} = Execution.run(exec)
+      assert {:error, %Pipeline{status: :failed} = result} = Pipeline.run(exec)
       assert result.results["pre:0"] == {:deny, "blocked"}
     end
 
@@ -71,9 +73,9 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo original"}, %{}, all_hooks: [modify_hook])
+      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, all_hooks: [modify_hook])
 
-      assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
+      assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["execute"] == {:ok, "modified\n"}
     end
 
@@ -85,9 +87,9 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
+      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
 
-      assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
+      assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["post:0"] == {:ok, "sanitized"}
     end
 
@@ -99,16 +101,16 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
+      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
 
-      assert {:error, %Execution{status: :failed}} = Execution.run(exec)
+      assert {:error, %Pipeline{status: :failed}} = Pipeline.run(exec)
     end
 
     test "handler {:pending, state} suspends execution" do
-      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
-      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
+      s = skill(handler: SkillKit.PipelineTest.PendingHandler)
+      exec = Pipeline.new(s, %{"command" => "needs approval"}, %{})
 
-      assert {:pending, %Execution{status: :suspended} = result} = Execution.run(exec)
+      assert {:pending, %Pipeline{status: :suspended} = result} = Pipeline.run(exec)
       assert result.suspended_at == "execute"
     end
 
@@ -120,9 +122,9 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pending_hook])
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pending_hook])
 
-      assert {:pending, %Execution{status: :suspended} = result} = Execution.run(exec)
+      assert {:pending, %Pipeline{status: :suspended} = result} = Pipeline.run(exec)
       assert result.suspended_at == "pre:0"
     end
 
@@ -130,13 +132,13 @@ defmodule SkillKit.ExecutionTest do
       mfa_hook = %Hook{
         phase: :pre,
         matcher: ~r/Shell/,
-        handler: {SkillKit.ExecutionTest.MFAHandler, :allow_all, []}
+        handler: {SkillKit.PipelineTest.MFAHandler, :allow_all, []}
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo mfa"}, %{}, all_hooks: [mfa_hook])
+      exec = Pipeline.new(s, %{"command" => "echo mfa"}, %{}, all_hooks: [mfa_hook])
 
-      assert {:ok, %Execution{status: :complete}} = Execution.run(exec)
+      assert {:ok, %Pipeline{status: :complete}} = Pipeline.run(exec)
     end
 
     test "multiple pre-hooks chain — each gets potentially modified input" do
@@ -156,34 +158,34 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, %{"command" => "echo original"}, %{}, all_hooks: [hook1, hook2])
+      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, all_hooks: [hook1, hook2])
 
-      assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
+      assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["execute"] == {:ok, "step1\n"}
     end
   end
 
   describe "resume/2" do
     test "resumes suspended handler and completes" do
-      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
-      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
+      s = skill(handler: SkillKit.PipelineTest.PendingHandler)
+      exec = Pipeline.new(s, %{"command" => "needs approval"}, %{})
 
-      {:pending, suspended} = Execution.run(exec)
+      {:pending, suspended} = Pipeline.run(exec)
 
-      assert {:ok, %Execution{status: :complete} = result} =
-               Execution.resume(suspended, :approved)
+      assert {:ok, %Pipeline{status: :complete} = result} =
+               Pipeline.resume(suspended, :approved)
 
       assert result.results["execute"] == {:ok, "approved result"}
     end
 
     test "resumes denied handler and fails" do
-      s = skill(handler: SkillKit.ExecutionTest.PendingHandler)
-      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
+      s = skill(handler: SkillKit.PipelineTest.PendingHandler)
+      exec = Pipeline.new(s, %{"command" => "needs approval"}, %{})
 
-      {:pending, suspended} = Execution.run(exec)
+      {:pending, suspended} = Pipeline.run(exec)
 
-      assert {:error, %Execution{status: :failed}} =
-               Execution.resume(suspended, {:denied, "nope"})
+      assert {:error, %Pipeline{status: :failed}} =
+               Pipeline.resume(suspended, {:denied, "nope"})
     end
   end
 
@@ -193,11 +195,11 @@ defmodule SkillKit.ExecutionTest do
     @behaviour SkillKit.Handler.Behaviour
 
     @impl true
-    def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
+    def execute(%SkillKit.Pipeline{}), do: {:pending, %{awaiting: :approval}}
 
     @impl true
-    def resume(%SkillKit.Execution{}, _state, :approved), do: {:ok, "approved result"}
-    def resume(%SkillKit.Execution{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
+    def resume(%SkillKit.Pipeline{}, _state, :approved), do: {:ok, "approved result"}
+    def resume(%SkillKit.Pipeline{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
     @impl true
     def tool_definition do

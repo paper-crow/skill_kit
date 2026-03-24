@@ -1,8 +1,8 @@
-defmodule SkillKit.Execution do
+defmodule SkillKit.Pipeline do
   @moduledoc """
   A named, resumable pipeline for executing a skill input through lifecycle hooks.
 
-  Inspired by `Ecto.Multi`, an `Execution` separates construction from execution.
+  Inspired by `Ecto.Multi`, a `Pipeline` separates construction from execution.
   Each step in the pipeline is a named entry — pre-hooks, the execute step, and
   post-hooks. Steps are walked sequentially; results are recorded in a map keyed
   by step name.
@@ -57,7 +57,7 @@ defmodule SkillKit.Execution do
   ]
 
   @doc """
-  Builds an `Execution` pipeline for `skill`, `input`, and `context`.
+  Builds a `Pipeline` for `skill`, `input`, and `context`.
 
   Hooks are passed via the `all_hooks:` option. Only hooks whose `:matcher`
   regex matches the last segment of the handler module name are included.
@@ -110,9 +110,9 @@ defmodule SkillKit.Execution do
   Walks all pipeline steps sequentially, recording results by step name.
 
   Returns:
-  - `{:ok, execution}` — all steps completed successfully
-  - `{:error, execution}` — a step failed or was denied
-  - `{:pending, execution}` — a step suspended, waiting for a decision
+  - `{:ok, pipeline}` — all steps completed successfully
+  - `{:error, pipeline}` — a step failed or was denied
+  - `{:pending, pipeline}` — a step suspended, waiting for a decision
   """
   @spec run(t()) :: {:ok, t()} | {:error, t()} | {:pending, t()}
   def run(%__MODULE__{} = exec) do
@@ -121,7 +121,7 @@ defmodule SkillKit.Execution do
   end
 
   @doc """
-  Resumes a suspended `Execution` from the step it was suspended at.
+  Resumes a suspended `Pipeline` from the step it was suspended at.
 
   `decision` is passed directly to the suspended handler's `resume/3` callback,
   or used to re-invoke a suspended hook.

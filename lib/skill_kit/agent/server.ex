@@ -17,7 +17,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
-  alias SkillKit.Execution
+  alias SkillKit.Pipeline
   alias SkillKit.Telemetry
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
@@ -362,7 +362,7 @@ defmodule SkillKit.Agent.Server do
       %{cwd: state.definition.workspace, scope: state.scope, agent_name: state.agent_name}
       |> Map.merge(Map.new(source_config))
 
-    execution = %Execution{skill: skill, input: input, context: context}
+    execution = %Pipeline{skill: skill, input: input, context: context}
 
     case skill.handler.execute(execution) do
       {:ok, result} ->

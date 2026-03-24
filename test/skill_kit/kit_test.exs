@@ -2,10 +2,10 @@ defmodule SkillKit.KitTest.TestKit do
   use SkillKit.Kit,
     skills_dir: Path.join(__DIR__, "../support/fixtures/test_kit/skills")
 
-  alias SkillKit.Execution
+  alias SkillKit.Pipeline
 
   @impl SkillKit.Handler.Behaviour
-  def execute(%Execution{skill: %{name: "test_kit:greet"}, input: input}) do
+  def execute(%Pipeline{skill: %{name: "test_kit:greet"}, input: input}) do
     {:ok, "Hello, #{input["name"]}!"}
   end
 end
@@ -14,8 +14,8 @@ defmodule SkillKit.KitTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Execution
   alias SkillKit.Kit
+  alias SkillKit.Pipeline
   alias SkillKit.KitTest.TestKit
   alias SkillKit.Skill
 
@@ -42,7 +42,7 @@ defmodule SkillKit.KitTest do
       {:ok, [kit]} = TestKit.load_kits([])
       [skill] = kit.skills
 
-      execution = %Execution{
+      execution = %Pipeline{
         skill: skill,
         input: %{"name" => "World"},
         context: %{}

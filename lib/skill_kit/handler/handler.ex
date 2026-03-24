@@ -1,6 +1,6 @@
 defmodule SkillKit.Handler do
   @moduledoc """
-  Builds and runs `%Execution{}` pipelines.
+  Builds and runs `%Pipeline{}` pipelines.
 
   Public entry point for executing skill input through the pipeline.
   Accepts input as a map (e.g., `%{"command" => "echo hi"}`) or a
@@ -8,10 +8,10 @@ defmodule SkillKit.Handler do
   all registered skills, builds the execution pipeline, and runs it.
 
   For callers that need pipeline inspection or suspension support,
-  use `SkillKit.Execution` directly.
+  use `SkillKit.Pipeline` directly.
   """
 
-  alias SkillKit.Execution
+  alias SkillKit.Pipeline
   alias SkillKit.Registry
 
   @doc """
@@ -24,8 +24,8 @@ defmodule SkillKit.Handler do
     handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
     all_hooks = collect_hooks(registry)
     input = wrap_input(input)
-    execution = Execution.new(nil, input, context, all_hooks: all_hooks, handler: handler)
-    Execution.run(execution)
+    execution = Pipeline.new(nil, input, context, all_hooks: all_hooks, handler: handler)
+    Pipeline.run(execution)
   end
 
   @doc """
@@ -37,15 +37,15 @@ defmodule SkillKit.Handler do
   def run(registry, skill, input, context) do
     all_hooks = collect_hooks(registry)
     input = wrap_input(input)
-    execution = Execution.new(skill, input, context, all_hooks: all_hooks)
-    Execution.run(execution)
+    execution = Pipeline.new(skill, input, context, all_hooks: all_hooks)
+    Pipeline.run(execution)
   end
 
   @doc """
   Resumes a suspended execution with an approval decision.
   """
   def resume(execution, decision) do
-    Execution.resume(execution, decision)
+    Pipeline.resume(execution, decision)
   end
 
   defp wrap_input(input) when is_map(input), do: input

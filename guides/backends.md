@@ -80,7 +80,7 @@ defmodule MyApp.FilesKit do
   use SkillKit.Kit
 
   @impl SkillKit.Handler.Behaviour
-  def execute(%SkillKit.Execution{} = execution) do
+  def execute(%SkillKit.Pipeline{} = execution) do
     # handle skill execution
   end
 end
