@@ -1,0 +1,1 @@
+{application,persona_chat,[{modules,['Elixir.PersonaChat.Scope','Elixir.SkillKit.Scope.PersonaChat.Scope']},{optional_applications,[]},{applications,[kernel,stdlib,elixir,logger,skill_kit,jason]},{description,"persona_chat"},{registered,[]},{vsn,"0.1.0"}]}.
