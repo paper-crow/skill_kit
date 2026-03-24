@@ -7,9 +7,13 @@ defmodule SkillKit.Agent.ServerTest do
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
-  alias SkillKit.LLM.Message
+  alias SkillKit.Event.Delta
+  alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Response.Text
   alias SkillKit.Response.ToolCall
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.SystemMessage
+  alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
 
@@ -49,8 +53,8 @@ defmodule SkillKit.Agent.ServerTest do
       definition: definition
     } do
       assert_response(%Text{content: "Hi there!"}, fn messages, _opts ->
-        assert [%Message.User{content: "hello"}] =
-                 Enum.filter(messages, &match?(%Message.User{}, &1))
+        assert [%UserMessage{content: "hello"}] =
+                 Enum.filter(messages, &match?(%UserMessage{}, &1))
       end)
 
       {:ok, pid} =
@@ -58,14 +62,14 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
-      assert_receive {:skill_kit, _, {:response, _}}, 1000
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
+      assert_receive %AssistantMessage{}, 1000
 
       state = :sys.get_state(pid)
 
       assert length(state.messages) == 2
-      assert %Message.User{content: "hello"} = Enum.at(state.messages, 0)
-      assert %Message.Assistant{content: "Hi there!"} = Enum.at(state.messages, 1)
+      assert %UserMessage{content: "hello"} = Enum.at(state.messages, 0)
+      assert %AssistantMessage{content: "Hi there!"} = Enum.at(state.messages, 1)
     end
 
     test "executes local tool calls and loops", %{
@@ -83,8 +87,8 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
-      assert_receive {:skill_kit, _, {:response, _}}, 1000
+      send(pid, {:mailbox_flush, [%UserMessage{content: "do it"}]})
+      assert_receive %AssistantMessage{}, 1000
 
       state = :sys.get_state(pid)
 
@@ -105,14 +109,14 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
-      assert_receive {:skill_kit, _, {:error, _}}, 1000
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
+      assert_receive %EventError{}, 1000
 
       # Server should still be alive
       assert Process.alive?(pid)
       state = :sys.get_state(pid)
       # User message was appended but no assistant response
-      assert [%Message.User{content: "hello"}] = state.messages
+      assert [%UserMessage{content: "hello"}] = state.messages
     end
 
     test "passes system_prompt and model to LLM", %{
@@ -138,8 +142,8 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "2+2"}]})
-      assert_receive {:skill_kit, _, {:response, _}}, 1000
+      send(pid, {:mailbox_flush, [%UserMessage{content: "2+2"}]})
+      assert_receive %AssistantMessage{}, 1000
     end
   end
 
@@ -169,8 +173,8 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hi"}]})
-      assert_receive {:skill_kit, _, {:response, _}}, 1000
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hi"}]})
+      assert_receive %AssistantMessage{}, 1000
     end
   end
 
@@ -182,28 +186,9 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Hi"}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => " there"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
+          %Delta{text: "Hi"},
+          %Delta{text: " there"},
+          %SkillKit.Event.Done{stop_reason: :end_turn}
         ]
 
         {:ok, Stream.map(events, & &1)}
@@ -214,11 +199,11 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
 
-      assert_receive {:skill_kit, ^agent_name, {:delta, "Hi"}}, 1000
-      assert_receive {:skill_kit, ^agent_name, {:delta, " there"}}, 1000
-      assert_receive {:skill_kit, ^agent_name, {:response, "Hi there"}}, 1000
+      assert_receive %Delta{agent: ^agent_name, text: "Hi"}, 1000
+      assert_receive %Delta{agent: ^agent_name, text: " there"}, 1000
+      assert_receive %AssistantMessage{agent: ^agent_name, content: "Hi there"}, 1000
     end
 
     test "sends error event to caller on LLM failure", %{
@@ -233,9 +218,9 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
 
-      assert_receive {:skill_kit, ^agent_name, {:error, {500, "internal error"}}}, 1000
+      assert_receive %EventError{agent: ^agent_name, reason: {500, "internal error"}}, 1000
       assert Process.alive?(pid)
     end
 
@@ -254,10 +239,10 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "do it"}]})
 
-      assert_receive {:skill_kit, ^agent_name, {:delta, "Done!"}}, 1000
-      assert_receive {:skill_kit, ^agent_name, {:response, "Done!"}}, 1000
+      assert_receive %Delta{agent: ^agent_name, text: "Done!"}, 1000
+      assert_receive %AssistantMessage{agent: ^agent_name, content: "Done!"}, 1000
     end
   end
 
@@ -272,7 +257,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       :sys.replace_state(pid, fn state -> %{state | halted: true} end)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
 
       state = :sys.get_state(pid)
       assert state.messages == []
@@ -303,7 +288,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "report your findings"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "report your findings"}]})
 
       # Parent (us) should receive the result
       assert_receive {:subagent_result, ^pid, "All good"}, 2000
@@ -331,7 +316,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "report"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "report"}]})
 
       # Should not crash, should be halted
       assert Process.alive?(pid)
@@ -380,15 +365,15 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      system_msg = %Message.System{
+      system_msg = %SystemMessage{
         content: "[Background task ref_1 complete] Agent 'worker' returned: done"
       }
 
       send(pid, {:mailbox_flush, [system_msg]})
-      assert_receive {:skill_kit, _, {:response, _}}, 1000
+      assert_receive %AssistantMessage{}, 1000
 
       state = :sys.get_state(pid)
-      assert Enum.any?(state.messages, &match?(%Message.System{}, &1))
+      assert Enum.any?(state.messages, &match?(%SystemMessage{}, &1))
     end
   end
 
@@ -400,7 +385,7 @@ defmodule SkillKit.Agent.ServerTest do
     } do
       assert_response(%Text{content: "Fixing now."}, fn messages, _opts ->
         last = List.last(messages)
-        assert %Message.System{content: content} = last
+        assert %SystemMessage{content: content} = last
         assert content =~ "Subagent Complete"
         assert content =~ "review the code"
         assert content =~ "check lib/skill_kit.ex"
@@ -434,8 +419,8 @@ defmodule SkillKit.Agent.ServerTest do
 
       send(pid, {:subagent_result, fake_subagent_pid, "Found 2 issues"})
 
-      assert_receive {:skill_kit, ^agent_name, {:delta, "Fixing now."}}, 2000
-      assert_receive {:skill_kit, ^agent_name, {:response, "Fixing now."}}, 2000
+      assert_receive %Delta{agent: ^agent_name, text: "Fixing now."}, 2000
+      assert_receive %AssistantMessage{agent: ^agent_name, content: "Fixing now."}, 2000
     end
   end
 end

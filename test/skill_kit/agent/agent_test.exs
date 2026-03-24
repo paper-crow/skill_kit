@@ -5,7 +5,7 @@ defmodule SkillKit.Agent.AgentTest do
 
   alias SkillKit.Agent
   alias SkillKit.Agent.Definition
-  alias SkillKit.LLM.Message
+  alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
 
@@ -57,23 +57,8 @@ defmodule SkillKit.Agent.AgentTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "OK"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
+          %SkillKit.Event.Delta{text: "OK"},
+          %SkillKit.Event.Done{stop_reason: :end_turn}
         ]
 
         {:ok, Stream.map(events, & &1)}
@@ -95,14 +80,14 @@ defmodule SkillKit.Agent.AgentTest do
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
       Mox.allow(SkillKit.LLM.Mock, self(), server_pid)
 
-      GenServer.cast(mailbox_pid, {:message, %Message.User{content: "hello"}})
-      GenServer.cast(mailbox_pid, {:message, %Message.User{content: "world"}})
+      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hello"}})
+      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "world"}})
       send(mailbox_pid, :flush)
 
       Process.sleep(50)
       state = :sys.get_state(server_pid)
-      assert Enum.any?(state.messages, &match?(%Message.User{content: "hello"}, &1))
-      assert Enum.any?(state.messages, &match?(%Message.User{content: "world"}, &1))
+      assert Enum.any?(state.messages, &match?(%UserMessage{content: "hello"}, &1))
+      assert Enum.any?(state.messages, &match?(%UserMessage{content: "world"}, &1))
     end
 
     test "server state has correct depth and scope", %{

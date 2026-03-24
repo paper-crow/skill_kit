@@ -5,7 +5,10 @@ defmodule SkillKit.Agent.LoopTest do
 
   alias SkillKit.Agent
   alias SkillKit.Agent.Definition
-  alias SkillKit.LLM.Message
+  alias SkillKit.Event.Delta
+  alias SkillKit.Event.Done
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
 
@@ -27,35 +30,20 @@ defmodule SkillKit.Agent.LoopTest do
   end
 
   describe "full agent tree with loop" do
-    test "message flows through mailbox → server → LLM → response", %{
+    test "message flows through mailbox -> server -> LLM -> response", %{
       registry: registry,
       agent_name: agent_name,
       definition: definition
     } do
       expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         assert Enum.any?(messages, fn
-                 %Message.User{content: "What is 2+2?"} -> true
+                 %UserMessage{content: "What is 2+2?"} -> true
                  _ -> false
                end)
 
         events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "4"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
+          %Delta{text: "4"},
+          %Done{stop_reason: :end_turn}
         ]
 
         {:ok, Stream.map(events, & &1)}
@@ -77,15 +65,15 @@ defmodule SkillKit.Agent.LoopTest do
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
       Mox.allow(SkillKit.LLM.Mock, self(), server_pid)
 
-      GenServer.cast(mailbox_pid, {:message, %Message.User{content: "What is 2+2?"}})
+      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "What is 2+2?"}})
       send(mailbox_pid, :flush)
       Process.sleep(100)
 
       state = :sys.get_state(server_pid)
 
       assert length(state.messages) == 2
-      assert %Message.User{content: "What is 2+2?"} = Enum.at(state.messages, 0)
-      assert %Message.Assistant{content: "4"} = Enum.at(state.messages, 1)
+      assert %UserMessage{content: "What is 2+2?"} = Enum.at(state.messages, 0)
+      assert %AssistantMessage{content: "4"} = Enum.at(state.messages, 1)
     end
 
     test "telemetry events fire during loop", %{
@@ -95,23 +83,8 @@ defmodule SkillKit.Agent.LoopTest do
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "ok"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
+          %Delta{text: "ok"},
+          %Done{stop_reason: :end_turn}
         ]
 
         {:ok, Stream.map(events, & &1)}
@@ -149,7 +122,7 @@ defmodule SkillKit.Agent.LoopTest do
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
       Mox.allow(SkillKit.LLM.Mock, self(), server_pid)
 
-      GenServer.cast(mailbox_pid, {:message, %Message.User{content: "hi"}})
+      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hi"}})
       send(mailbox_pid, :flush)
 
       assert_receive {:telemetry, [:skill_kit, :agent, :turn, :start], _,

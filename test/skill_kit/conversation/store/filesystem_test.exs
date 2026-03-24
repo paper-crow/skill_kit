@@ -2,7 +2,8 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Conversation.Store.Filesystem
-  alias SkillKit.LLM.Message
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
 
   @test_path Path.join(
                System.tmp_dir!(),
@@ -18,8 +19,8 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
 
   test "save and load round-trips messages", %{config: config} do
     messages = [
-      %Message.User{content: "hello"},
-      %Message.Assistant{content: "hi there", tool_calls: []}
+      %UserMessage{content: "hello"},
+      %AssistantMessage{content: "hi there", tool_calls: []}
     ]
 
     assert :ok = Filesystem.save("conv-1", messages, config)
@@ -32,7 +33,7 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
   end
 
   test "delete removes conversation file", %{config: config} do
-    Filesystem.save("conv-2", [%Message.User{content: "test"}], config)
+    Filesystem.save("conv-2", [%UserMessage{content: "test"}], config)
     assert :ok = Filesystem.delete("conv-2", config)
     assert {:ok, []} = Filesystem.load("conv-2", config)
   end
@@ -42,7 +43,7 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
   end
 
   test "sanitizes conversation id for filesystem safety", %{config: config} do
-    messages = [%Message.User{content: "test"}]
+    messages = [%UserMessage{content: "test"}]
     assert :ok = Filesystem.save("../../evil", messages, config)
     # Should create a safe filename, not traverse directories
     refute File.exists?(Path.join([@test_path, "..", "..", "evil.bin"]))

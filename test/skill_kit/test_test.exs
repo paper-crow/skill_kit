@@ -3,12 +3,16 @@ defmodule SkillKit.TestTest do
 
   import Mox
 
-  alias SkillKit.LLM.Anthropic.Decoder
-  alias SkillKit.LLM.Message
+  alias SkillKit.Event.Delta
+  alias SkillKit.Event.Done
+  alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Event.ToolCallStart
   alias SkillKit.LLM.Mock
   alias SkillKit.Response.Error
   alias SkillKit.Response.Text
   alias SkillKit.Response.ToolCall
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
 
   describe "expect_response/1" do
     setup :verify_on_exit!
@@ -18,9 +22,8 @@ defmodule SkillKit.TestTest do
 
       {:ok, stream} = Mock.stream([], [])
       events = Enum.to_list(stream)
-      result = Decoder.decode_events(events)
 
-      assert %Message.Assistant{content: "Hello"} = result
+      assert [%Delta{text: "Hello"}, %Done{stop_reason: :end_turn}] = events
     end
 
     test "sets up Mox expectation for ToolCall" do
@@ -28,10 +31,9 @@ defmodule SkillKit.TestTest do
 
       {:ok, stream} = Mock.stream([], [])
       events = Enum.to_list(stream)
-      result = Decoder.decode_events(events)
 
-      assert %Message.Assistant{tool_calls: [tc]} = result
-      assert tc.name == "bash"
+      assert [%ToolCallStart{name: "bash"}, %ToolCallComplete{name: "bash"}, %Done{}] = events
+      assert %ToolCallComplete{input: %{"cmd" => "ls"}} = Enum.at(events, 1)
     end
 
     test "sets up Mox expectation for Error" do
@@ -60,9 +62,9 @@ defmodule SkillKit.TestTest do
       SkillKit.Test.assert_response(%Text{content: "Hello"}, fn _messages, _opts -> :ok end)
 
       {:ok, stream} = Mock.stream([], [])
-      result = Decoder.decode_events(Enum.to_list(stream))
+      events = Enum.to_list(stream)
 
-      assert %Message.Assistant{content: "Hello"} = result
+      assert [%Delta{text: "Hello"}, %Done{stop_reason: :end_turn}] = events
     end
   end
 
@@ -75,16 +77,15 @@ defmodule SkillKit.TestTest do
         %Text{content: "Done!"}
       ])
 
-      # First call returns tool call
+      # First call returns tool call events
       {:ok, stream1} = Mock.stream([], [])
-      result1 = Decoder.decode_events(Enum.to_list(stream1))
-      assert %Message.Assistant{tool_calls: [tc]} = result1
-      assert tc.name == "echo"
+      events1 = Enum.to_list(stream1)
+      assert [%ToolCallStart{}, %ToolCallComplete{name: "echo"}, %Done{}] = events1
 
-      # Second call returns text
+      # Second call returns text events
       {:ok, stream2} = Mock.stream([], [])
-      result2 = Decoder.decode_events(Enum.to_list(stream2))
-      assert %Message.Assistant{content: "Done!"} = result2
+      events2 = Enum.to_list(stream2)
+      assert [%Delta{text: "Done!"}, %Done{stop_reason: :end_turn}] = events2
     end
   end
 
@@ -110,9 +111,9 @@ defmodule SkillKit.TestTest do
       assert is_atom(context.registry)
       assert is_binary(context.agent_name)
 
-      send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
 
-      assert_receive {:skill_kit, _, {:response, "Hi"}}, 1000
+      assert_receive %AssistantMessage{content: "Hi"}, 1000
     end
 
     test "accepts custom options" do

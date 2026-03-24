@@ -18,7 +18,11 @@ defmodule SkillKit.LLM do
         api_key: System.get_env("ANTHROPIC_API_KEY")
   """
 
-  @type message :: SkillKit.LLM.Message.t()
+  @type message ::
+          SkillKit.Types.UserMessage.t()
+          | SkillKit.Types.AssistantMessage.t()
+          | SkillKit.Types.SystemMessage.t()
+          | SkillKit.Types.ToolResult.t()
 
   @callback stream(messages :: [message()], opts :: keyword()) ::
               {:ok, Enumerable.t()} | {:error, term()}

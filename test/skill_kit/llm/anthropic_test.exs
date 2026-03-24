@@ -2,7 +2,7 @@ defmodule SkillKit.LLM.AnthropicTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.LLM.Anthropic, as: Adapter
-  alias SkillKit.LLM.Message
+  alias SkillKit.Types.UserMessage
 
   describe "stream/2" do
     setup do
@@ -39,7 +39,7 @@ defmodule SkillKit.LLM.AnthropicTest do
         end)
       end)
 
-      messages = [%Message.User{content: "Hi"}]
+      messages = [%UserMessage{content: "Hi"}]
 
       assert {:ok, stream} =
                Adapter.stream(
