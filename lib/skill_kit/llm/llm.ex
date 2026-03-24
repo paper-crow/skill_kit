@@ -2,11 +2,67 @@ defmodule SkillKit.LLM do
   @moduledoc """
   Behaviour for LLM provider adapters and dispatch entry point.
 
-  Resolves providers from model URI strings:
+  ## Implementing a Provider
 
-  - `"anthropic://claude-sonnet-4-20250514?max_tokens=8096"` — full URI
-  - `"claude-sonnet-4-20250514"` — bare string, uses default provider
-  - `"claude-sonnet-4-20250514?max_tokens=4096"` — bare with params
+  A provider adapter implements this behaviour and returns a stream of
+  `SkillKit.Event.*` structs. The adapter is responsible for:
+
+  1. Calling the provider's API (e.g., `Anthropic.stream/3`)
+  2. Converting provider-specific events to SkillKit events via the
+     `SkillKit.Event.Streamable` protocol
+  3. Returning `{:ok, event_stream}` or `{:error, reason}`
+
+  ### Example adapter
+
+      defmodule SkillKit.LLM.MyProvider do
+        @behaviour SkillKit.LLM
+
+        alias SkillKit.Event.Streamable
+
+        @impl true
+        def stream(messages, opts) do
+          encoded = encode_messages(messages)
+
+          case MyProvider.stream(encoded, opts) do
+            {:ok, raw_stream} ->
+              {:ok, Stream.transform(raw_stream, %{}, &Streamable.to_events/2)}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+        end
+      end
+
+  The stream must yield these `SkillKit.Event` structs:
+
+    * `%Delta{text: text}` — text fragment from the LLM
+    * `%ToolCallStart{id: id, name: name}` — a tool call has begun
+    * `%ToolCallComplete{id: id, name: name, input: map}` — tool call fully parsed
+    * `%Usage{input_tokens: n, output_tokens: n}` — token counts
+    * `%Done{stop_reason: reason}` — turn complete (`:end_turn` or `:tool_use`)
+
+  See `SkillKit.Event.Streamable` for how to implement the protocol for
+  your provider's event types. See `SkillKit.LLM.Anthropic` for a
+  complete reference implementation.
+
+  ## Streamable Protocol
+
+  Each provider defines its own typed event structs (e.g., `Anthropic.Event.*`).
+  SkillKit defines `SkillKit.Event.Streamable` implementations for those types,
+  converting them to universal SkillKit events. The provider knows nothing about
+  SkillKit — the protocol implementations live in the SkillKit codebase.
+
+  The protocol function `to_events/2` takes a provider event and an accumulator,
+  returning `{[SkillKit.Event.*], updated_acc}`. The accumulator carries state
+  across events (e.g., partial JSON fragments for tool call inputs).
+
+  ## Model URI Resolution
+
+  Providers are resolved from model URI strings:
+
+    * `"anthropic://claude-sonnet-4-20250514?max_tokens=8096"` — full URI
+    * `"claude-sonnet-4-20250514"` — bare string, uses default provider
+    * `"claude-sonnet-4-20250514?max_tokens=4096"` — bare with query params
 
   ## Configuration
 
