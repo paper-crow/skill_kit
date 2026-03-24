@@ -1,4 +1,4 @@
-defmodule Anthropic.RespondableTest do
+defmodule SkillKit.Response.RespondableTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.LLM.Anthropic.Decoder
