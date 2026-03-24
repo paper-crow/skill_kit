@@ -16,7 +16,7 @@ defmodule Anthropic.ClientTest do
     end
 
     test "raises when api_key is missing" do
-      assert_raise KeyError, fn -> Client.new([]) end
+      assert_raise ArgumentError, fn -> Client.new([]) end
     end
   end
 

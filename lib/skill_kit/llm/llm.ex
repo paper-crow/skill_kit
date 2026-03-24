@@ -41,7 +41,7 @@ defmodule SkillKit.LLM do
         end)
 
       {:error, _} = err ->
-        SkillKit.Telemetry.event([:llm, :stream, :error], %{}, %{error: err})
+        SkillKit.Telemetry.event([:llm, :stream, :error], %{}, %{error: err, model: model_string})
         err
     end
   end
