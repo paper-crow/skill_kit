@@ -178,9 +178,9 @@ config :skill_kit, handler: MyApp.Handler.Sandbox
 
 ## How Hooks Are Collected
 
-Hooks are defined on skills and gathered at run time. `Handler.run/3,4` calls
-`Registry.list_skills/1` and flat-maps each skill's `:hooks` list into a single
-collection before passing it to `Execution.new/4`.
+Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3` calls
+`SkillKit.Registry.list_skills/2` and flat-maps each skill's `:hooks` list into a
+single collection before passing it to `SkillKit.Execution.new/4`.
 
 The matcher regex is tested against only the last segment of the handler module
 name. A hook with `~r/Shell/` matches `SkillKit.Handler.Shell` but not

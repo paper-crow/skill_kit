@@ -58,8 +58,8 @@ defprotocol SkillKit.Event.Streamable do
     * `:partial_json` — accumulates JSON fragments by block index for tool
       call inputs that arrive across multiple delta events
 
-  See `lib/skill_kit/event/streamable/anthropic.ex` for a complete
-  reference implementation.
+  See `SkillKit.LLM.Anthropic` and the `Anthropic.Event` types for a
+  complete reference implementation.
   """
 
   @spec to_events(t(), map()) :: {[struct()], map()}

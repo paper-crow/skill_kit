@@ -61,7 +61,7 @@ end
 
 ### 2. Implement `Streamable` for each event type
 
-Create `lib/skill_kit/event/streamable/my_provider.ex`. Implement one clause per
+Create `lib/skill_kit/llm/my_provider/streamable.ex`. Implement one clause per
 provider event type. Return `{events, updated_acc}` — an empty list when the event
 carries no output-worthy signal yet.
 
@@ -214,9 +214,9 @@ message list before mapping.
 
 The Anthropic adapter is the canonical example:
 
-- `lib/skill_kit/llm/anthropic/anthropic.ex` — adapter
-- `lib/skill_kit/llm/anthropic/encoder.ex` — message encoder
-- `lib/skill_kit/event/streamable/anthropic.ex` — Streamable implementations
+- `SkillKit.LLM.Anthropic` — adapter implementing the `SkillKit.LLM` behaviour
+- `SkillKit.LLM.Anthropic.Encoder` — message encoder (SkillKit types → Anthropic API format)
+- `SkillKit.Event.Streamable` implementations for `Anthropic.Event` types — see the `Anthropic.Event` module for the typed structs
 
 See `SkillKit.Event.Streamable` and `SkillKit.LLM` for the behaviour and protocol
 specifications.
