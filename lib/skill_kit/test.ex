@@ -1,15 +1,76 @@
-defmodule SkillKit.Test do
-  @moduledoc """
-  Test helpers for SkillKit.
+if Mix.env() == :test do
+  defmodule SkillKit.Test do
+    @moduledoc """
+    Test helpers for SkillKit.
 
-  Provides Mox convenience helpers for testing agents and LLM interactions.
-  Provider-specific event builders live in their own modules
-  (e.g., `Anthropic.Test`).
+    Provides Mox convenience helpers for testing agents and LLM interactions.
+    Provider-specific event builders live in their own modules
+    (e.g., `Anthropic.Test`).
 
-  ## Setup
+    ## Setup
 
-      use SkillKit.Test
+        use SkillKit.Test
 
-  This imports `SkillKit.Test` and sets up `Mox.verify_on_exit!/1`.
-  """
+    This imports `SkillKit.Test` and sets up `Mox.verify_on_exit!/1`.
+    """
+
+    alias SkillKit.Response.Error
+    alias SkillKit.Response.Respondable
+
+    @doc """
+    Sets up a single Mox expectation that returns the given response.
+    """
+    @spec expect_response(struct()) :: :ok
+    def expect_response(response) do
+      Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn _messages, _opts ->
+        Respondable.to_stream(response)
+      end)
+
+      :ok
+    end
+
+    @doc """
+    Sets up a Mox expectation that runs the assertion callback, then returns the response.
+
+    The callback receives `(messages, opts)` — the arguments the LLM mock was called with.
+    """
+    @spec assert_response(struct(), (list(), keyword() -> any())) :: :ok
+    def assert_response(response, assertion_fn) do
+      Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn messages, opts ->
+        assertion_fn.(messages, opts)
+        Respondable.to_stream(response)
+      end)
+
+      :ok
+    end
+
+    @doc """
+    Sets up multi-call Mox expectations from a list of response types.
+
+    Each element corresponds to one `LLM.stream` call in order.
+    """
+    @spec expect_responses([struct()]) :: :ok
+    def expect_responses(responses) do
+      count = length(responses)
+      counter = :counters.new(1, [:atomics])
+      responses_list = :lists.zip(:lists.seq(1, count), responses)
+      responses_map = Map.new(responses_list)
+
+      Mox.expect(SkillKit.LLM.Mock, :stream, count, fn _messages, _opts ->
+        index = :counters.get(counter, 1) + 1
+        :counters.put(counter, 1, index)
+        Respondable.to_stream(Map.fetch!(responses_map, index))
+      end)
+
+      :ok
+    end
+
+    @doc """
+    Sets up a Mox expectation returning an LLM error.
+    """
+    @spec expect_error(integer(), String.t()) :: :ok
+    def expect_error(status, message) do
+      expect_response(%Error{status: status, message: message})
+    end
+  end
 end
