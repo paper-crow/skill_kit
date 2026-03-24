@@ -67,6 +67,8 @@ defmodule Anthropic.Event do
     %{type: :tool_use, id: cb["id"], name: cb["name"]}
   end
 
+  defp parse_content_block(cb), do: cb
+
   defp parse_delta(%{"type" => "text_delta"} = d), do: %{type: :text_delta, text: d["text"]}
 
   defp parse_delta(%{"type" => "input_json_delta"} = d),

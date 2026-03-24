@@ -3,11 +3,12 @@ defmodule SkillKit.Types.ToolResult do
 
   @type t :: %__MODULE__{
           agent: String.t() | nil,
+          name: String.t() | nil,
           tool_call_id: String.t(),
           content: String.t(),
           is_error: boolean()
         }
 
   @enforce_keys [:tool_call_id, :content]
-  defstruct [:agent, :tool_call_id, :content, is_error: false]
+  defstruct [:agent, :name, :tool_call_id, :content, is_error: false]
 end

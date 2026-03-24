@@ -52,13 +52,12 @@ defmodule Anthropic.TestTest do
   # Converts raw Anthropic SSE event maps through the full pipeline:
   # parse -> Streamable.to_events -> flatten
   defp convert_via_streamable(raw_events) do
-    raw_events
-    |> Enum.map(&Event.parse/1)
-    |> Enum.reject(&(&1 == :skip))
-    |> Enum.flat_map_reduce(%{blocks: %{}, partial_json: %{}}, fn event, acc ->
-      {events, acc} = Streamable.to_events(event, acc)
-      {events, acc}
-    end)
-    |> elem(0)
+    {events, _acc} =
+      raw_events
+      |> Enum.map(&Event.parse/1)
+      |> Enum.reject(&(&1 == :skip))
+      |> Enum.flat_map_reduce(%{blocks: %{}, partial_json: %{}}, &Streamable.to_events/2)
+
+    events
   end
 end

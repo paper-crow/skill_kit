@@ -29,7 +29,7 @@ defmodule SkillKit.LLM.Anthropic do
     request_opts =
       opts
       |> Keyword.drop([:api_key, :endpoint])
-      |> then(&if(encoded_tools != [], do: Keyword.put(&1, :tools, encoded_tools), else: &1))
+      |> maybe_put_tools(encoded_tools)
       |> Keyword.put_new(:model, @default_model)
       |> Keyword.put_new(:max_tokens, @default_max_tokens)
 
@@ -39,10 +39,11 @@ defmodule SkillKit.LLM.Anthropic do
     end
   end
 
+  defp maybe_put_tools(opts, []), do: opts
+  defp maybe_put_tools(opts, tools), do: Keyword.put(opts, :tools, tools)
+
   defp to_skill_kit_stream(anthropic_stream) do
-    Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, fn event, acc ->
-      Streamable.to_events(event, acc)
-    end)
+    Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, &Streamable.to_events/2)
   end
 
   defp resolve_api_key do

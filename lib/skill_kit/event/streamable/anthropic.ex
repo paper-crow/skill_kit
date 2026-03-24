@@ -30,12 +30,16 @@ defimpl SkillKit.Event.Streamable, for: Anthropic.Event.ContentBlockDelta do
   end
 
   def to_events(%{index: idx, delta: %{type: :input_json_delta, partial_json: json}}, acc) do
-    acc =
-      Map.update(acc, :partial_json, %{idx => json}, fn pj ->
-        Map.update(pj, idx, json, &(&1 <> json))
-      end)
-
+    acc = accumulate_json(acc, idx, json)
     {[], acc}
+  end
+
+  def to_events(_event, acc), do: {[], acc}
+
+  defp accumulate_json(acc, idx, json) do
+    Map.update(acc, :partial_json, %{idx => json}, fn pj ->
+      Map.update(pj, idx, json, &(&1 <> json))
+    end)
   end
 end
 
@@ -44,14 +48,15 @@ defimpl SkillKit.Event.Streamable, for: Anthropic.Event.ContentBlockStop do
 
   def to_events(%{index: idx}, acc) do
     case get_in(acc, [:blocks, idx]) do
-      %{type: :tool_use, id: id, name: name} ->
-        json = get_in(acc, [:partial_json, idx]) || "{}"
-        input = Jason.decode!(json)
-        {[%ToolCallComplete{id: id, name: name, input: input}], acc}
-
-      _ ->
-        {[], acc}
+      %{type: :tool_use, id: id, name: name} -> build_tool_call_complete(id, name, idx, acc)
+      _ -> {[], acc}
     end
+  end
+
+  defp build_tool_call_complete(id, name, idx, acc) do
+    json = get_in(acc, [:partial_json, idx]) || "{}"
+    input = Jason.decode!(json)
+    {[%ToolCallComplete{id: id, name: name, input: input}], acc}
   end
 end
 

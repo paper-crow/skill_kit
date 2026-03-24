@@ -234,12 +234,12 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp handle_response(%{tool_calls: []} = response, state) do
+  defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
     notify_caller(state, %{response | agent: state.agent_name})
     state
   end
 
-  defp handle_response(%{tool_calls: tool_calls} = _response, state) do
+  defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
     classifier = ToolBuilder.classifier(state.kits, state.activated_skills)
     {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
