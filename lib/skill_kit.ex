@@ -15,22 +15,23 @@ defmodule SkillKit do
       :ok = SkillKit.send_message(agent, "Hello")
 
       receive do
-        {:skill_kit, agent_name, {:delta, text}} -> IO.write(text)
-        {:skill_kit, agent_name, {:response, text}} -> IO.puts("Done.")
-        {:skill_kit, agent_name, {:error, reason}} -> IO.puts("Error")
+        %SkillKit.Event.Delta{text: text} -> IO.write(text)
+        %SkillKit.Types.AssistantMessage{content: text} -> IO.puts("Done.")
+        %SkillKit.Event.Error{reason: reason} -> IO.puts("Error")
       end
 
       SkillKit.stop_agent(agent)
 
   ## Events
 
-  The caller process receives these messages:
+  The caller process receives structs directly:
 
-    * `{:skill_kit, agent_name, {:delta, text}}` — real-time text fragment
-    * `{:skill_kit, agent_name, {:response, text}}` — complete text at turn end
-    * `{:skill_kit, agent_name, {:tool_call, name, input}}` — tool invocation
-    * `{:skill_kit, agent_name, {:tool_result, name, content, is_error}}` — tool result
-    * `{:skill_kit, agent_name, {:error, reason}}` — LLM or execution error
+    * `%SkillKit.Event.Delta{agent: name, text: text}` — real-time text fragment
+    * `%SkillKit.Event.ToolCallStart{agent: name, id: id, name: name}` — tool call began
+    * `%SkillKit.Event.ToolCallComplete{agent: name, id: id, name: name, input: input}` — tool call parsed
+    * `%SkillKit.Types.AssistantMessage{agent: name, content: text}` — complete response at turn end
+    * `%SkillKit.Types.ToolResult{agent: name, content: content}` — tool result
+    * `%SkillKit.Event.Error{agent: name, reason: reason}` — LLM or execution error
 
   ## Configuration
 
