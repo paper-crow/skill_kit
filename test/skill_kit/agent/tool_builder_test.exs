@@ -79,6 +79,24 @@ defmodule SkillKit.Agent.ToolBuilderTest do
       refute Enum.any?(tools, &(&1.name == "report_result"))
     end
 
+    test "activate_skill tool includes arguments property" do
+      kit = %Kit{
+        name: "test",
+        skills: [
+          %Skill{name: "test:foo", description: "A skill", handler: SkillKit.Handler.Shell}
+        ]
+      }
+
+      tools = ToolBuilder.build_tools([kit])
+      activate = Enum.find(tools, &(&1.name == "activate_skill"))
+
+      assert activate.input_schema["properties"]["arguments"] == %{
+               "type" => "string",
+               "description" =>
+                 "Arguments to pass to the skill (space-separated, accessible as $ARGUMENTS, $0, $1, etc.)"
+             }
+    end
+
     test "activated module-backed skills appear as individual tools" do
       module_skill = %Skill{
         name: "scheduler:schedule",

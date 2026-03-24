@@ -316,11 +316,23 @@ defmodule SkillKit.Agent.Server do
 
   defp activate_skill(%ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
+    arguments = Map.get(input, "arguments", "")
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    opts = if state.scope, do: [scopes: Scope.permissions(state.scope)], else: []
+    opts =
+      if state.scope do
+        [
+          scopes: Scope.permissions(state.scope),
+          scope: state.scope,
+          scope_context: %{agent: state.agent_name, skill: skill_name}
+        ]
+      else
+        []
+      end
 
-    case SkillKit.Catalog.activate(skill_registry, skill_name, %{}, opts) do
+    args = %{"arguments" => arguments}
+
+    case SkillKit.Catalog.activate(skill_registry, skill_name, args, opts) do
       {:ok, rendered_body} ->
         skill = find_skill_by_name(skill_name, state)
         already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))

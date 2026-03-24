@@ -71,8 +71,13 @@ defmodule SkillKit.Catalog do
   """
   def activate(server, name, args, opts \\ []) do
     case get_skill(server, name, opts) do
-      {:ok, skill} -> Skill.render(skill, args)
-      error -> error
+      {:ok, skill} ->
+        scope = Keyword.get(opts, :scope)
+        scope_context = Keyword.get(opts, :scope_context)
+        Skill.render(skill, args, scope, scope_context)
+
+      error ->
+        error
     end
   end
 

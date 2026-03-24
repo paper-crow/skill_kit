@@ -128,6 +128,11 @@ defmodule SkillKit.Agent.ToolBuilder do
             "type" => "string",
             "description" => "The skill name to activate",
             "enum" => skill_names
+          },
+          "arguments" => %{
+            "type" => "string",
+            "description" =>
+              "Arguments to pass to the skill (space-separated, accessible as $ARGUMENTS, $0, $1, etc.)"
           }
         },
         "required" => ["name"]
