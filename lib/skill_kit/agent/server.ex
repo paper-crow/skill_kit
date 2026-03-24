@@ -284,11 +284,10 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%Message.ToolCall{id: id, input: input}, state) do
-    command = Map.get(input, "command", "")
     context = %{cwd: state.definition.workspace, scope: state.scope}
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    case SkillKit.Executor.run(skill_registry, command, context) do
+    case SkillKit.Executor.run(skill_registry, input, context) do
       {:ok, execution} ->
         %Message.ToolResult{
           tool_call_id: id,

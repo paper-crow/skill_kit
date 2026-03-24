@@ -17,7 +17,7 @@ defmodule SkillKit.ExecutionTest do
   describe "new/4" do
     test "builds an execution with execute step when no hooks" do
       s = skill()
-      exec = Execution.new(s, "echo hello", %{})
+      exec = Execution.new(s, %{"command" => "echo hello"}, %{})
 
       assert exec.status == :pending
       assert length(exec.steps) == 1
@@ -31,7 +31,7 @@ defmodule SkillKit.ExecutionTest do
       non_matching = %Hook{phase: :pre, matcher: ~r/Docker/, handler: fn _ctx -> :allow end}
 
       s = skill()
-      exec = Execution.new(s, "echo hello", %{}, all_hooks: [pre, post, non_matching])
+      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
 
       # Should have pre + execute + post = 3 steps (non_matching filtered out)
       assert length(exec.steps) == 3
@@ -41,7 +41,7 @@ defmodule SkillKit.ExecutionTest do
   describe "run/1" do
     test "executes simple command through Shell and completes" do
       s = skill()
-      exec = Execution.new(s, "echo hello", %{})
+      exec = Execution.new(s, %{"command" => "echo hello"}, %{})
 
       assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
       assert result.results["execute"] == {:ok, "hello\n"}
@@ -55,21 +55,21 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, "echo hello", %{}, all_hooks: [deny_hook])
+      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [deny_hook])
 
       assert {:error, %Execution{status: :failed} = result} = Execution.run(exec)
       assert result.results["pre:0"] == {:deny, "blocked"}
     end
 
-    test "pre-hook {:allow, cmd} modifies command" do
+    test "pre-hook {:allow, input} modifies input" do
       modify_hook = %Hook{
         phase: :pre,
         matcher: ~r/Shell/,
-        handler: fn _ctx -> {:allow, "echo modified"} end
+        handler: fn _ctx -> {:allow, %{"command" => "echo modified"}} end
       }
 
       s = skill()
-      exec = Execution.new(s, "echo original", %{}, all_hooks: [modify_hook])
+      exec = Execution.new(s, %{"command" => "echo original"}, %{}, all_hooks: [modify_hook])
 
       assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
       assert result.results["execute"] == {:ok, "modified\n"}
@@ -83,7 +83,7 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, "echo secret", %{}, all_hooks: [post_hook])
+      exec = Execution.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
 
       assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
       assert result.results["post:0"] == {:ok, "sanitized"}
@@ -97,14 +97,14 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, "echo secret", %{}, all_hooks: [post_hook])
+      exec = Execution.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
 
       assert {:error, %Execution{status: :failed}} = Execution.run(exec)
     end
 
     test "executor {:pending, state} suspends execution" do
       s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
-      exec = Execution.new(s, "needs approval", %{})
+      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       assert {:pending, %Execution{status: :suspended} = result} = Execution.run(exec)
       assert result.suspended_at == "execute"
@@ -118,7 +118,7 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, "echo hello", %{}, all_hooks: [pending_hook])
+      exec = Execution.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pending_hook])
 
       assert {:pending, %Execution{status: :suspended} = result} = Execution.run(exec)
       assert result.suspended_at == "pre:0"
@@ -132,29 +132,29 @@ defmodule SkillKit.ExecutionTest do
       }
 
       s = skill()
-      exec = Execution.new(s, "echo mfa", %{}, all_hooks: [mfa_hook])
+      exec = Execution.new(s, %{"command" => "echo mfa"}, %{}, all_hooks: [mfa_hook])
 
       assert {:ok, %Execution{status: :complete}} = Execution.run(exec)
     end
 
-    test "multiple pre-hooks chain — each gets potentially modified command" do
+    test "multiple pre-hooks chain — each gets potentially modified input" do
       hook1 = %Hook{
         phase: :pre,
         matcher: ~r/Shell/,
-        handler: fn _ctx -> {:allow, "echo step1"} end
+        handler: fn _ctx -> {:allow, %{"command" => "echo step1"}} end
       }
 
       hook2 = %Hook{
         phase: :pre,
         matcher: ~r/Shell/,
         handler: fn ctx ->
-          # Should receive the modified command from hook1
-          if ctx.command == "echo step1", do: :allow, else: {:deny, "wrong command"}
+          # Should receive the modified input from hook1
+          if ctx.input == %{"command" => "echo step1"}, do: :allow, else: {:deny, "wrong input"}
         end
       }
 
       s = skill()
-      exec = Execution.new(s, "echo original", %{}, all_hooks: [hook1, hook2])
+      exec = Execution.new(s, %{"command" => "echo original"}, %{}, all_hooks: [hook1, hook2])
 
       assert {:ok, %Execution{status: :complete} = result} = Execution.run(exec)
       assert result.results["execute"] == {:ok, "step1\n"}
@@ -164,7 +164,7 @@ defmodule SkillKit.ExecutionTest do
   describe "resume/2" do
     test "resumes suspended executor and completes" do
       s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
-      exec = Execution.new(s, "needs approval", %{})
+      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       {:pending, suspended} = Execution.run(exec)
 
@@ -176,7 +176,7 @@ defmodule SkillKit.ExecutionTest do
 
     test "resumes denied executor and fails" do
       s = skill(executor: SkillKit.ExecutionTest.PendingExecutor)
-      exec = Execution.new(s, "needs approval", %{})
+      exec = Execution.new(s, %{"command" => "needs approval"}, %{})
 
       {:pending, suspended} = Execution.run(exec)
 

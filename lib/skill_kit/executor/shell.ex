@@ -14,7 +14,7 @@ defmodule SkillKit.Executor.Shell do
   alias SkillKit.Execution
 
   @impl true
-  def execute(%Execution{command: command, context: context}) do
+  def execute(%Execution{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =

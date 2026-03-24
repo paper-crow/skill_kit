@@ -1,6 +1,6 @@
 defmodule SkillKit.Execution do
   @moduledoc """
-  A named, resumable pipeline for executing a skill command through lifecycle hooks.
+  A named, resumable pipeline for executing a skill input through lifecycle hooks.
 
   Inspired by `Ecto.Multi`, an `Execution` separates construction from execution.
   Each step in the pipeline is a named entry — pre-hooks, the execute step, and
@@ -36,7 +36,7 @@ defmodule SkillKit.Execution do
 
   @type t :: %__MODULE__{
           skill: SkillKit.Skill.t(),
-          command: String.t(),
+          input: map(),
           context: map(),
           steps: [step()],
           results: map(),
@@ -47,7 +47,7 @@ defmodule SkillKit.Execution do
 
   defstruct [
     :skill,
-    :command,
+    :input,
     :context,
     :suspended_at,
     :suspended_state,
@@ -57,7 +57,7 @@ defmodule SkillKit.Execution do
   ]
 
   @doc """
-  Builds an `Execution` pipeline for `skill`, `command`, and `context`.
+  Builds an `Execution` pipeline for `skill`, `input`, and `context`.
 
   Hooks are passed via the `all_hooks:` option. Only hooks whose `:matcher`
   regex matches the last segment of the executor module name are included.
@@ -66,8 +66,8 @@ defmodule SkillKit.Execution do
 
   - `all_hooks:` — list of `SkillKit.Hook.t()` to filter and insert into the pipeline
   """
-  @spec new(SkillKit.Skill.t() | nil, String.t(), map(), keyword()) :: t()
-  def new(skill, command, context, opts \\ []) do
+  @spec new(SkillKit.Skill.t() | nil, map(), map(), keyword()) :: t()
+  def new(skill, input, context, opts \\ []) do
     all_hooks = Keyword.get(opts, :all_hooks, [])
     executor = resolve_executor(skill, opts)
     executor_name = executor_name(executor)
@@ -96,7 +96,7 @@ defmodule SkillKit.Execution do
 
     %__MODULE__{
       skill: skill,
-      command: command,
+      input: input,
       context: context,
       steps: steps,
       results: %{},
@@ -157,7 +157,7 @@ defmodule SkillKit.Execution do
         walk_steps(rest, put_result(exec, name, :allow))
 
       {:pre_hook, {:allow, new_cmd}} ->
-        exec = exec |> put_result(name, {:allow, new_cmd}) |> update_command(new_cmd)
+        exec = exec |> put_result(name, {:allow, new_cmd}) |> update_input(new_cmd)
         walk_steps(rest, exec)
 
       {:pre_hook, {:deny, reason}} ->
@@ -204,8 +204,8 @@ defmodule SkillKit.Execution do
     %{exec | results: Map.put(exec.results, name, value)}
   end
 
-  defp update_command(exec, new_cmd) do
-    %{exec | command: new_cmd}
+  defp update_input(exec, new_input) do
+    %{exec | input: new_input}
   end
 
   defp executor_name(executor) do
@@ -223,7 +223,7 @@ defmodule SkillKit.Execution do
     %{
       skill: nil,
       scope: Map.get(exec.context, :scope),
-      command: exec.command,
+      input: exec.input,
       executor: executor
     }
   end
@@ -232,7 +232,7 @@ defmodule SkillKit.Execution do
     %{
       skill: exec.skill,
       scope: Map.get(exec.context, :scope),
-      command: exec.command,
+      input: exec.input,
       executor: exec.skill.executor
     }
   end

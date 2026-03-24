@@ -23,7 +23,8 @@ defmodule SkillKit.Executor do
   def run(registry, command, context) do
     executor = Application.get_env(:skill_kit, :executor, SkillKit.Executor.Shell)
     all_hooks = collect_hooks(registry)
-    execution = Execution.new(nil, command, context, all_hooks: all_hooks, executor: executor)
+    input = wrap_input(command)
+    execution = Execution.new(nil, input, context, all_hooks: all_hooks, executor: executor)
     Execution.run(execution)
   end
 
@@ -35,7 +36,8 @@ defmodule SkillKit.Executor do
   """
   def run(registry, skill, command, context) do
     all_hooks = collect_hooks(registry)
-    execution = Execution.new(skill, command, context, all_hooks: all_hooks)
+    input = wrap_input(command)
+    execution = Execution.new(skill, input, context, all_hooks: all_hooks)
     Execution.run(execution)
   end
 
@@ -45,6 +47,9 @@ defmodule SkillKit.Executor do
   def resume(execution, decision) do
     Execution.resume(execution, decision)
   end
+
+  defp wrap_input(%{} = input), do: input
+  defp wrap_input(command) when is_binary(command), do: %{"command" => command}
 
   defp collect_hooks(registry) do
     registry
