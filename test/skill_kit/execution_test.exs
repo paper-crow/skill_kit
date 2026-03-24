@@ -196,6 +196,11 @@ defmodule SkillKit.ExecutionTest do
     @impl true
     def resume(%SkillKit.Execution{}, _state, :approved), do: {:ok, "approved result"}
     def resume(%SkillKit.Execution{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
+
+    @impl true
+    def tool_definition do
+      %SkillKit.Executor.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
+    end
   end
 
   defmodule MFAHandler do
