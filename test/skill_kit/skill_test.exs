@@ -3,6 +3,16 @@ defmodule SkillKit.SkillTest do
 
   alias SkillKit.Skill
 
+  defmodule TestScope do
+    defstruct [:user]
+  end
+
+  defimpl SkillKit.Scope, for: TestScope do
+    def permissions(_scope), do: []
+    def resolve(scope, "USERNAME", _context), do: {:ok, scope.user}
+    def resolve(_scope, _key, _context), do: :error
+  end
+
   describe "Skill struct" do
     test "has expected fields" do
       skill = %Skill{}
@@ -104,6 +114,58 @@ defmodule SkillKit.SkillTest do
       skill = %Skill{body: "Process $0"}
       args = %{"arguments" => "file.txt"}
       assert {:ok, "Process file.txt"} = Skill.render(skill, args)
+    end
+  end
+
+  describe "render/3 with unified syntax" do
+    test "substitutes $SKILL_DIR (new name for ${CLAUDE_SKILL_DIR})" do
+      skill = %Skill{body: "Run $SKILL_DIR/build.sh", location: "/skills/builder/SKILL.md"}
+      assert {:ok, "Run /skills/builder/build.sh"} = Skill.render(skill, %{})
+    end
+
+    test "substitutes ${SKILL_DIR} with braces" do
+      skill = %Skill{body: "Run ${SKILL_DIR}/build.sh", location: "/skills/builder/SKILL.md"}
+      assert {:ok, "Run /skills/builder/build.sh"} = Skill.render(skill, %{})
+    end
+
+    test "substitutes $SESSION_ID (new name for ${CLAUDE_SESSION_ID})" do
+      skill = %Skill{body: "Log to $SESSION_ID.log"}
+      assert {:ok, "Log to abc-123.log"} = Skill.render(skill, %{"session_id" => "abc-123"})
+    end
+
+    test "resolves unmatched variables via scope" do
+      skill = %Skill{name: "memory_kit:user_memory", body: "Hello $USERNAME"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "pirate_pete", skill: "memory_kit:user_memory"}
+      assert {:ok, "Hello alice"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "scope resolution works with braces syntax" do
+      skill = %Skill{name: "memory_kit:user_memory", body: "Hello ${USERNAME}"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "pirate_pete", skill: "memory_kit:user_memory"}
+      assert {:ok, "Hello alice"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "unresolved scope variables are left as-is" do
+      skill = %Skill{name: "test:skill", body: "Value is $UNKNOWN"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "test", skill: "test:skill"}
+      assert {:ok, "Value is $UNKNOWN"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "$ARGUMENTS takes precedence over scope variables" do
+      skill = %Skill{name: "test:skill", body: "User: $ARGUMENTS"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "test", skill: "test:skill"}
+
+      assert {:ok, "User: bob"} =
+               Skill.render(skill, %{"arguments" => "bob"}, scope, scope_context)
+    end
+
+    test "render/2 without scope still works (backwards compatible)" do
+      skill = %Skill{body: "Fix issue $ARGUMENTS"}
+      assert {:ok, "Fix issue 123"} = Skill.render(skill, %{"arguments" => "123"})
     end
   end
 end
