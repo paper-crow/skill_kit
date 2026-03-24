@@ -95,10 +95,19 @@ defmodule SkillKit.MixProject do
         "LLM Providers": [
           SkillKit.LLM,
           SkillKit.LLM.Anthropic,
-          SkillKit.LLM.Anthropic.Encoder,
+          SkillKit.LLM.Anthropic.Encoder
+        ],
+        "Anthropic Client": [
           Anthropic,
           Anthropic.Client,
-          Anthropic.Event
+          Anthropic.Event,
+          Anthropic.Event.MessageStart,
+          Anthropic.Event.ContentBlockStart,
+          Anthropic.Event.ContentBlockDelta,
+          Anthropic.Event.ContentBlockStop,
+          Anthropic.Event.MessageDelta,
+          Anthropic.Event.MessageStop,
+          Anthropic.Telemetry
         ],
         "Skills & Kits": [
           SkillKit.Skill,
@@ -127,8 +136,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Conversation.Store.Filesystem
         ],
         Telemetry: [
-          SkillKit.Telemetry,
-          Anthropic.Telemetry
+          SkillKit.Telemetry
         ],
         Infrastructure: [
           SkillKit.Supervisor,
