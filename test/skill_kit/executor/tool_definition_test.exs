@@ -16,7 +16,7 @@ defmodule SkillKit.Executor.ToolDefinitionTest do
       td = Shell.tool_definition()
       assert %ToolDefinition{} = td
       assert td.name == "bash"
-      assert td.description != nil
+      assert is_binary(td.description)
       assert td.input_schema["properties"]["command"]
     end
   end

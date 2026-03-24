@@ -44,7 +44,7 @@ defmodule SkillKit.AuthorizationTest do
   # Helper
   # ---------------------------------------------------------------------------
 
-  defp skill(required_scope \\ []) do
+  defp skill(required_scope) do
     %Skill{name: "test:skill", namespace: "test", required_scope: required_scope}
   end
 
@@ -202,23 +202,17 @@ defmodule SkillKit.AuthorizationTest do
   describe "error signal distinction" do
     test "authorize/2 only returns :unauthorized, never :not_found" do
       s = skill(["admin:read"])
-      result = Authorization.authorize(s, ["tools:read"])
-      assert result == {:error, :unauthorized}
-      refute match?({:error, :not_found}, result)
+      assert {:error, :unauthorized} = Authorization.authorize(s, ["tools:read"])
     end
 
     test "authorize/3 with valid provider only returns :unauthorized or provider reason — never :not_found" do
       s = skill(["admin:read"])
-      result = Authorization.authorize(s, GrantNone, %{})
-      assert result == {:error, :unauthorized}
-      refute match?({:error, :not_found}, result)
+      assert {:error, :unauthorized} = Authorization.authorize(s, GrantNone, %{})
     end
 
     test "provider error passes through as-is — not normalized to :unauthorized" do
       s = skill(["admin:read"])
-      result = Authorization.authorize(s, ErrorProvider, %{})
-      assert result == {:error, :token_expired}
-      refute match?({:error, :unauthorized}, result)
+      assert {:error, :token_expired} = Authorization.authorize(s, ErrorProvider, %{})
     end
   end
 end
