@@ -2,11 +2,14 @@ defmodule SkillKit.Agent.ServerTest do
   use ExUnit.Case, async: true
 
   import Mox
+  import SkillKit.Test
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
   alias SkillKit.LLM.Message
+  alias SkillKit.Response.Text
+  alias SkillKit.Response.ToolCall
 
   setup :verify_on_exit!
 
@@ -45,40 +48,18 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
+      assert_response(%Text{content: "Hi there!"}, fn messages, _opts ->
         assert [%Message.User{content: "hello"}] =
                  Enum.filter(messages, &match?(%Message.User{}, &1))
-
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Hi there!"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
       end)
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
-      Process.sleep(50)
+      assert_receive {:skill_kit, _, {:response, _}}, 1000
 
       state = :sys.get_state(pid)
 
@@ -92,75 +73,22 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      call_count = :counters.new(1, [:atomics])
-
-      expect(SkillKit.LLM.Mock, :stream, 2, fn _messages, _opts ->
-        count = :counters.get(call_count, 1) + 1
-        :counters.put(call_count, 1, count)
-
-        events =
-          if count == 1 do
-            [
-              %{
-                "type" => "message_start",
-                "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-              },
-              %{
-                "type" => "content_block_start",
-                "index" => 0,
-                "content_block" => %{
-                  "type" => "tool_use",
-                  "id" => "tc_1",
-                  "name" => "echo",
-                  "input" => %{}
-                }
-              },
-              %{
-                "type" => "content_block_delta",
-                "index" => 0,
-                "delta" => %{"type" => "input_json_delta", "partial_json" => "{\"command\": \"echo hi\"}"}
-              },
-              %{"type" => "content_block_stop", "index" => 0},
-              %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-              %{"type" => "message_stop"}
-            ]
-          else
-            [
-              %{
-                "type" => "message_start",
-                "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}
-              },
-              %{
-                "type" => "content_block_start",
-                "index" => 0,
-                "content_block" => %{"type" => "text", "text" => ""}
-              },
-              %{
-                "type" => "content_block_delta",
-                "index" => 0,
-                "delta" => %{"type" => "text_delta", "text" => "Done."}
-              },
-              %{"type" => "content_block_stop", "index" => 0},
-              %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-              %{"type" => "message_stop"}
-            ]
-          end
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      expect_responses([
+        %ToolCall{name: "echo", input: %{"command" => "echo hi"}},
+        %Text{content: "Done."}
+      ])
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "do it"}]})
-      Process.sleep(100)
+      assert_receive {:skill_kit, _, {:response, _}}, 1000
 
       state = :sys.get_state(pid)
 
       assert length(state.messages) >= 4
-      assert :counters.get(call_count, 1) == 2
     end
   end
 
@@ -170,17 +98,15 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        {:error, {400, "credit balance too low"}}
-      end)
+      expect_error(400, "credit balance too low")
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
-      Process.sleep(50)
+      assert_receive {:skill_kit, _, {:error, _}}, 1000
 
       # Server should still be alive
       assert Process.alive?(pid)
@@ -202,40 +128,18 @@ defmodule SkillKit.Agent.ServerTest do
         model: "claude-sonnet-4-20250514"
       }
 
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
+      assert_response(%Text{content: "4"}, fn _messages, opts ->
         assert Keyword.get(opts, :system) == "You are a calculator."
         assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
-
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "4"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
       end)
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "2+2"}]})
-      Process.sleep(50)
+      assert_receive {:skill_kit, _, {:response, _}}, 1000
     end
   end
 
@@ -245,32 +149,10 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, opts ->
+      assert_response(%Text{content: "ok"}, fn _messages, opts ->
         tools = Keyword.get(opts, :tools, [])
         assert Enum.any?(tools, fn t -> t.name == "bash" end)
         assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
-
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "ok"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
       end)
 
       kits = [
@@ -281,12 +163,14 @@ defmodule SkillKit.Agent.ServerTest do
       ]
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, kits: kits})
+        Server.start_link(
+          {agent_name, definition, 0, nil, nil, registry, caller: self(), kits: kits}
+        )
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hi"}]})
-      Process.sleep(50)
+      assert_receive {:skill_kit, _, {:response, _}}, 1000
     end
   end
 
@@ -342,9 +226,7 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        {:error, {500, "internal error"}}
-      end)
+      expect_error(500, "internal error")
 
       {:ok, pid} =
         Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
@@ -362,65 +244,10 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      call_count = :counters.new(1, [:atomics])
-
-      expect(SkillKit.LLM.Mock, :stream, 2, fn _messages, _opts ->
-        count = :counters.get(call_count, 1) + 1
-        :counters.put(call_count, 1, count)
-
-        events =
-          if count == 1 do
-            [
-              %{
-                "type" => "message_start",
-                "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-              },
-              %{
-                "type" => "content_block_start",
-                "index" => 0,
-                "content_block" => %{
-                  "type" => "tool_use",
-                  "id" => "tc_1",
-                  "name" => "echo",
-                  "input" => %{}
-                }
-              },
-              %{
-                "type" => "content_block_delta",
-                "index" => 0,
-                "delta" => %{
-                  "type" => "input_json_delta",
-                  "partial_json" => "{\"command\":\"echo hi\"}"
-                }
-              },
-              %{"type" => "content_block_stop", "index" => 0},
-              %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-              %{"type" => "message_stop"}
-            ]
-          else
-            [
-              %{
-                "type" => "message_start",
-                "message" => %{"id" => "msg_2", "role" => "assistant", "content" => []}
-              },
-              %{
-                "type" => "content_block_start",
-                "index" => 0,
-                "content_block" => %{"type" => "text", "text" => ""}
-              },
-              %{
-                "type" => "content_block_delta",
-                "index" => 0,
-                "delta" => %{"type" => "text_delta", "text" => "Done!"}
-              },
-              %{"type" => "content_block_stop", "index" => 0},
-              %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-              %{"type" => "message_stop"}
-            ]
-          end
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      expect_responses([
+        %ToolCall{name: "echo", input: %{"command" => "echo hi"}},
+        %Text{content: "Done!"}
+      ])
 
       {:ok, pid} =
         Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
@@ -446,7 +273,6 @@ defmodule SkillKit.Agent.ServerTest do
       :sys.replace_state(pid, fn state -> %{state | halted: true} end)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "hello"}]})
-      Process.sleep(50)
 
       state = :sys.get_state(pid)
       assert state.messages == []
@@ -467,37 +293,7 @@ defmodule SkillKit.Agent.ServerTest do
       Registry.register(parent_registry, {parent_name, :server}, [])
 
       # Mock: LLM returns a report_result tool call
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{
-              "type" => "tool_use",
-              "id" => "tc_1",
-              "name" => "report_result",
-              "input" => %{}
-            }
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{
-              "type" => "input_json_delta",
-              "partial_json" => "{\"result\": \"All good\"}"
-            }
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      expect_response(%ToolCall{name: "report_result", input: %{"result" => "All good"}})
 
       {:ok, pid} =
         Server.start_link(
@@ -513,7 +309,6 @@ defmodule SkillKit.Agent.ServerTest do
       assert_receive {:subagent_result, ^pid, "All good"}, 2000
 
       # Server should be halted
-      Process.sleep(50)
       state = :sys.get_state(pid)
       assert state.halted == true
     end
@@ -526,37 +321,7 @@ defmodule SkillKit.Agent.ServerTest do
       parent_registry = :"orphan_reg_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, keys: :unique, name: parent_registry})
 
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{
-              "type" => "tool_use",
-              "id" => "tc_1",
-              "name" => "report_result",
-              "input" => %{}
-            }
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{
-              "type" => "input_json_delta",
-              "partial_json" => "{\"result\": \"orphaned\"}"
-            }
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "tool_use"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      expect_response(%ToolCall{name: "report_result", input: %{"result" => "orphaned"}})
 
       {:ok, pid} =
         Server.start_link(
@@ -567,7 +332,6 @@ defmodule SkillKit.Agent.ServerTest do
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
       send(pid, {:mailbox_flush, [%Message.User{content: "report"}]})
-      Process.sleep(100)
 
       # Should not crash, should be halted
       assert Process.alive?(pid)
@@ -609,32 +373,10 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Got it."}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      expect_response(%Text{content: "Got it."})
 
       {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -643,7 +385,7 @@ defmodule SkillKit.Agent.ServerTest do
       }
 
       send(pid, {:mailbox_flush, [system_msg]})
-      Process.sleep(50)
+      assert_receive {:skill_kit, _, {:response, _}}, 1000
 
       state = :sys.get_state(pid)
       assert Enum.any?(state.messages, &match?(%Message.System{}, &1))
@@ -656,35 +398,13 @@ defmodule SkillKit.Agent.ServerTest do
       agent_name: agent_name,
       definition: definition
     } do
-      expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
+      assert_response(%Text{content: "Fixing now."}, fn messages, _opts ->
         last = List.last(messages)
         assert %Message.System{content: content} = last
         assert content =~ "Subagent Complete"
         assert content =~ "review the code"
         assert content =~ "check lib/skill_kit.ex"
         assert content =~ "Found 2 issues"
-
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Fixing now."}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
       end)
 
       mailbox_config = %{max_messages: 1, flush_interval: 50}
@@ -695,7 +415,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      fake_subagent_pid = spawn(fn -> Process.sleep(:infinity) end)
+      fake_subagent_pid = spawn(fn -> :timer.sleep(:infinity) end)
       monitor_ref = Process.monitor(fake_subagent_pid)
 
       :sys.replace_state(pid, fn state ->
