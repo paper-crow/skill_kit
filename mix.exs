@@ -87,10 +87,10 @@ defmodule SkillKit.MixProject do
           SkillKit.Frontmatter
         ],
         "Execution & Hooks": [
-          SkillKit.Executor,
-          SkillKit.Executor.Behaviour,
-          SkillKit.Executor.Shell,
-          SkillKit.Executor.ToolDefinition,
+          SkillKit.Handler,
+          SkillKit.Handler.Behaviour,
+          SkillKit.Handler.Shell,
+          SkillKit.Handler.ToolDefinition,
           SkillKit.Execution,
           SkillKit.Hook
         ],

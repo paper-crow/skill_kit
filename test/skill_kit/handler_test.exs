@@ -1,7 +1,7 @@
-defmodule SkillKit.ExecutorTest do
+defmodule SkillKit.HandlerTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Executor, Hook, Skill}
+  alias SkillKit.{Handler, Hook, Skill}
 
   setup do
     name = :"registry_#{:erlang.unique_integer([:positive])}"
@@ -20,7 +20,7 @@ defmodule SkillKit.ExecutorTest do
 
   describe "run/4" do
     test "executes a command and returns {:ok, %Execution{}}", %{registry: registry} do
-      assert {:ok, result} = Executor.run(registry, skill(), "echo hello", %{})
+      assert {:ok, result} = Handler.run(registry, skill(), "echo hello", %{})
       assert result.status == :complete
       assert result.results["execute"] == {:ok, "hello\n"}
     end
@@ -42,33 +42,33 @@ defmodule SkillKit.ExecutorTest do
 
       SkillKit.Registry.register(registry, hook_skill)
 
-      assert {:error, result} = Executor.run(registry, skill(), "echo hello", %{})
+      assert {:error, result} = Handler.run(registry, skill(), "echo hello", %{})
       assert result.status == :failed
     end
 
     test "works with no hooks registered", %{registry: registry} do
-      assert {:ok, result} = Executor.run(registry, skill(), "echo clean", %{})
+      assert {:ok, result} = Handler.run(registry, skill(), "echo clean", %{})
       assert result.status == :complete
     end
 
     test "accepts a pre-formed input map", %{registry: registry} do
-      assert {:ok, result} = Executor.run(registry, skill(), %{"command" => "echo hello"}, %{})
+      assert {:ok, result} = Handler.run(registry, skill(), %{"command" => "echo hello"}, %{})
       assert result.results["execute"] == {:ok, "hello\n"}
     end
 
-    test "passes context with cwd through to Shell executor", %{registry: registry} do
+    test "passes context with cwd through to Shell handler", %{registry: registry} do
       tmp = System.tmp_dir!()
       # Resolve symlinks for macOS
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
       context = %{cwd: tmp}
-      assert {:ok, result} = Executor.run(registry, skill(), "pwd", context)
+      assert {:ok, result} = Handler.run(registry, skill(), "pwd", context)
       assert result.results["execute"] == {:ok, resolved_tmp <> "\n"}
     end
 
-    test "passes context with env through to Shell executor", %{registry: registry} do
+    test "passes context with env through to Shell handler", %{registry: registry} do
       context = %{env: [{"SKILL_KIT_INT_TEST", "integration"}]}
-      assert {:ok, result} = Executor.run(registry, skill(), "echo $SKILL_KIT_INT_TEST", context)
+      assert {:ok, result} = Handler.run(registry, skill(), "echo $SKILL_KIT_INT_TEST", context)
       assert result.results["execute"] == {:ok, "integration\n"}
     end
   end
@@ -80,17 +80,17 @@ defmodule SkillKit.ExecutorTest do
         namespace: "test",
         description: "Pending skill",
         body: "Need approval",
-        executor: SkillKit.ExecutorTest.PendingExecutor
+        handler: SkillKit.HandlerTest.PendingHandler
       }
 
-      {:pending, suspended} = Executor.run(registry, pending_skill, "do thing", %{})
-      assert {:ok, result} = Executor.resume(suspended, :approved)
+      {:pending, suspended} = Handler.run(registry, pending_skill, "do thing", %{})
+      assert {:ok, result} = Handler.resume(suspended, :approved)
       assert result.status == :complete
     end
   end
 
-  defmodule PendingExecutor do
-    @behaviour SkillKit.Executor.Behaviour
+  defmodule PendingHandler do
+    @behaviour SkillKit.Handler.Behaviour
     @impl true
     def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
     @impl true
@@ -99,7 +99,7 @@ defmodule SkillKit.ExecutorTest do
 
     @impl true
     def tool_definition do
-      %SkillKit.Executor.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
+      %SkillKit.Handler.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
     end
   end
 end

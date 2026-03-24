@@ -4,7 +4,7 @@ defmodule SkillKit.Skill do
 
   `SkillKit.Skill` is a plain Elixir struct that carries all identity,
   execution, and hook configuration for a skill. Execution is delegated
-  to the module named in `:executor` (default: `SkillKit.Executor.Shell`).
+  to the module named in `:handler` (default: `SkillKit.Handler.Shell`).
 
   ## Struct Fields
 
@@ -16,7 +16,7 @@ defmodule SkillKit.Skill do
   | `:body`           | `String.t() \| nil` | `nil`                      | Skill body / prompt template                 |
   | `:location`       | `String.t() \| nil` | `nil`                      | File path or source location for this skill  |
   | `:required_scope` | `[String.t()]`      | `[]`                       | Scopes required to call this skill           |
-  | `:executor`       | `module()`          | `SkillKit.Executor.Shell`  | Module responsible for executing the skill   |
+  | `:handler`       | `module()`          | `SkillKit.Handler.Shell`  | Module responsible for executing the skill   |
   | `:hooks`          | `[SkillKit.Hook.t()]` | `[]`                     | Lifecycle hooks attached to this skill       |
   | `:metadata`       | `%{String.t() => term()}` | `%{}`              | Arbitrary key-value metadata from frontmatter |
 
@@ -39,7 +39,7 @@ defmodule SkillKit.Skill do
           body: String.t() | nil,
           location: String.t() | nil,
           required_scope: [String.t()],
-          executor: module(),
+          handler: module(),
           hooks: [Hook.t()],
           metadata: %{optional(String.t()) => term()}
         }
@@ -51,7 +51,7 @@ defmodule SkillKit.Skill do
     :body,
     :location,
     required_scope: [],
-    executor: SkillKit.Executor.Shell,
+    handler: SkillKit.Handler.Shell,
     hooks: [],
     metadata: %{}
   ]

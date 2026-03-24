@@ -9,7 +9,7 @@ defmodule SkillKit.Catalog do
 
   1. **Discovery** — `list_skills/2` returns authorized skill metadata
   2. **Activation** — `activate/4` renders the skill body for LLM context
-  3. **Execution** — handled by `SkillKit.Executor` (separate concern)
+  3. **Execution** — handled by `SkillKit.Handler` (separate concern)
   """
 
   alias SkillKit.Authorization

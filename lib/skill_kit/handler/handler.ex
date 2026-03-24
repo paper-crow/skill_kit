@@ -1,4 +1,4 @@
-defmodule SkillKit.Executor do
+defmodule SkillKit.Handler do
   @moduledoc """
   Builds and runs `%Execution{}` pipelines.
 
@@ -17,14 +17,14 @@ defmodule SkillKit.Executor do
   @doc """
   Runs input through the execution pipeline without a specific skill.
 
-  Accepts a map or bare command string. Uses the configured executor
-  from `config :skill_kit, :executor` (defaults to `SkillKit.Executor.Shell`).
+  Accepts a map or bare command string. Uses the configured handler
+  from `config :skill_kit, :handler` (defaults to `SkillKit.Handler.Shell`).
   """
   def run(registry, input, context) do
-    executor = Application.get_env(:skill_kit, :executor, SkillKit.Executor.Shell)
+    handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
     all_hooks = collect_hooks(registry)
     input = wrap_input(input)
-    execution = Execution.new(nil, input, context, all_hooks: all_hooks, executor: executor)
+    execution = Execution.new(nil, input, context, all_hooks: all_hooks, handler: handler)
     Execution.run(execution)
   end
 

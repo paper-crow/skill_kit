@@ -137,7 +137,7 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
   describe "encode_tools/1" do
     test "encodes tool definitions to Anthropic format" do
       tools = [
-        %SkillKit.Executor.ToolDefinition{
+        %SkillKit.Handler.ToolDefinition{
           name: "bash",
           description: "Run a command",
           input_schema: %{

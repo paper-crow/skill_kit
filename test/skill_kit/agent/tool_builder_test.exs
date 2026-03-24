@@ -7,8 +7,8 @@ defmodule SkillKit.Agent.ToolBuilderTest do
   alias SkillKit.Skill
 
   describe "build_tools/2" do
-    test "includes executor tool definitions" do
-      tools = ToolBuilder.build_tools([], executors: [SkillKit.Executor.Shell])
+    test "includes handler tool definitions" do
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
 
       bash = Enum.find(tools, &(&1.name == "bash"))
       assert bash != nil
@@ -26,7 +26,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         }
       ]
 
-      tools = ToolBuilder.build_tools(kits, executors: [SkillKit.Executor.Shell])
+      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Handler.Shell])
 
       activate = Enum.find(tools, &(&1.name == "activate_skill"))
       assert activate != nil
@@ -36,7 +36,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "does not include activate_skill when no skills" do
-      tools = ToolBuilder.build_tools([], executors: [SkillKit.Executor.Shell])
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
 
       refute Enum.any?(tools, &(&1.name == "activate_skill"))
     end
@@ -57,7 +57,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         }
       ]
 
-      tools = ToolBuilder.build_tools(kits, executors: [SkillKit.Executor.Shell])
+      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Handler.Shell])
 
       agent_tool = Enum.find(tools, &(&1.name == "project-a"))
       assert agent_tool != nil
@@ -66,14 +66,14 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "includes builtins when subagent: true" do
-      tools = ToolBuilder.build_tools([], executors: [SkillKit.Executor.Shell], subagent: true)
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell], subagent: true)
 
       assert Enum.any?(tools, &(&1.name == "report_status"))
       assert Enum.any?(tools, &(&1.name == "report_result"))
     end
 
     test "excludes builtins by default" do
-      tools = ToolBuilder.build_tools([], executors: [SkillKit.Executor.Shell])
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
 
       refute Enum.any?(tools, &(&1.name == "report_status"))
       refute Enum.any?(tools, &(&1.name == "report_result"))
@@ -85,7 +85,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         namespace: "scheduler",
         description: "Schedule a task",
         body: "Use schedule tool",
-        executor: SkillKit.Executor.Shell
+        handler: SkillKit.Handler.Shell
       }
 
       tools = ToolBuilder.build_tools([], activated_skills: [module_skill])
@@ -93,13 +93,13 @@ defmodule SkillKit.Agent.ToolBuilderTest do
       assert "schedule" in tool_names
     end
 
-    test "activated skills with unloadable executors are excluded" do
+    test "activated skills with unloadable handlers are excluded" do
       bad_skill = %Skill{
         name: "broken:thing",
         namespace: "broken",
         description: "Won't load",
         body: "nope",
-        executor: DoesNotExist.Module
+        handler: DoesNotExist.Module
       }
 
       tools = ToolBuilder.build_tools([], activated_skills: [bad_skill])
@@ -140,9 +140,9 @@ defmodule SkillKit.Agent.ToolBuilderTest do
       assert classify.(%{name: "report_result"}) == :builtin
     end
 
-    test "returns :executor for everything else" do
+    test "returns :handler for everything else" do
       classify = ToolBuilder.classifier([])
-      assert classify.(%{name: "bash"}) == :executor
+      assert classify.(%{name: "bash"}) == :handler
     end
 
     test "classifier returns {:module_skill, skill} for activated module-backed skills" do
@@ -151,16 +151,16 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         namespace: "scheduler",
         description: "Schedule a task",
         body: "Use schedule tool",
-        executor: SkillKit.Executor.Shell
+        handler: SkillKit.Handler.Shell
       }
 
       classify = ToolBuilder.classifier([], [module_skill])
       assert {:module_skill, ^module_skill} = classify.(%{name: "schedule"})
     end
 
-    test "classifier still returns :executor for unknown tools" do
+    test "classifier still returns :handler for unknown tools" do
       classify = ToolBuilder.classifier([], [])
-      assert :executor = classify.(%{name: "bash"})
+      assert :handler = classify.(%{name: "bash"})
     end
   end
 end

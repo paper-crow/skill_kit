@@ -255,7 +255,7 @@ defmodule SkillKit.Agent.Server do
 
       {result, acc} =
         case classifier.(tc) do
-          :executor -> {execute_command(tc, acc), acc}
+          :handler -> {execute_command(tc, acc), acc}
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
           :subagent -> spawn_subagent(tc, acc)
@@ -272,7 +272,7 @@ defmodule SkillKit.Agent.Server do
     context = %{cwd: state.definition.workspace, scope: state.scope}
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    case SkillKit.Executor.run(skill_registry, input, context) do
+    case SkillKit.Handler.run(skill_registry, input, context) do
       {:ok, execution} ->
         %Message.ToolResult{
           tool_call_id: id,
@@ -319,7 +319,7 @@ defmodule SkillKit.Agent.Server do
         already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))
 
         state =
-          if skill && skill.executor != SkillKit.Executor.Shell && !already_activated do
+          if skill && skill.handler != SkillKit.Handler.Shell && !already_activated do
             %{state | activated_skills: [skill | state.activated_skills]}
           else
             state
@@ -358,7 +358,7 @@ defmodule SkillKit.Agent.Server do
 
     execution = %Execution{skill: skill, input: input, context: context}
 
-    case skill.executor.execute(execution) do
+    case skill.handler.execute(execution) do
       {:ok, result} ->
         %Message.ToolResult{tool_call_id: id, content: to_string(result)}
 

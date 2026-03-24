@@ -1,18 +1,18 @@
-# Agent Skills Executor Spec
+# Agent Skills Handler Spec
 
 ## Overview
 
-The executor is a synchronous tool call. The LLM decides what command to run and how to shape its output — including filtering, piping, and timeouts. The executor's only job is to run the skill and return a result.
+The handler is a synchronous tool call. The LLM decides what command to run and how to shape its output — including filtering, piping, and timeouts. The handler's only job is to run the skill and return a result.
 
-Skills are always OS commands. Any Elixir logic that needs to run as a skill is invoked via the shell (`mix run`, `elixir script.exs`, or a compiled binary). The executor stays dumb.
+Skills are always OS commands. Any Elixir logic that needs to run as a skill is invoked via the shell (`mix run`, `elixir script.exs`, or a compiled binary). The handler stays dumb.
 
 ---
 
 ## Design Constraints
 
-- **cmd only** — skills are filesystem artifacts defined by `SKILL.md`. The executor always spawns an OS process.
+- **cmd only** — skills are filesystem artifacts defined by `SKILL.md`. The handler always spawns an OS process.
 - **No streaming** — output is buffered and returned as a single result. If output is too large to buffer, it's too large to be a useful LLM tool result.
-- **No timeouts** — the executor blocks until the process exits or dies. Timeouts are expressed in the command itself (e.g. `timeout 30 run-tests`).
+- **No timeouts** — the handler blocks until the process exits or dies. Timeouts are expressed in the command itself (e.g. `timeout 30 run-tests`).
 - **No piping helpers** — if the LLM needs filtered output it tells the command to do it (e.g. `run-tests | grep FAILED`).
 
 ---
@@ -21,14 +21,14 @@ Skills are always OS commands. Any Elixir logic that needs to run as a skill is 
 
 Spawns an OS process via `Port`. Stderr is merged into stdout — the LLM sees all output in a single result. If a skill needs to suppress or redirect stderr it does so in the command itself (`my-command 2>/dev/null`). Returns the full output on success or the output + exit code on failure.
 
-The executor reads optional `:cwd` and `:env` keys from the context map:
+The handler reads optional `:cwd` and `:env` keys from the context map:
 
 - **`:cwd`** — working directory for the spawned process. Passed to Port as `{:cd, path}`. When absent, the process inherits the BEAM's working directory.
 - **`:env`** — list of `{name, value}` string tuples. Merged with `System.get_env()` (caller-supplied vars override existing ones) and passed to Port as `{:env, charlist_pairs}`. When absent, the process inherits the BEAM's environment.
 
 ```elixir
-Executor.run("run-tests | grep FAILED")
-Executor.run("timeout 30 build")
+Handler.run("run-tests | grep FAILED")
+Handler.run("timeout 30 build")
 ```
 
 ---
@@ -45,8 +45,8 @@ Executor.run("timeout 30 build")
 ## Implementation
 
 ```elixir
-defmodule SkillKit.Executor.Shell do
-  @behaviour SkillKit.Executor.Behaviour
+defmodule SkillKit.Handler.Shell do
+  @behaviour SkillKit.Handler.Behaviour
 
   @impl true
   def execute(command, context) do
@@ -99,7 +99,7 @@ Uses `{:spawn_executable, path}` with explicit `args` rather than `{:spawn, comm
 ### LLM tool result
 
 ```elixir
-case Executor.run("run-tests") do
+case Handler.run("run-tests") do
   {:ok, output}            -> send_tool_result(llm, output)
   {:error, {output, code}} -> send_tool_error(llm, code, output)
 end
@@ -107,14 +107,14 @@ end
 
 ### From orchestration layer
 
-The executor is always called from `Subagent.Skill`, which runs in its own process under `Agent.SubagentSupervisor`. The executor blocks that process — the parent agent remains free to handle other messages.
+The handler is always called from `Subagent.Skill`, which runs in its own process under `Agent.SubagentSupervisor`. The handler blocks that process — the parent agent remains free to handle other messages.
 
 ```elixir
 defmodule Subagent.Skill do
   use GenServer
 
   def handle_info(:run, state) do
-    result = Executor.run(state.cmd)
+    result = Handler.run(state.cmd)
     send(state.parent, {:subagent_result, self(), result})
     {:stop, :normal, state}
   end
@@ -125,7 +125,7 @@ end
 
 ## What the LLM Controls
 
-Policy decisions belong in the skill invocation, not the executor:
+Policy decisions belong in the skill invocation, not the handler:
 
 | Concern | How |
 |---|---|
@@ -143,10 +143,10 @@ This spec describes the innermost execution layer — the Port wrapper. In the S
 | Layer | Module | Role |
 |---|---|---|
 | **Pipeline** | `SkillKit.Execution` | Named step pipeline (pre-hooks → execute → post-hooks), suspension/resumption |
-| **Orchestrator** | `SkillKit.Executor` | Builds pipelines, collects hooks from registry, convenience `run/4` |
-| **Shell** | `SkillKit.Executor.Shell` | This spec — Port wrapper, cwd/env, output collection |
+| **Orchestrator** | `SkillKit.Handler` | Builds pipelines, collects hooks from registry, convenience `run/4` |
+| **Shell** | `SkillKit.Handler.Shell` | This spec — Port wrapper, cwd/env, output collection |
 
-`Executor.Shell` implements the `Executor.Behaviour` contract (`execute/2`, `resume/3`). It is never called directly by consumers — `SkillKit.Executor.run/4` is the public entry point.
+`Handler.Shell` implements the `Handler.Behaviour` contract (`execute/2`, `resume/3`). It is never called directly by consumers — `SkillKit.Handler.run/4` is the public entry point.
 
 ---
 
@@ -158,4 +158,4 @@ No hard limit is enforced. If a skill can produce unbounded output, it should wr
 
 ### Cancellation
 
-Handled by OTP process lifecycle. The executor runs inside a `Subagent.Skill` GenServer. When the parent agent's supervisor kills the subagent process, Erlang closes the port. The OS process receives SIGHUP when its stdin closes. Skills that need graceful shutdown should trap SIGHUP. No explicit `cancel/1` API is needed — the OTP supervision tree is the cancellation mechanism.
+Handled by OTP process lifecycle. The handler runs inside a `Subagent.Skill` GenServer. When the parent agent's supervisor kills the subagent process, Erlang closes the port. The OS process receives SIGHUP when its stdin closes. Skills that need graceful shutdown should trap SIGHUP. No explicit `cancel/1` API is needed — the OTP supervision tree is the cancellation mechanism.

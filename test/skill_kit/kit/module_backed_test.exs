@@ -5,7 +5,7 @@ defmodule SkillKit.Test.EchoKit do
 
   alias SkillKit.Execution
 
-  @impl SkillKit.Executor.Behaviour
+  @impl SkillKit.Handler.Behaviour
   def execute(%Execution{skill: %{name: "test_kit:greet"}, input: input}) do
     {:ok, "Hello, #{input["name"]}!"}
   end
@@ -60,7 +60,7 @@ defmodule SkillKit.Kit.ModuleBackedTest do
       assert %Skill{} = skill
       assert skill.name == "test_kit:greet"
       assert skill.namespace == "test_kit"
-      assert skill.executor == SkillKit.Test.EchoKit
+      assert skill.handler == SkillKit.Test.EchoKit
       assert skill.description == "Greet a user"
       assert skill.body =~ "greet"
     end

@@ -1,8 +1,8 @@
-defmodule SkillKit.Executor.ShellTest do
+defmodule SkillKit.Handler.ShellTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Execution
-  alias SkillKit.Executor.Shell
+  alias SkillKit.Handler.Shell
 
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do

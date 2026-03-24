@@ -60,7 +60,7 @@ defmodule SkillKit.Execution do
   Builds an `Execution` pipeline for `skill`, `input`, and `context`.
 
   Hooks are passed via the `all_hooks:` option. Only hooks whose `:matcher`
-  regex matches the last segment of the executor module name are included.
+  regex matches the last segment of the handler module name are included.
 
   ## Options
 
@@ -69,12 +69,12 @@ defmodule SkillKit.Execution do
   @spec new(SkillKit.Skill.t() | nil, map(), map(), keyword()) :: t()
   def new(skill, input, context, opts \\ []) do
     all_hooks = Keyword.get(opts, :all_hooks, [])
-    executor = resolve_executor(skill, opts)
-    executor_name = executor_name(executor)
+    handler = resolve_handler(skill, opts)
+    handler_name = handler_name(handler)
 
     matching_hooks =
       Enum.filter(all_hooks, fn %Hook{matcher: matcher} ->
-        Regex.match?(matcher, executor_name)
+        Regex.match?(matcher, handler_name)
       end)
 
     pre_hooks = Enum.filter(matching_hooks, &(&1.phase == :pre))
@@ -85,7 +85,7 @@ defmodule SkillKit.Execution do
       |> Enum.with_index()
       |> Enum.map(fn {hook, i} -> {:pre_hook, "pre:#{i}", hook} end)
 
-    execute_step = {:execute, "execute", executor}
+    execute_step = {:execute, "execute", handler}
 
     post_steps =
       post_hooks
@@ -123,7 +123,7 @@ defmodule SkillKit.Execution do
   @doc """
   Resumes a suspended `Execution` from the step it was suspended at.
 
-  `decision` is passed directly to the suspended executor's `resume/3` callback,
+  `decision` is passed directly to the suspended handler's `resume/3` callback,
   or used to re-invoke a suspended hook.
   """
   @spec resume(t(), any()) :: {:ok, t()} | {:error, t()} | {:pending, t()}
@@ -132,8 +132,8 @@ defmodule SkillKit.Execution do
     remaining = Enum.drop_while(exec.steps, fn {_type, step_name, _mod} -> step_name != name end)
 
     case remaining do
-      [{:execute, _step_name, executor_mod} | _rest] ->
-        result = executor_mod.resume(exec, exec.suspended_state, decision)
+      [{:execute, _step_name, handler_mod} | _rest] ->
+        result = handler_mod.resume(exec, exec.suspended_state, decision)
         apply_step_result(remaining, exec, result)
 
       [{_hook_type, _step_name, hook} | _rest] ->
@@ -182,8 +182,8 @@ defmodule SkillKit.Execution do
     apply_step_result(steps, exec, invoke_handler(hook.handler, context))
   end
 
-  defp walk_steps([{:execute, _name, executor_mod} | _rest] = steps, exec) do
-    apply_step_result(steps, exec, executor_mod.execute(exec))
+  defp walk_steps([{:execute, _name, handler_mod} | _rest] = steps, exec) do
+    apply_step_result(steps, exec, handler_mod.execute(exec))
   end
 
   defp walk_steps([{:post_hook, _name, hook} | _rest] = steps, exec) do
@@ -208,23 +208,23 @@ defmodule SkillKit.Execution do
     %{exec | input: new_input}
   end
 
-  defp executor_name(executor) do
-    executor
+  defp handler_name(handler) do
+    handler
     |> Module.split()
     |> List.last()
   end
 
-  defp resolve_executor(nil, opts), do: Keyword.fetch!(opts, :executor)
-  defp resolve_executor(skill, _opts), do: skill.executor
+  defp resolve_handler(nil, opts), do: Keyword.fetch!(opts, :handler)
+  defp resolve_handler(skill, _opts), do: skill.handler
 
   defp build_pre_context(%{skill: nil, steps: steps} = exec) do
-    {:execute, _, executor} = Enum.find(steps, &match?({:execute, _, _}, &1))
+    {:execute, _, handler} = Enum.find(steps, &match?({:execute, _, _}, &1))
 
     %{
       skill: nil,
       scope: Map.get(exec.context, :scope),
       input: exec.input,
-      executor: executor
+      handler: handler
     }
   end
 
@@ -233,7 +233,7 @@ defmodule SkillKit.Execution do
       skill: exec.skill,
       scope: Map.get(exec.context, :scope),
       input: exec.input,
-      executor: exec.skill.executor
+      handler: exec.skill.handler
     }
   end
 

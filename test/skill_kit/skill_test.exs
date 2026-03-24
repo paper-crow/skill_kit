@@ -12,7 +12,7 @@ defmodule SkillKit.SkillTest do
       assert Map.has_key?(skill, :body)
       assert Map.has_key?(skill, :location)
       assert Map.has_key?(skill, :required_scope)
-      assert Map.has_key?(skill, :executor)
+      assert Map.has_key?(skill, :handler)
       assert Map.has_key?(skill, :hooks)
     end
 
@@ -27,8 +27,8 @@ defmodule SkillKit.SkillTest do
       assert %Skill{}.required_scope == []
     end
 
-    test "executor defaults to SkillKit.Executor.Shell" do
-      assert %Skill{}.executor == SkillKit.Executor.Shell
+    test "handler defaults to SkillKit.Handler.Shell" do
+      assert %Skill{}.handler == SkillKit.Handler.Shell
     end
 
     test "hooks defaults to empty list" do

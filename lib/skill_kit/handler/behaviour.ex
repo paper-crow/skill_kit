@@ -1,10 +1,10 @@
-defmodule SkillKit.Executor.Behaviour do
+defmodule SkillKit.Handler.Behaviour do
   @moduledoc """
-  Callback contract for executor modules.
+  Callback contract for handler modules.
 
-  Executors handle the actual command execution. The default executor
-  (`SkillKit.Executor.Shell`) shells out via `System.cmd/3`. Custom
-  executors can run commands in sandboxes, containers, or as Elixir code.
+  Handlers handle the actual command execution. The default handler
+  (`SkillKit.Handler.Shell`) shells out via `System.cmd/3`. Custom
+  handlers can run commands in sandboxes, containers, or as Elixir code.
 
   ## Three-value return
 
@@ -23,5 +23,5 @@ defmodule SkillKit.Executor.Behaviour do
             ) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
-  @callback tool_definition() :: SkillKit.Executor.ToolDefinition.t()
+  @callback tool_definition() :: SkillKit.Handler.ToolDefinition.t()
 end
