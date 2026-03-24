@@ -51,11 +51,36 @@ defmodule SkillKit.MixProject do
   defp docs do
     [
       main: "SkillKit",
-      extras: ["README.md"],
+      extras: [
+        "README.md",
+        "guides/architecture.md",
+        "guides/llm-providers.md",
+        "guides/backends.md",
+        "guides/hooks-and-execution.md",
+        "guides/authorization.md",
+        "guides/telemetry.md"
+      ],
+      groups_for_extras: [
+        Guides: Path.wildcard("guides/*.md")
+      ],
       groups_for_modules: [
         "Public API": [
           SkillKit,
           SkillKit.AgentRef
+        ],
+        "Types & Events": [
+          SkillKit.Types.UserMessage,
+          SkillKit.Types.AssistantMessage,
+          SkillKit.Types.SystemMessage,
+          SkillKit.Types.ToolCall,
+          SkillKit.Types.ToolResult,
+          SkillKit.Event.Delta,
+          SkillKit.Event.ToolCallStart,
+          SkillKit.Event.ToolCallComplete,
+          SkillKit.Event.Usage,
+          SkillKit.Event.Done,
+          SkillKit.Event.Error,
+          SkillKit.Event.Streamable
         ],
         "Agent System": [
           SkillKit.Agent,
@@ -69,13 +94,11 @@ defmodule SkillKit.MixProject do
         ],
         "LLM Providers": [
           SkillKit.LLM,
-          SkillKit.LLM.Message,
           SkillKit.LLM.Anthropic,
           SkillKit.LLM.Anthropic.Encoder,
-          SkillKit.LLM.Anthropic.Decoder,
-          SkillKit.LLM.Metadata,
           Anthropic,
-          Anthropic.Client
+          Anthropic.Client,
+          Anthropic.Event
         ],
         "Skills & Kits": [
           SkillKit.Skill,
@@ -102,6 +125,10 @@ defmodule SkillKit.MixProject do
         Persistence: [
           SkillKit.Conversation.Store,
           SkillKit.Conversation.Store.Filesystem
+        ],
+        Telemetry: [
+          SkillKit.Telemetry,
+          Anthropic.Telemetry
         ],
         Infrastructure: [
           SkillKit.Supervisor,
