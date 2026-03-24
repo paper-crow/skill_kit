@@ -87,9 +87,9 @@ defmodule SkillKit.ExecutorTest do
   defmodule PendingExecutor do
     @behaviour SkillKit.Executor.Behaviour
     @impl true
-    def execute(_cmd, _ctx), do: {:pending, %{awaiting: :approval}}
+    def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
     @impl true
-    def resume(_state, :approved, _ctx), do: {:ok, "approved"}
-    def resume(_state, {:denied, reason}, _ctx), do: {:error, {:denied, reason}}
+    def resume(%SkillKit.Execution{}, _state, :approved), do: {:ok, "approved"}
+    def resume(%SkillKit.Execution{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
   end
 end

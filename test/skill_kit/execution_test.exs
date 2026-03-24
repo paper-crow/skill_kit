@@ -191,11 +191,11 @@ defmodule SkillKit.ExecutionTest do
     @behaviour SkillKit.Executor.Behaviour
 
     @impl true
-    def execute(_command, _context), do: {:pending, %{awaiting: :approval}}
+    def execute(%SkillKit.Execution{}), do: {:pending, %{awaiting: :approval}}
 
     @impl true
-    def resume(_state, :approved, _context), do: {:ok, "approved result"}
-    def resume(_state, {:denied, reason}, _context), do: {:error, {:denied, reason}}
+    def resume(%SkillKit.Execution{}, _state, :approved), do: {:ok, "approved result"}
+    def resume(%SkillKit.Execution{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
   end
 
   defmodule MFAHandler do

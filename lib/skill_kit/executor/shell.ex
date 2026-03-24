@@ -5,14 +5,14 @@ defmodule SkillKit.Executor.Shell do
   Executes the command string using `Port.open/2` with `:stderr_to_stdout`.
   Returns stdout on success, or `{output, exit_code}` on failure.
 
-  `resume/3` delegates to `execute/2` — shell commands have no approval
-  concept, so resuming just runs the command stored in the frozen state.
+  `resume/3` delegates to `execute/1` — shell commands have no approval
+  concept, so resuming just re-executes the command from the Execution struct.
   """
 
   @behaviour SkillKit.Executor.Behaviour
 
   @impl true
-  def execute(command, context) do
+  def execute(%SkillKit.Execution{command: command, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =
@@ -74,11 +74,11 @@ defmodule SkillKit.Executor.Shell do
   end
 
   @impl true
-  def resume(%{command: command}, :approved, context) do
-    execute(command, context)
+  def resume(%SkillKit.Execution{} = exec, _state, :approved) do
+    execute(exec)
   end
 
-  def resume(_state, {:denied, reason}, _context) do
+  def resume(_exec, _state, {:denied, reason}) do
     {:error, {:denied, reason}}
   end
 end

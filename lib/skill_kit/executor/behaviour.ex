@@ -13,10 +13,10 @@ defmodule SkillKit.Executor.Behaviour do
   - `{:pending, state}` — needs approval; caller manages the lifecycle
   """
 
-  @callback execute(command :: String.t(), context :: map()) ::
+  @callback execute(execution :: SkillKit.Execution.t()) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
-  @callback resume(state :: any(), decision :: :approved | {:denied, any()}, context :: map()) ::
+  @callback resume(execution :: SkillKit.Execution.t(), state :: any(), decision :: :approved | {:denied, any()}) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
   @callback tool_definition() :: SkillKit.Executor.ToolDefinition.t()

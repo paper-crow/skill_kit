@@ -133,8 +133,7 @@ defmodule SkillKit.Execution do
 
     case remaining do
       [{:execute, _step_name, executor_mod} | _rest] ->
-        context = build_execute_context(exec)
-        result = executor_mod.resume(exec.suspended_state, decision, context)
+        result = executor_mod.resume(exec, exec.suspended_state, decision)
         apply_step_result(remaining, exec, result)
 
       [{_hook_type, _step_name, hook} | _rest] ->
@@ -184,8 +183,7 @@ defmodule SkillKit.Execution do
   end
 
   defp walk_steps([{:execute, _name, executor_mod} | _rest] = steps, exec) do
-    context = build_execute_context(exec)
-    apply_step_result(steps, exec, executor_mod.execute(exec.command, context))
+    apply_step_result(steps, exec, executor_mod.execute(exec))
   end
 
   defp walk_steps([{:post_hook, _name, hook} | _rest] = steps, exec) do
@@ -237,10 +235,6 @@ defmodule SkillKit.Execution do
       command: exec.command,
       executor: exec.skill.executor
     }
-  end
-
-  defp build_execute_context(exec) do
-    exec.context
   end
 
   defp build_post_context(exec, result) do
