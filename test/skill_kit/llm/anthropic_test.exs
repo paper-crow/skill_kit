@@ -2,7 +2,7 @@ defmodule SkillKit.LLM.AnthropicTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.LLM.Anthropic, as: Adapter
-  alias SkillKit.LLM.Message
+  alias SkillKit.Types.UserMessage
 
   describe "stream/2" do
     setup do
@@ -39,7 +39,7 @@ defmodule SkillKit.LLM.AnthropicTest do
         end)
       end)
 
-      messages = [%Message.User{content: "Hi"}]
+      messages = [%UserMessage{content: "Hi"}]
 
       assert {:ok, stream} =
                Adapter.stream(
@@ -49,8 +49,9 @@ defmodule SkillKit.LLM.AnthropicTest do
 
       events = Enum.to_list(stream)
       assert events != []
-      # Verify we got a message_stop event
-      assert Enum.any?(events, &(&1["type"] == "message_stop"))
+      # Verify we got a text delta and a done event (SkillKit events)
+      assert Enum.any?(events, &match?(%SkillKit.Event.Delta{}, &1))
+      assert Enum.any?(events, &match?(%SkillKit.Event.Done{}, &1))
     end
   end
 end

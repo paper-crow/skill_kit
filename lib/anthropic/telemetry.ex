@@ -12,7 +12,14 @@ defmodule Anthropic.Telemetry do
   - `[:anthropic, :rate_limited]` — when a 429 triggers a retry
   """
 
-  @doc false
+  @doc """
+  Executes a `<prefix>:start` telemetry event and returns the monotonic start time.
+
+  `event` is a list of atoms appended to `[:anthropic]` (e.g. `[:request]`).
+  `meta` is the metadata map forwarded to `:telemetry.execute/3`.
+  `extra_measurements` are merged with the `:system_time` measurement.
+  """
+  @spec start(list(atom()) | atom(), map(), map()) :: integer()
   def start(event, meta \\ %{}, extra_measurements \\ %{}) do
     start_time = System.monotonic_time()
 
@@ -25,7 +32,13 @@ defmodule Anthropic.Telemetry do
     start_time
   end
 
-  @doc false
+  @doc """
+  Executes a `<prefix>:stop` telemetry event, measuring duration since `start_time`.
+
+  `start_time` should be the value returned by `start/3`.
+  `extra_measurements` are merged with the computed `:duration`.
+  """
+  @spec stop(list(atom()) | atom(), integer(), map(), map()) :: :ok
   def stop(event, start_time, meta \\ %{}, extra_measurements \\ %{}) do
     end_time = System.monotonic_time()
     measurements = Map.put(extra_measurements, :duration, end_time - start_time)
@@ -37,7 +50,12 @@ defmodule Anthropic.Telemetry do
     )
   end
 
-  @doc false
+  @doc """
+  Executes a point-in-time telemetry event (no start/stop pairing).
+
+  `event` is a list of atoms appended to `[:anthropic]`.
+  """
+  @spec event(list(atom()) | atom(), map(), map()) :: :ok
   def event(event, measurements, meta) do
     :telemetry.execute(build_event_prefix(event), measurements, meta)
   end

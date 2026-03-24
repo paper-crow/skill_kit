@@ -29,7 +29,7 @@ defmodule AnthropicTest do
                  max_tokens: 1024
                )
 
-      assert [%{"type" => "message_stop"}] = Enum.to_list(stream)
+      assert [%Anthropic.Event.MessageStop{}] = Enum.to_list(stream)
     end
   end
 end

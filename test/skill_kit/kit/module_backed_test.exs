@@ -17,10 +17,11 @@ defmodule SkillKit.Kit.ModuleBackedTest do
   alias SkillKit.Agent.ToolBuilder
   alias SkillKit.Execution
   alias SkillKit.Skill
+  alias SkillKit.Test.EchoKit
 
   describe "module-backed skill lifecycle" do
     setup do
-      {:ok, [kit]} = SkillKit.Test.EchoKit.load_kits([])
+      {:ok, [kit]} = EchoKit.load_kits([])
       [skill] = kit.skills
       %{kit: kit, skill: skill}
     end
@@ -53,7 +54,7 @@ defmodule SkillKit.Kit.ModuleBackedTest do
         context: %{}
       }
 
-      assert {:ok, "Hello, World!"} = SkillKit.Test.EchoKit.execute(execution)
+      assert {:ok, "Hello, World!"} = EchoKit.execute(execution)
     end
 
     test "skill has correct properties", %{skill: skill} do

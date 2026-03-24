@@ -16,11 +16,12 @@ defmodule SkillKit.KitTest do
   alias SkillKit.Agent.Definition
   alias SkillKit.Execution
   alias SkillKit.Kit
+  alias SkillKit.KitTest.TestKit
   alias SkillKit.Skill
 
   describe "use SkillKit.Kit" do
     test "load_kits/1 returns kit with skills from skills/ directory" do
-      assert {:ok, [kit]} = SkillKit.KitTest.TestKit.load_kits([])
+      assert {:ok, [kit]} = TestKit.load_kits([])
       assert kit.name == "test_kit"
       assert length(kit.skills) == 1
 
@@ -32,13 +33,13 @@ defmodule SkillKit.KitTest do
     end
 
     test "source config is stored in skill metadata" do
-      assert {:ok, [kit]} = SkillKit.KitTest.TestKit.load_kits(foo: :bar)
+      assert {:ok, [kit]} = TestKit.load_kits(foo: :bar)
       [skill] = kit.skills
       assert skill.metadata["source_config"] == [foo: :bar]
     end
 
     test "execute/1 dispatches to the Kit module" do
-      {:ok, [kit]} = SkillKit.KitTest.TestKit.load_kits([])
+      {:ok, [kit]} = TestKit.load_kits([])
       [skill] = kit.skills
 
       execution = %Execution{
@@ -47,11 +48,11 @@ defmodule SkillKit.KitTest do
         context: %{}
       }
 
-      assert {:ok, "Hello, World!"} = SkillKit.KitTest.TestKit.execute(execution)
+      assert {:ok, "Hello, World!"} = TestKit.execute(execution)
     end
 
     test "kit name is inferred from module" do
-      {:ok, [kit]} = SkillKit.KitTest.TestKit.load_kits([])
+      {:ok, [kit]} = TestKit.load_kits([])
       assert kit.name == "test_kit"
     end
   end

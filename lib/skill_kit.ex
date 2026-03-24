@@ -15,22 +15,23 @@ defmodule SkillKit do
       :ok = SkillKit.send_message(agent, "Hello")
 
       receive do
-        {:skill_kit, agent_name, {:delta, text}} -> IO.write(text)
-        {:skill_kit, agent_name, {:response, text}} -> IO.puts("Done.")
-        {:skill_kit, agent_name, {:error, reason}} -> IO.puts("Error")
+        %SkillKit.Event.Delta{text: text} -> IO.write(text)
+        %SkillKit.Types.AssistantMessage{content: text} -> IO.puts("Done.")
+        %SkillKit.Event.Error{reason: reason} -> IO.puts("Error")
       end
 
       SkillKit.stop_agent(agent)
 
   ## Events
 
-  The caller process receives these messages:
+  The caller process receives structs directly:
 
-    * `{:skill_kit, agent_name, {:delta, text}}` — real-time text fragment
-    * `{:skill_kit, agent_name, {:response, text}}` — complete text at turn end
-    * `{:skill_kit, agent_name, {:tool_call, name, input}}` — tool invocation
-    * `{:skill_kit, agent_name, {:tool_result, name, content, is_error}}` — tool result
-    * `{:skill_kit, agent_name, {:error, reason}}` — LLM or execution error
+    * `%SkillKit.Event.Delta{agent: name, text: text}` — real-time text fragment
+    * `%SkillKit.Event.ToolCallStart{agent: name, id: id, name: name}` — tool call began
+    * `%SkillKit.Event.ToolCallComplete{agent: name, id: id, name: name, input: input}` — tool call parsed
+    * `%SkillKit.Types.AssistantMessage{agent: name, content: text}` — complete response at turn end
+    * `%SkillKit.Types.ToolResult{agent: name, content: content}` — tool result
+    * `%SkillKit.Event.Error{agent: name, reason: reason}` — LLM or execution error
 
   ## Configuration
 
@@ -44,7 +45,9 @@ defmodule SkillKit do
 
   alias SkillKit.Agent
   alias SkillKit.AgentRef
-  alias SkillKit.LLM.Message
+  alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
 
   @type agent :: AgentRef.t()
 
@@ -100,7 +103,7 @@ defmodule SkillKit do
   """
   @spec send_message(agent(), String.t()) :: :ok | {:error, :not_found}
   def send_message(%AgentRef{} = agent, content) when is_binary(content) do
-    message = %Message.User{content: content}
+    message = %UserMessage{content: content}
 
     try do
       case Registry.lookup(agent.registry, {agent.name, :mailbox}) do
@@ -113,6 +116,39 @@ defmodule SkillKit do
       end
     rescue
       ArgumentError -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  Sends a message and blocks until the agent responds.
+
+  Returns `{:ok, text}` on success, `{:error, reason}` on LLM error,
+  or `{:error, :timeout}` if the turn doesn't complete within `timeout` ms.
+
+  Must be called from the process registered as `:caller` in `start_agent/2`.
+  Intermediate events (`:delta`, `:tool_call`, `:tool_result`) remain in
+  the caller's mailbox and are not consumed.
+
+  ## Examples
+
+      {:ok, "Hello!"} = SkillKit.send_message_sync(agent, "Hi")
+      {:error, :timeout} = SkillKit.send_message_sync(agent, "Hi", 100)
+  """
+  @spec send_message_sync(agent(), String.t(), timeout()) ::
+          {:ok, AssistantMessage.t()} | {:error, term()}
+  def send_message_sync(%AgentRef{} = agent, content, timeout \\ 5000) do
+    case send_message(agent, content) do
+      :ok -> await_response(agent.name, timeout)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp await_response(agent_name, timeout) do
+    receive do
+      %AssistantMessage{agent: ^agent_name} = msg -> {:ok, msg}
+      %EventError{agent: ^agent_name, reason: reason} -> {:error, reason}
+    after
+      timeout -> {:error, :timeout}
     end
   end
 

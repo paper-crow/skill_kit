@@ -9,6 +9,7 @@ defmodule SkillKit.LLM.Anthropic do
 
   @behaviour SkillKit.LLM
 
+  alias SkillKit.Event.Streamable
   alias SkillKit.LLM.Anthropic.Encoder
 
   @default_model "claude-sonnet-4-20250514"
@@ -19,7 +20,7 @@ defmodule SkillKit.LLM.Anthropic do
   def stream(messages, opts) do
     api_key = Keyword.get(opts, :api_key) || resolve_api_key()
     endpoint = Keyword.get(opts, :endpoint, resolve_endpoint())
-    client = Anthropic.Client.new(api_key: api_key, endpoint: endpoint)
+    config = [api_key: api_key, endpoint: endpoint]
 
     encoded_messages = Encoder.encode_messages(messages)
     {tools, opts} = Keyword.pop(opts, :tools, [])
@@ -28,11 +29,21 @@ defmodule SkillKit.LLM.Anthropic do
     request_opts =
       opts
       |> Keyword.drop([:api_key, :endpoint])
-      |> then(&if(encoded_tools != [], do: Keyword.put(&1, :tools, encoded_tools), else: &1))
+      |> maybe_put_tools(encoded_tools)
       |> Keyword.put_new(:model, @default_model)
       |> Keyword.put_new(:max_tokens, @default_max_tokens)
 
-    Anthropic.Client.stream(client, encoded_messages, request_opts)
+    case Anthropic.stream(config, encoded_messages, request_opts) do
+      {:ok, stream} -> {:ok, to_skill_kit_stream(stream)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_put_tools(opts, []), do: opts
+  defp maybe_put_tools(opts, tools), do: Keyword.put(opts, :tools, tools)
+
+  defp to_skill_kit_stream(anthropic_stream) do
+    Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, &Streamable.to_events/2)
   end
 
   defp resolve_api_key do

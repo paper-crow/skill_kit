@@ -4,6 +4,8 @@ defmodule SkillKitTest do
   import Mox
 
   alias SkillKit.Conversation.Store.Filesystem
+  alias SkillKit.Event.Delta
+  alias SkillKit.Types.AssistantMessage
 
   setup :set_mox_global
   setup :verify_on_exit!
@@ -19,34 +21,7 @@ defmodule SkillKitTest do
         model: "test-model"
       }
 
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Hello"}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => " world"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hello world"})
 
       {:ok, agent} =
         SkillKit.start_agent(definition,
@@ -55,11 +30,10 @@ defmodule SkillKitTest do
 
       assert %SkillKit.AgentRef{name: "api-test-agent"} = agent
 
-      :ok = SkillKit.send_message(agent, "Hi")
+      assert {:ok, %AssistantMessage{content: "Hello world"}} =
+               SkillKit.send_message_sync(agent, "Hi")
 
-      assert_receive {:skill_kit, "api-test-agent", {:delta, "Hello"}}, 2000
-      assert_receive {:skill_kit, "api-test-agent", {:delta, " world"}}, 2000
-      assert_receive {:skill_kit, "api-test-agent", {:response, "Hello world"}}, 2000
+      assert_receive %Delta{text: "Hello world"}
 
       assert :ok = SkillKit.stop_agent(agent)
     end
@@ -120,29 +94,7 @@ defmodule SkillKitTest do
       }
 
       # First session — agent gets a message and responds
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %{
-            "type" => "message_start",
-            "message" => %{"id" => "msg_1", "role" => "assistant", "content" => []}
-          },
-          %{
-            "type" => "content_block_start",
-            "index" => 0,
-            "content_block" => %{"type" => "text", "text" => ""}
-          },
-          %{
-            "type" => "content_block_delta",
-            "index" => 0,
-            "delta" => %{"type" => "text_delta", "text" => "Hi!"}
-          },
-          %{"type" => "content_block_stop", "index" => 0},
-          %{"type" => "message_delta", "delta" => %{"stop_reason" => "end_turn"}},
-          %{"type" => "message_stop"}
-        ]
-
-        {:ok, Stream.map(events, & &1)}
-      end)
+      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hi!"})
 
       {:ok, agent} =
         SkillKit.start_agent(definition,
@@ -150,8 +102,8 @@ defmodule SkillKitTest do
           caller: self()
         )
 
-      :ok = SkillKit.send_message(agent, "Hello")
-      assert_receive {:skill_kit, "store-test-agent", {:response, "Hi!"}}, 2000
+      assert {:ok, %AssistantMessage{content: "Hi!"}} =
+               SkillKit.send_message_sync(agent, "Hello")
 
       # Give the Server time to complete save_conversation after the turn
       Process.sleep(100)
@@ -163,6 +115,82 @@ defmodule SkillKitTest do
                Filesystem.load("store-test-agent", path: store_path)
 
       assert length(messages) == 2
+    end
+  end
+
+  describe "send_message_sync/3" do
+    test "blocks and returns {:ok, %AssistantMessage{}} for text response" do
+      definition = %SkillKit.Agent.Definition{
+        name: "sync-test-agent",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp/test",
+        workspace: "/tmp/test",
+        model: "test-model"
+      }
+
+      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hello world"})
+
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      assert {:ok, %AssistantMessage{content: "Hello world"}} =
+               SkillKit.send_message_sync(agent, "Hi")
+    end
+
+    test "returns {:error, reason} for LLM errors" do
+      definition = %SkillKit.Agent.Definition{
+        name: "sync-error-agent",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp/test",
+        workspace: "/tmp/test"
+      }
+
+      SkillKit.Test.expect_error(500, "internal error")
+
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      assert {:error, {500, "internal error"}} = SkillKit.send_message_sync(agent, "Hi")
+    end
+
+    test "deltas arrive at caller before send_message_sync returns" do
+      definition = %SkillKit.Agent.Definition{
+        name: "sync-delta-agent",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp/test",
+        workspace: "/tmp/test",
+        model: "test-model"
+      }
+
+      SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hello world"})
+
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      {:ok, %AssistantMessage{content: "Hello world"}} =
+        SkillKit.send_message_sync(agent, "Hi")
+
+      # Deltas should be in the mailbox — they arrived before the response
+      assert_receive %Delta{text: "Hello world"}
+    end
+
+    test "returns {:error, :timeout} when timeout expires" do
+      definition = %SkillKit.Agent.Definition{
+        name: "sync-timeout-agent",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp/test",
+        workspace: "/tmp/test"
+      }
+
+      # Mock that never returns — simulate a halted server
+      Mox.stub(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+        Process.sleep(:infinity)
+      end)
+
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      assert {:error, :timeout} = SkillKit.send_message_sync(agent, "Hi", 100)
     end
   end
 end

@@ -111,6 +111,8 @@ defmodule Anthropic.Client do
       |> String.split("\n")
       |> Enum.filter(&String.starts_with?(&1, "data: "))
       |> Enum.map(fn "data: " <> json -> Jason.decode!(json) end)
+      |> Enum.map(&Anthropic.Event.parse/1)
+      |> Enum.reject(&(&1 == :skip))
     end)
   end
 end

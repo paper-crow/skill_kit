@@ -11,10 +11,18 @@ defmodule SkillKit.Agent.Server do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Agent.ToolBuilder
+  alias SkillKit.Event.Delta
+  alias SkillKit.Event.Done
+  alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Event.ToolCallStart
+  alias SkillKit.Event.Usage
   alias SkillKit.Execution
-  alias SkillKit.LLM.Anthropic.Decoder
-  alias SkillKit.LLM.Message
   alias SkillKit.Telemetry
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.SystemMessage
+  alias SkillKit.Types.ToolCall
+  alias SkillKit.Types.ToolResult
 
   defstruct [
     :agent_name,
@@ -142,7 +150,7 @@ defmodule SkillKit.Agent.Server do
 
         intent = entry.parent_intent || "N/A"
 
-        message = %Message.System{
+        message = %SystemMessage{
           content: """
           [Subagent Complete] #{entry.name} finished the task you delegated.
 
@@ -177,7 +185,7 @@ defmodule SkillKit.Agent.Server do
       {entry, subagents} ->
         state = %{state | subagents: subagents}
 
-        message = %Message.System{
+        message = %SystemMessage{
           content:
             "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
               "Reason: #{inspect(reason)}"
@@ -202,10 +210,10 @@ defmodule SkillKit.Agent.Server do
       )
 
     case stream(state, tools) do
-      {:ok, stream} ->
-        acc = Enum.reduce(stream, Decoder.new_accumulator(), &stream_event(&1, &2, state))
+      {:ok, event_stream} ->
+        acc = Enum.reduce(event_stream, new_accumulator(), &process_event(&1, &2, state))
 
-        response = Decoder.finalize(acc)
+        response = finalize_response(acc)
 
         Telemetry.event([:agent, :usage], acc.usage, %{agent_name: state.agent_name})
 
@@ -221,17 +229,17 @@ defmodule SkillKit.Agent.Server do
       {:error, reason} ->
         Telemetry.event([:agent, :error], %{}, %{agent_name: state.agent_name, error: reason})
 
-        notify_caller(state, {:error, reason})
+        notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
         state
     end
   end
 
-  defp handle_response(%{tool_calls: []} = response, state) do
-    notify_caller(state, {:response, response.content})
+  defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
+    notify_caller(state, %{response | agent: state.agent_name})
     state
   end
 
-  defp handle_response(%{tool_calls: tool_calls} = _response, state) do
+  defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
     classifier = ToolBuilder.classifier(state.kits, state.activated_skills)
     {results, state} = execute_tool_calls(tool_calls, state, classifier)
 
@@ -251,8 +259,6 @@ defmodule SkillKit.Agent.Server do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
       Telemetry.event([:agent, :tool_call], %{}, %{agent_name: acc.agent_name, tool_call: tc})
 
-      notify_caller(acc, {:tool_call, tc.name, tc.input})
-
       {result, acc} =
         case classifier.(tc) do
           :handler -> {execute_command(tc, acc), acc}
@@ -262,28 +268,28 @@ defmodule SkillKit.Agent.Server do
           :builtin -> handle_builtin(tc, acc)
         end
 
-      notify_caller(acc, {:tool_result, tc.name, result.content, result.is_error})
+      notify_caller(acc, %{result | agent: acc.agent_name})
 
       {result, acc}
     end)
   end
 
-  defp execute_command(%Message.ToolCall{id: id, input: input}, state) do
+  defp execute_command(%ToolCall{id: id, input: input}, state) do
     context = %{cwd: state.definition.workspace, scope: state.scope}
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
     case SkillKit.Handler.run(skill_registry, input, context) do
       {:ok, execution} ->
-        %Message.ToolResult{
+        %ToolResult{
           tool_call_id: id,
           content: extract_output(execution.results["execute"])
         }
 
       {:error, execution} ->
-        %Message.ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
+        %ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
 
       {:pending, _execution} ->
-        %Message.ToolResult{
+        %ToolResult{
           tool_call_id: id,
           content: "Command requires approval (not yet supported).",
           is_error: true
@@ -307,7 +313,7 @@ defmodule SkillKit.Agent.Server do
   defp ensure_non_empty(str) when is_binary(str), do: str
   defp ensure_non_empty(nil), do: "(no output)"
 
-  defp activate_skill(%Message.ToolCall{id: id, input: input}, state) do
+  defp activate_skill(%ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
@@ -325,17 +331,17 @@ defmodule SkillKit.Agent.Server do
             state
           end
 
-        {%Message.ToolResult{tool_call_id: id, content: rendered_body}, state}
+        {%ToolResult{tool_call_id: id, content: rendered_body}, state}
 
       {:error, :unauthorized} ->
-        {%Message.ToolResult{
+        {%ToolResult{
            tool_call_id: id,
            content: "Unauthorized: insufficient scope for skill #{skill_name}",
            is_error: true
          }, state}
 
       {:error, reason} ->
-        {%Message.ToolResult{
+        {%ToolResult{
            tool_call_id: id,
            content: "Error: #{inspect(reason)}",
            is_error: true
@@ -349,7 +355,7 @@ defmodule SkillKit.Agent.Server do
     |> Enum.find(&(&1.name == name))
   end
 
-  defp execute_module_skill(%Message.ToolCall{id: id, input: input}, skill, state) do
+  defp execute_module_skill(%ToolCall{id: id, input: input}, skill, state) do
     source_config = Map.get(skill.metadata, "source_config", [])
 
     context =
@@ -360,18 +366,18 @@ defmodule SkillKit.Agent.Server do
 
     case skill.handler.execute(execution) do
       {:ok, result} ->
-        %Message.ToolResult{tool_call_id: id, content: to_string(result)}
+        %ToolResult{tool_call_id: id, content: to_string(result)}
 
       {:error, reason} ->
-        %Message.ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
+        %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
     end
   end
 
-  defp spawn_subagent(%Message.ToolCall{id: id, name: name, input: input}, state) do
+  defp spawn_subagent(%ToolCall{id: id, name: name, input: input}, state) do
     task = Map.get(input, "task", "")
 
     if state.depth >= state.definition.max_agent_depth do
-      result = %Message.ToolResult{
+      result = %ToolResult{
         tool_call_id: id,
         content:
           "Cannot spawn subagent: max depth (#{state.definition.max_agent_depth}) reached.",
@@ -382,7 +388,7 @@ defmodule SkillKit.Agent.Server do
     else
       case find_agent_definition(name, state.kits) do
         nil ->
-          result = %Message.ToolResult{
+          result = %ToolResult{
             tool_call_id: id,
             content: "Unknown agent: #{name}",
             is_error: true
@@ -428,7 +434,7 @@ defmodule SkillKit.Agent.Server do
 
         SkillKit.send_message(agent_ref, task)
 
-        result = %Message.ToolResult{
+        result = %ToolResult{
           tool_call_id: id,
           content: "Delegated to #{name}. You will receive the result when it completes."
         }
@@ -436,7 +442,7 @@ defmodule SkillKit.Agent.Server do
         {result, state}
 
       {:error, reason} ->
-        result = %Message.ToolResult{
+        result = %ToolResult{
           tool_call_id: id,
           content: "Failed to start subagent #{name}: #{inspect(reason)}",
           is_error: true
@@ -456,12 +462,12 @@ defmodule SkillKit.Agent.Server do
     messages
     |> Enum.reverse()
     |> Enum.find_value(fn
-      %Message.Assistant{content: content} when is_binary(content) -> content
+      %AssistantMessage{content: content} when is_binary(content) -> content
       _ -> nil
     end)
   end
 
-  defp handle_builtin(%Message.ToolCall{id: id, name: "report_result", input: input}, state) do
+  defp handle_builtin(%ToolCall{id: id, name: "report_result", input: input}, state) do
     result = Map.get(input, "result", "")
 
     case lookup_parent(state) do
@@ -477,16 +483,15 @@ defmodule SkillKit.Agent.Server do
     end
 
     state = %{state | halted: true}
-    {%Message.ToolResult{tool_call_id: id, content: "Result reported successfully."}, state}
+    {%ToolResult{tool_call_id: id, content: "Result reported successfully."}, state}
   end
 
-  defp handle_builtin(%Message.ToolCall{id: id, name: "report_status"}, state) do
-    {%Message.ToolResult{tool_call_id: id, content: "Status acknowledged."}, state}
+  defp handle_builtin(%ToolCall{id: id, name: "report_status"}, state) do
+    {%ToolResult{tool_call_id: id, content: "Status acknowledged."}, state}
   end
 
-  defp handle_builtin(%Message.ToolCall{id: id, name: name}, state) do
-    {%Message.ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true},
-     state}
+  defp handle_builtin(%ToolCall{id: id, name: name}, state) do
+    {%ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true}, state}
   end
 
   defp lookup_parent(%{parent_registry: nil}), do: :not_found
@@ -507,21 +512,51 @@ defmodule SkillKit.Agent.Server do
     )
   end
 
-  defp stream_event(event, acc, state) do
-    {action, acc} = Decoder.decode_event(event, acc)
+  defp new_accumulator do
+    %{text: "", tool_calls: [], usage: %{input_tokens: 0, output_tokens: 0}}
+  end
 
-    case action do
-      {:delta, text} -> notify_caller(state, {:delta, text})
-      :none -> :ok
-    end
+  defp process_event(%Delta{text: text}, acc, state) do
+    notify_caller(state, %Delta{text: text, agent: state.agent_name})
+    %{acc | text: acc.text <> text}
+  end
 
+  defp process_event(%ToolCallStart{} = event, acc, state) do
+    notify_caller(state, %{event | agent: state.agent_name})
     acc
+  end
+
+  defp process_event(%ToolCallComplete{} = event, acc, state) do
+    notify_caller(state, %{event | agent: state.agent_name})
+    tool_call = %ToolCall{id: event.id, name: event.name, input: event.input}
+    %{acc | tool_calls: acc.tool_calls ++ [tool_call]}
+  end
+
+  defp process_event(%Usage{} = usage, acc, _state) do
+    merged = %{
+      input_tokens: acc.usage.input_tokens + usage.input_tokens,
+      output_tokens: acc.usage.output_tokens + usage.output_tokens
+    }
+
+    %{acc | usage: merged}
+  end
+
+  defp process_event(%Done{}, acc, _state), do: acc
+  defp process_event(_other, acc, _state), do: acc
+
+  defp finalize_response(acc) do
+    content = if acc.text == "", do: nil, else: acc.text
+
+    %AssistantMessage{
+      content: content,
+      tool_calls: acc.tool_calls
+    }
   end
 
   defp notify_caller(%{caller: nil}, _event), do: :ok
 
-  defp notify_caller(%{caller: pid, agent_name: name}, event) do
-    send(pid, {:skill_kit, name, event})
+  defp notify_caller(%{caller: pid}, event) do
+    send(pid, event)
   end
 
   defp cast_to_mailbox(state, message) do

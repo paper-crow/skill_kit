@@ -2,16 +2,20 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.LLM.Anthropic.Encoder
-  alias SkillKit.LLM.Message
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.SystemMessage
+  alias SkillKit.Types.ToolCall
+  alias SkillKit.Types.ToolResult
+  alias SkillKit.Types.UserMessage
 
   describe "encode_messages/1" do
     test "encodes a simple user message" do
-      messages = [%Message.User{content: "hello"}]
+      messages = [%UserMessage{content: "hello"}]
       assert [%{"role" => "user", "content" => "hello"}] = Encoder.encode_messages(messages)
     end
 
     test "encodes an assistant message with no tool calls" do
-      messages = [%Message.Assistant{content: "hi there"}]
+      messages = [%AssistantMessage{content: "hi there"}]
 
       assert [%{"role" => "assistant", "content" => "hi there"}] =
                Encoder.encode_messages(messages)
@@ -19,10 +23,10 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "encodes an assistant message with tool calls" do
       messages = [
-        %Message.Assistant{
+        %AssistantMessage{
           content: "Let me check.",
           tool_calls: [
-            %Message.ToolCall{id: "tc_1", name: "build:check", input: %{"project" => "a"}}
+            %ToolCall{id: "tc_1", name: "build:check", input: %{"project" => "a"}}
           ]
         }
       ]
@@ -43,10 +47,10 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "encodes an assistant message with tool calls but no text" do
       messages = [
-        %Message.Assistant{
+        %AssistantMessage{
           content: nil,
           tool_calls: [
-            %Message.ToolCall{id: "tc_1", name: "build:check", input: %{}}
+            %ToolCall{id: "tc_1", name: "build:check", input: %{}}
           ]
         }
       ]
@@ -59,8 +63,8 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "encodes tool results as user message with content blocks" do
       messages = [
-        %Message.ToolResult{tool_call_id: "tc_1", content: "build passing"},
-        %Message.ToolResult{tool_call_id: "tc_2", content: "deployed", is_error: false}
+        %ToolResult{tool_call_id: "tc_1", content: "build passing"},
+        %ToolResult{tool_call_id: "tc_2", content: "deployed", is_error: false}
       ]
 
       assert [%{"role" => "user", "content" => content_blocks}] =
@@ -74,7 +78,7 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "encodes tool result with is_error flag" do
       messages = [
-        %Message.ToolResult{tool_call_id: "tc_1", content: "not found", is_error: true}
+        %ToolResult{tool_call_id: "tc_1", content: "not found", is_error: true}
       ]
 
       assert [%{"role" => "user", "content" => [block]}] = Encoder.encode_messages(messages)
@@ -82,7 +86,7 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
     end
 
     test "encodes system message as user message" do
-      messages = [%Message.System{content: "[Task complete]"}]
+      messages = [%SystemMessage{content: "[Task complete]"}]
 
       assert [%{"role" => "user", "content" => "[Task complete]"}] =
                Encoder.encode_messages(messages)
@@ -90,15 +94,15 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "encodes a full conversation" do
       messages = [
-        %Message.User{content: "Deploy"},
-        %Message.Assistant{
+        %UserMessage{content: "Deploy"},
+        %AssistantMessage{
           content: "Checking.",
           tool_calls: [
-            %Message.ToolCall{id: "tc_1", name: "build:check", input: %{}}
+            %ToolCall{id: "tc_1", name: "build:check", input: %{}}
           ]
         },
-        %Message.ToolResult{tool_call_id: "tc_1", content: "ok"},
-        %Message.Assistant{content: "Done."}
+        %ToolResult{tool_call_id: "tc_1", content: "ok"},
+        %AssistantMessage{content: "Done."}
       ]
 
       encoded = Encoder.encode_messages(messages)
@@ -108,23 +112,23 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
 
     test "handles assistant with nil content followed by tool result in multi-loop conversation" do
       messages = [
-        %Message.User{content: "review this"},
-        %Message.Assistant{
+        %UserMessage{content: "review this"},
+        %AssistantMessage{
           content: "Let me check",
           tool_calls: [
-            %Message.ToolCall{id: "tc_1", name: "activate_skill", input: %{"name" => "review"}},
-            %Message.ToolCall{id: "tc_2", name: "bash", input: %{"command" => "cat file.ex"}}
+            %ToolCall{id: "tc_1", name: "activate_skill", input: %{"name" => "review"}},
+            %ToolCall{id: "tc_2", name: "bash", input: %{"command" => "cat file.ex"}}
           ]
         },
-        %Message.ToolResult{tool_call_id: "tc_1", content: "skill loaded"},
-        %Message.ToolResult{tool_call_id: "tc_2", content: "file contents"},
-        %Message.Assistant{
+        %ToolResult{tool_call_id: "tc_1", content: "skill loaded"},
+        %ToolResult{tool_call_id: "tc_2", content: "file contents"},
+        %AssistantMessage{
           content: nil,
           tool_calls: [
-            %Message.ToolCall{id: "tc_3", name: "bash", input: %{"command" => "cat other.ex"}}
+            %ToolCall{id: "tc_3", name: "bash", input: %{"command" => "cat other.ex"}}
           ]
         },
-        %Message.ToolResult{tool_call_id: "tc_3", content: "other contents"}
+        %ToolResult{tool_call_id: "tc_3", content: "other contents"}
       ]
 
       encoded = Encoder.encode_messages(messages)
