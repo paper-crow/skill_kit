@@ -18,7 +18,6 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Execution
-  alias SkillKit.LLM.Message
   alias SkillKit.Telemetry
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
@@ -464,7 +463,6 @@ defmodule SkillKit.Agent.Server do
     |> Enum.reverse()
     |> Enum.find_value(fn
       %AssistantMessage{content: content} when is_binary(content) -> content
-      %Message.Assistant{content: content} when is_binary(content) -> content
       _ -> nil
     end)
   end
