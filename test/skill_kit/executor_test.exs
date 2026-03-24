@@ -51,6 +51,11 @@ defmodule SkillKit.ExecutorTest do
       assert result.status == :complete
     end
 
+    test "accepts a pre-formed input map", %{registry: registry} do
+      assert {:ok, result} = Executor.run(registry, skill(), %{"command" => "echo hello"}, %{})
+      assert result.results["execute"] == {:ok, "hello\n"}
+    end
+
     test "passes context with cwd through to Shell executor", %{registry: registry} do
       tmp = System.tmp_dir!()
       # Resolve symlinks for macOS

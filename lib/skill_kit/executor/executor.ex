@@ -2,9 +2,10 @@ defmodule SkillKit.Executor do
   @moduledoc """
   Builds and runs `%Execution{}` pipelines.
 
-  This is the public entry point for executing a skill's command.
-  It collects hooks from all registered skills in the registry,
-  builds the execution pipeline, and runs it.
+  Public entry point for executing skill input through the pipeline.
+  Accepts input as a map (e.g., `%{"command" => "echo hi"}`) or a
+  bare command string (wrapped automatically). Collects hooks from
+  all registered skills, builds the execution pipeline, and runs it.
 
   For callers that need pipeline inspection or suspension support,
   use `SkillKit.Execution` directly.
@@ -14,29 +15,28 @@ defmodule SkillKit.Executor do
   alias SkillKit.Registry
 
   @doc """
-  Runs a command through the execution pipeline without a specific skill.
+  Runs input through the execution pipeline without a specific skill.
 
-  Uses the configured executor from `config :skill_kit, :executor`
-  (defaults to `SkillKit.Executor.Shell`). Hooks from all registered
-  skills are collected and fired.
+  Accepts a map or bare command string. Uses the configured executor
+  from `config :skill_kit, :executor` (defaults to `SkillKit.Executor.Shell`).
   """
-  def run(registry, command, context) do
+  def run(registry, input, context) do
     executor = Application.get_env(:skill_kit, :executor, SkillKit.Executor.Shell)
     all_hooks = collect_hooks(registry)
-    input = wrap_input(command)
+    input = wrap_input(input)
     execution = Execution.new(nil, input, context, all_hooks: all_hooks, executor: executor)
     Execution.run(execution)
   end
 
   @doc """
-  Runs a skill's command through the execution pipeline.
+  Runs a skill's input through the execution pipeline.
 
-  Collects hooks from all registered skills, builds the pipeline,
-  and runs it in one call.
+  Accepts a map or bare command string. Collects hooks from all
+  registered skills, builds the pipeline, and runs it.
   """
-  def run(registry, skill, command, context) do
+  def run(registry, skill, input, context) do
     all_hooks = collect_hooks(registry)
-    input = wrap_input(command)
+    input = wrap_input(input)
     execution = Execution.new(skill, input, context, all_hooks: all_hooks)
     Execution.run(execution)
   end
@@ -48,7 +48,7 @@ defmodule SkillKit.Executor do
     Execution.resume(execution, decision)
   end
 
-  defp wrap_input(%{} = input), do: input
+  defp wrap_input(input) when is_map(input), do: input
   defp wrap_input(command) when is_binary(command), do: %{"command" => command}
 
   defp collect_hooks(registry) do
