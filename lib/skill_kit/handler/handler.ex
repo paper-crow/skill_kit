@@ -22,10 +22,10 @@ defmodule SkillKit.Handler do
   """
   def run(registry, input, context) do
     handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
-    all_hooks = collect_hooks(registry)
+    hooks = collect_and_filter_hooks(registry, handler)
     input = wrap_input(input)
-    execution = Pipeline.new(nil, input, context, all_hooks: all_hooks, handler: handler)
-    Pipeline.run(execution)
+    pipeline = Pipeline.new(nil, input, context, hooks: hooks, handler: handler)
+    Pipeline.run(pipeline)
   end
 
   @doc """
@@ -35,10 +35,10 @@ defmodule SkillKit.Handler do
   registered skills, builds the pipeline, and runs it.
   """
   def run(registry, skill, input, context) do
-    all_hooks = collect_hooks(registry)
+    hooks = collect_and_filter_hooks(registry, skill.handler)
     input = wrap_input(input)
-    execution = Pipeline.new(skill, input, context, all_hooks: all_hooks)
-    Pipeline.run(execution)
+    pipeline = Pipeline.new(skill, input, context, hooks: hooks)
+    Pipeline.run(pipeline)
   end
 
   @doc """
@@ -51,10 +51,13 @@ defmodule SkillKit.Handler do
   defp wrap_input(input) when is_map(input), do: input
   defp wrap_input(command) when is_binary(command), do: %{"command" => command}
 
-  defp collect_hooks(registry) do
+  defp collect_and_filter_hooks(registry, handler) do
+    handler_name = handler |> Module.split() |> List.last()
+
     registry
     |> Registry.list_skills()
     |> Enum.flat_map(& &1.hooks)
+    |> Enum.filter(&Regex.match?(&1.matcher, handler_name))
   rescue
     _ -> []
   catch

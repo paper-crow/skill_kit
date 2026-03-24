@@ -27,17 +27,16 @@ defmodule SkillKit.PipelineTest do
       assert is_nil(exec.suspended_at)
     end
 
-    test "builds pipeline with pre and post hooks filtered by handler name" do
+    test "builds pipeline with pre and post hooks" do
       pre = %Hook{phase: :pre, matcher: ~r/Shell/, handler: fn _ctx -> :allow end}
       post = %Hook{phase: :post, matcher: ~r/Shell/, handler: fn ctx -> ctx.result end}
-      non_matching = %Hook{phase: :pre, matcher: ~r/Docker/, handler: fn _ctx -> :allow end}
 
       s = skill()
 
       exec =
-        Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pre, post, non_matching])
+        Pipeline.new(s, %{"command" => "echo hello"}, %{}, hooks: [pre, post])
 
-      # Should have pre + execute + post = 3 steps (non_matching filtered out)
+      # pre + execute + post = 3 steps
       assert length(exec.steps) == 3
     end
   end
@@ -59,7 +58,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [deny_hook])
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, hooks: [deny_hook])
 
       assert {:error, %Pipeline{status: :failed} = result} = Pipeline.run(exec)
       assert result.results["pre:0"] == {:deny, "blocked"}
@@ -73,7 +72,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, all_hooks: [modify_hook])
+      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, hooks: [modify_hook])
 
       assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["execute"] == {:ok, "modified\n"}
@@ -87,7 +86,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
+      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, hooks: [post_hook])
 
       assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["post:0"] == {:ok, "sanitized"}
@@ -101,7 +100,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, all_hooks: [post_hook])
+      exec = Pipeline.new(s, %{"command" => "echo secret"}, %{}, hooks: [post_hook])
 
       assert {:error, %Pipeline{status: :failed}} = Pipeline.run(exec)
     end
@@ -122,7 +121,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, all_hooks: [pending_hook])
+      exec = Pipeline.new(s, %{"command" => "echo hello"}, %{}, hooks: [pending_hook])
 
       assert {:pending, %Pipeline{status: :suspended} = result} = Pipeline.run(exec)
       assert result.suspended_at == "pre:0"
@@ -136,7 +135,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo mfa"}, %{}, all_hooks: [mfa_hook])
+      exec = Pipeline.new(s, %{"command" => "echo mfa"}, %{}, hooks: [mfa_hook])
 
       assert {:ok, %Pipeline{status: :complete}} = Pipeline.run(exec)
     end
@@ -158,7 +157,7 @@ defmodule SkillKit.PipelineTest do
       }
 
       s = skill()
-      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, all_hooks: [hook1, hook2])
+      exec = Pipeline.new(s, %{"command" => "echo original"}, %{}, hooks: [hook1, hook2])
 
       assert {:ok, %Pipeline{status: :complete} = result} = Pipeline.run(exec)
       assert result.results["execute"] == {:ok, "step1\n"}

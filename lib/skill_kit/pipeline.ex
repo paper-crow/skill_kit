@@ -59,51 +59,35 @@ defmodule SkillKit.Pipeline do
   @doc """
   Builds a `Pipeline` for `skill`, `input`, and `context`.
 
-  Hooks are passed via the `all_hooks:` option. Only hooks whose `:matcher`
-  regex matches the last segment of the handler module name are included.
-
   ## Options
 
-  - `all_hooks:` — list of `SkillKit.Hook.t()` to filter and insert into the pipeline
+    * `:hooks` — pre-filtered list of `SkillKit.Hook.t()` (already matched
+      against the handler). Defaults to `[]`.
+    * `:handler` — handler module override (required when `skill` is `nil`)
   """
   @spec new(SkillKit.Skill.t() | nil, map(), map(), keyword()) :: t()
   def new(skill, input, context, opts \\ []) do
-    all_hooks = Keyword.get(opts, :all_hooks, [])
+    hooks = Keyword.get(opts, :hooks, [])
     handler = resolve_handler(skill, opts)
-    handler_name = handler_name(handler)
-
-    matching_hooks =
-      Enum.filter(all_hooks, fn %Hook{matcher: matcher} ->
-        Regex.match?(matcher, handler_name)
-      end)
-
-    pre_hooks = Enum.filter(matching_hooks, &(&1.phase == :pre))
-    post_hooks = Enum.filter(matching_hooks, &(&1.phase == :post))
-
-    pre_steps =
-      pre_hooks
-      |> Enum.with_index()
-      |> Enum.map(fn {hook, i} -> {:pre_hook, "pre:#{i}", hook} end)
-
-    execute_step = {:execute, "execute", handler}
-
-    post_steps =
-      post_hooks
-      |> Enum.with_index()
-      |> Enum.map(fn {hook, i} -> {:post_hook, "post:#{i}", hook} end)
-
-    steps = pre_steps ++ [execute_step] ++ post_steps
+    steps = build_steps(hooks, handler)
 
     %__MODULE__{
       skill: skill,
       input: input,
       context: context,
-      steps: steps,
-      results: %{},
-      status: :pending,
-      suspended_at: nil,
-      suspended_state: nil
+      steps: steps
     }
+  end
+
+  defp build_steps(hooks, handler) do
+    pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
+    post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
+
+    pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+  end
+
+  defp index_steps(hooks, type, prefix) do
+    Enum.with_index(hooks, fn hook, i -> {type, "#{prefix}:#{i}", hook} end)
   end
 
   @doc """
@@ -206,12 +190,6 @@ defmodule SkillKit.Pipeline do
 
   defp update_input(exec, new_input) do
     %{exec | input: new_input}
-  end
-
-  defp handler_name(handler) do
-    handler
-    |> Module.split()
-    |> List.last()
   end
 
   defp resolve_handler(nil, opts), do: Keyword.fetch!(opts, :handler)
