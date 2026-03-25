@@ -56,7 +56,7 @@ defmodule SkillKit.MixProject do
         "README.md",
         "guides/architecture.md",
         "guides/llm-providers.md",
-        "guides/backends.md",
+        "guides/providers.md",
         "guides/hooks-and-execution.md",
         "guides/authorization.md",
         "guides/telemetry.md",
@@ -90,9 +90,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Agent.Server,
           SkillKit.Agent.Mailbox,
           SkillKit.Agent.Core,
-          SkillKit.Agent.Infrastructure,
-          SkillKit.Agent.SubagentSupervisor,
-          SkillKit.Agent.ToolBuilder
+          SkillKit.Agent.SubagentSupervisor
         ],
         "LLM Providers": [
           SkillKit.LLM,
@@ -114,6 +112,7 @@ defmodule SkillKit.MixProject do
         "Skills & Kits": [
           SkillKit.Skill,
           SkillKit.Kit,
+          SkillKit.Kit.Memory,
           SkillKit.Catalog,
           SkillKit.Kit.Provider,
           SkillKit.Kit.Local,
@@ -139,10 +138,6 @@ defmodule SkillKit.MixProject do
         ],
         Telemetry: [
           SkillKit.Telemetry
-        ],
-        Infrastructure: [
-          SkillKit.Supervisor,
-          SkillKit.Registry
         ]
       ]
     ]

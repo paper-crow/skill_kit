@@ -62,17 +62,11 @@ Agents are defined in `AGENT.md` files with YAML frontmatter:
 name: "neve"
 description: "A helpful coding assistant"
 model: "claude-sonnet-4-20250514"
-capabilities: bash, activate_skill, system:memory
 metadata:
   max_agent_depth: 2
 ---
 Your name is Neve. You are a helpful coding assistant.
 ```
-
-The `capabilities` field determines what the agent can do:
-- **Tool names** (e.g. `bash`) register the tool with the LLM
-- **Skill names** (e.g. `system:memory`) inject the skill's instructions into the system prompt
-- Both can share a name (e.g. `bash` is both a tool and a skill with usage guidelines)
 
 ## Skills
 
@@ -107,7 +101,6 @@ Agents can delegate work to subagents asynchronously:
 ---
 name: "code-reviewer"
 description: "Reviews code for issues and reports findings"
-capabilities: bash, activate_skill, report_result
 ---
 You are a code reviewer. Use bash to read files, analyze them,
 then call report_result with your findings.
@@ -183,7 +176,7 @@ Run any agent: `mix skill_kit.chat neve` or `mix skill_kit.chat researcher`
 SkillKit.start_agent/1
   |-> Agent (Supervisor)
        |-> Registry (process discovery)
-       |-> Infrastructure (skill registry)
+       |-> Catalog (provider aggregation, authorization, tool definitions)
        |-> Core (rest_for_one)
             |-> Mailbox (message buffering)
             |-> Server (LLM loop, tool execution, streaming)

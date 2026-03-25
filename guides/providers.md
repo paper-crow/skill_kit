@@ -1,8 +1,8 @@
 # Skill Providers
 
 A **provider** is a data source that produces kits — bundles of `%SkillKit.Skill{}`
-structs and agent definitions. SkillKit loads providers at boot time and registers
-all skills they return into the registry.
+structs and agent definitions. `SkillKit.Catalog` queries providers on every request
+and aggregates their kits in real time.
 
 ---
 
@@ -11,12 +11,22 @@ all skills they return into the registry.
 Any module that implements `SkillKit.Kit.Provider` is a valid provider:
 
 ```elixir
-@callback load_kits(config :: keyword()) :: {:ok, [SkillKit.Kit.t()]} | {:error, term()}
+@callback list_kits(config :: keyword()) :: {:ok, [SkillKit.Kit.t()]} | {:error, term()}
+@callback get_kit(config :: keyword(), name :: String.t()) ::
+            {:ok, SkillKit.Kit.t()} | {:error, :not_found}
+
+@optional_callbacks [load_kits: 1]
 ```
 
-`load_kits/1` receives the config keyword list you supply when registering the
-provider as a source. It must return `{:ok, kits}` where each kit is a
-`%SkillKit.Kit{}`, or `{:error, reason}` on failure.
+`list_kits/1` is the primary callback. It receives the config keyword list you supply
+when registering the provider and must return `{:ok, kits}` or `{:error, reason}`.
+
+`get_kit/2` fetches a single kit by name. The default implementation calls
+`list_kits/1` and searches the result, so you only need to override it for
+performance-sensitive cases.
+
+`load_kits/1` is a legacy callback retained for backwards compatibility. New
+providers should implement `list_kits/1` instead.
 
 A `%SkillKit.Kit{}` wraps:
 
@@ -24,6 +34,15 @@ A `%SkillKit.Kit{}` wraps:
 - `:skills` — list of `%SkillKit.Skill{}` structs
 - `:agents` — list of agent definitions (optional)
 - `:metadata` — arbitrary map
+
+---
+
+## The "Always Fresh" Model
+
+`SkillKit.Catalog` calls `list_kits/1` on every query — there is no internal
+cache. This means the catalog always reflects the live state of its providers.
+Dynamic sources like `Kit.Memory` work naturally as a result: skills added at
+runtime appear immediately on the next request without any cache invalidation.
 
 ---
 
@@ -70,6 +89,36 @@ Parse failures are logged as warnings and skipped; the rest of the kit still loa
 
 ---
 
+## Built-in: In-Memory Provider
+
+`SkillKit.Kit.Memory` is an `Agent`-backed provider for testing and dynamic skill
+injection. Skills can be added or removed at runtime and are visible to the catalog
+on the very next query.
+
+```elixir
+{:ok, mem} = SkillKit.Kit.Memory.start_link([])
+
+SkillKit.Kit.Memory.put(mem, %SkillKit.Skill{
+  name: "greet:hello",
+  description: "Say hello.",
+  body: "Say hello to $ARGUMENTS."
+})
+
+# Remove a skill by fully-qualified name
+SkillKit.Kit.Memory.delete(mem, "greet:hello")
+```
+
+Pass the pid (or registered name) as the `:provider` key in the provider config:
+
+```elixir
+{SkillKit.Kit.Memory, provider: mem}
+```
+
+Skills without a namespace separator are grouped under a bare-name kit. Skills
+with a `"namespace:skill"` name are grouped into a kit named by the namespace.
+
+---
+
 ## Module-backed Kits
 
 `use SkillKit.Kit` turns an Elixir module into a provider that loads skill files
@@ -101,14 +150,15 @@ use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
 
 ## Registering Providers as Sources
 
-Pass a `:sources` list to `SkillKit.Registry.start_link/1` (or embed it in your
-supervision tree). Each entry is a `{provider_module, config}` tuple:
+Pass a `:providers` list to `SkillKit.Catalog.start_link/1` (or embed it in your
+supervision tree via `SkillKit.start_agent/2`). Each entry is a
+`{provider_module, config}` tuple:
 
 ```elixir
 children = [
-  {SkillKit.Registry,
-   name: MyApp.SkillRegistry,
-   sources: [
+  {SkillKit.Catalog,
+   name: MyApp.Catalog,
+   providers: [
      {SkillKit.Kit.Local, dir: "/app/priv/skills"},
      {MyApp.FilesKit, []},
      {MyApp.DatabaseProvider, repo: MyApp.Repo}
@@ -118,9 +168,8 @@ children = [
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-Sources are loaded in order. **First-registered-wins**: if two providers provide
-a skill with the same name, the earlier source's version is kept. Provider
-failures emit a `Logger.warning` but do not prevent the registry from starting.
+Provider failures emit a `Logger.warning` but do not prevent the catalog from
+starting or serving other providers.
 
 ---
 
@@ -134,10 +183,11 @@ defmodule MyApp.DatabaseProvider do
 
   alias MyApp.Repo
   alias MyApp.SkillRecord
-  alias SkillKit.{Kit, Skill}
+  alias SkillKit.Kit
+  alias SkillKit.Skill
 
   @impl true
-  def load_kits(config) do
+  def list_kits(config) do
     repo = Keyword.fetch!(config, :repo)
 
     skills =
@@ -148,6 +198,21 @@ defmodule MyApp.DatabaseProvider do
     {:ok, [kit]}
   rescue
     exception -> {:error, exception}
+  end
+
+  @impl true
+  def get_kit(config, name) do
+    case list_kits(config) do
+      {:ok, kits} -> find_kit(kits, name)
+      error -> error
+    end
+  end
+
+  defp find_kit(kits, name) do
+    case Enum.find(kits, &(&1.name == name)) do
+      nil -> {:error, :not_found}
+      kit -> {:ok, kit}
+    end
   end
 
   defp to_skill(%SkillRecord{} = record) do
@@ -168,5 +233,5 @@ Then register it as a source:
 {MyApp.DatabaseProvider, repo: MyApp.Repo}
 ```
 
-Any error returned from `load_kits/1` (or raised and rescued) is logged and
-the provider is skipped without crashing the registry.
+Any error returned from `list_kits/1` (or raised and rescued) is logged and
+the provider is skipped without crashing the catalog.
