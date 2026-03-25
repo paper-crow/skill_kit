@@ -3,7 +3,7 @@ defmodule SkillKit.Handler.Behaviour do
   Callback contract for handler modules.
 
   Handlers handle the actual command execution. The default handler
-  (`SkillKit.Handler.Shell`) shells out via `System.cmd/3`. Custom
+  (`SkillKit.Shell`) shells out via `System.cmd/3`. Custom
   handlers can run commands in sandboxes, containers, or as Elixir code.
 
   ## Three-value return

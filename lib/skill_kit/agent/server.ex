@@ -338,7 +338,7 @@ defmodule SkillKit.Agent.Server do
         already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))
 
         state =
-          if skill && skill.handler != SkillKit.Handler.Shell && !already_activated do
+          if skill && skill.handler != SkillKit.Shell && !already_activated do
             %{state | activated_skills: [skill | state.activated_skills]}
           else
             state

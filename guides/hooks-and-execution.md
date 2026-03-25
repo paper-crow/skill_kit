@@ -189,7 +189,7 @@ Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3` c
 by handler name, and builds the step list for the `%SkillKit.Pipeline{}` struct.
 
 The matcher regex is tested against only the last segment of the handler module
-name. A hook with `~r/Shell/` matches `SkillKit.Handler.Shell` but not
+name. A hook with `~r/Shell/` matches `SkillKit.Shell` but not
 `MyApp.Handler.Sandbox`. A catch-all hook can use `~r/.*/`.
 
 Because hooks are lifetime-scoped to their defining skill, unregistering a

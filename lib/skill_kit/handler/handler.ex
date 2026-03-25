@@ -20,10 +20,10 @@ defmodule SkillKit.Handler do
   Runs input through the execution pipeline without a specific skill.
 
   Accepts a map or bare command string. Uses the configured handler
-  from `config :skill_kit, :handler` (defaults to `SkillKit.Handler.Shell`).
+  from `config :skill_kit, :handler` (defaults to `SkillKit.Shell`).
   """
   def run(registry, input, context) do
-    handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
+    handler = Application.get_env(:skill_kit, :handler, SkillKit.Shell)
     hooks = collect_and_filter_hooks(registry, handler)
 
     %Pipeline{

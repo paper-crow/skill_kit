@@ -123,7 +123,7 @@ defmodule SkillKit.MixProject do
         "Execution & Hooks": [
           SkillKit.Handler,
           SkillKit.Handler.Behaviour,
-          SkillKit.Handler.Shell,
+          SkillKit.Shell,
           SkillKit.Handler.ToolDefinition,
           SkillKit.Pipeline,
           SkillKit.Hook

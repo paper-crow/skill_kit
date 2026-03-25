@@ -36,7 +36,7 @@ defmodule SkillKit do
   ## Configuration
 
       # Default handler
-      config :skill_kit, :handler, SkillKit.Handler.Shell
+      config :skill_kit, :handler, SkillKit.Shell
 
       # Default LLM provider
       config :skill_kit, SkillKit.LLM,
@@ -72,6 +72,7 @@ defmodule SkillKit do
 
     case extract_root_agent(kits) do
       {:ok, definition} ->
+        definition = %{definition | workspace: File.cwd!()}
         opts = Keyword.put(opts, :kits, kits)
         start_agent(definition, opts)
 

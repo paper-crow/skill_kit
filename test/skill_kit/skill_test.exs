@@ -37,8 +37,8 @@ defmodule SkillKit.SkillTest do
       assert %Skill{}.required_scope == []
     end
 
-    test "handler defaults to SkillKit.Handler.Shell" do
-      assert %Skill{}.handler == SkillKit.Handler.Shell
+    test "handler defaults to SkillKit.Shell" do
+      assert %Skill{}.handler == SkillKit.Shell
     end
 
     test "hooks defaults to empty list" do

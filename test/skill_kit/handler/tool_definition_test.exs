@@ -1,7 +1,7 @@
 defmodule SkillKit.Handler.ToolDefinitionTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Handler.Shell
+  alias SkillKit.Shell
   alias SkillKit.Handler.ToolDefinition
 
   describe "ToolDefinition struct" do

@@ -1,4 +1,4 @@
-defmodule SkillKit.Handler.Shell do
+defmodule SkillKit.Shell do
   @moduledoc """
   Default handler that runs commands via the system shell.
 

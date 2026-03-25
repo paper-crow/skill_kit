@@ -1,7 +1,7 @@
-defmodule SkillKit.Handler.ShellTest do
+defmodule SkillKit.ShellTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Handler.Shell
+  alias SkillKit.Shell
   alias SkillKit.Pipeline
 
   describe "execute/1" do

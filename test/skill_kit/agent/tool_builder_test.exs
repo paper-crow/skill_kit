@@ -8,7 +8,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
 
   describe "build_tools/2" do
     test "includes handler tool definitions" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
 
       bash = Enum.find(tools, &(&1.name == "bash"))
       assert bash != nil
@@ -26,7 +26,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         }
       ]
 
-      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Handler.Shell])
+      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Shell])
 
       activate = Enum.find(tools, &(&1.name == "activate_skill"))
       assert activate != nil
@@ -36,7 +36,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "does not include activate_skill when no skills" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
 
       refute Enum.any?(tools, &(&1.name == "activate_skill"))
     end
@@ -57,7 +57,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         }
       ]
 
-      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Handler.Shell])
+      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Shell])
 
       agent_tool = Enum.find(tools, &(&1.name == "project-a"))
       assert agent_tool != nil
@@ -66,14 +66,14 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "includes builtins when subagent: true" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell], subagent: true)
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell], subagent: true)
 
       assert Enum.any?(tools, &(&1.name == "report_status"))
       assert Enum.any?(tools, &(&1.name == "report_result"))
     end
 
     test "excludes builtins by default" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Handler.Shell])
+      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
 
       refute Enum.any?(tools, &(&1.name == "report_status"))
       refute Enum.any?(tools, &(&1.name == "report_result"))
@@ -83,7 +83,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
       kit = %Kit{
         name: "test",
         skills: [
-          %Skill{name: "test:foo", description: "A skill", handler: SkillKit.Handler.Shell}
+          %Skill{name: "test:foo", description: "A skill", handler: SkillKit.Shell}
         ]
       }
 
@@ -103,7 +103,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         namespace: "scheduler",
         description: "Schedule a task",
         body: "Use schedule tool",
-        handler: SkillKit.Handler.Shell
+        handler: SkillKit.Shell
       }
 
       tools = ToolBuilder.build_tools([], activated_skills: [module_skill])
@@ -169,7 +169,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
         namespace: "scheduler",
         description: "Schedule a task",
         body: "Use schedule tool",
-        handler: SkillKit.Handler.Shell
+        handler: SkillKit.Shell
       }
 
       classify = ToolBuilder.classifier([], [module_skill])

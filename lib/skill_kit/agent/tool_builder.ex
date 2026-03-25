@@ -21,13 +21,13 @@ defmodule SkillKit.Agent.ToolBuilder do
   Builds the full tool list for the LLM.
 
   Options:
-  - `:handlers` — list of handler modules (default: `[SkillKit.Handler.Shell]`)
+  - `:handlers` — list of handler modules (default: `[SkillKit.Shell]`)
   - `:subagent` — if true, includes report_status/report_result (default: false)
   - `:activated_skills` — list of `%Skill{}` structs with module-backed handlers
   """
   @spec build_tools([Kit.t()], keyword()) :: [ToolDefinition.t()]
   def build_tools(kits, opts \\ []) do
-    handlers = Keyword.get(opts, :handlers, [SkillKit.Handler.Shell])
+    handlers = Keyword.get(opts, :handlers, [SkillKit.Shell])
     subagent = Keyword.get(opts, :subagent, false)
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
@@ -43,7 +43,7 @@ defmodule SkillKit.Agent.ToolBuilder do
 
     visible_skills =
       Enum.filter(all_skills, fn skill ->
-        skill.handler == SkillKit.Handler.Shell or Code.ensure_loaded?(skill.handler)
+        skill.handler == SkillKit.Shell or Code.ensure_loaded?(skill.handler)
       end)
 
     skill_tool = if visible_skills != [], do: [activate_skill_tool(visible_skills)], else: []
