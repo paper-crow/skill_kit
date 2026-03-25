@@ -40,7 +40,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     end
 
     {:ok, definition} = Definition.parse(agent_md)
-    definition = %{definition | workspace: File.cwd!()}
 
     {:ok, agent} =
       SkillKit.start_agent(definition,

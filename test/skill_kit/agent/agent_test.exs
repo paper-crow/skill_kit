@@ -19,7 +19,6 @@ defmodule SkillKit.Agent.AgentTest do
       description: "Test agent",
       system_prompt: "You are a test.",
       path: "/tmp/test",
-      workspace: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 500}
     }
 

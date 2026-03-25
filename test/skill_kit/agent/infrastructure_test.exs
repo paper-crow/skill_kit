@@ -1,7 +1,8 @@
 defmodule SkillKit.Agent.InfrastructureTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Agent.{Definition, Infrastructure}
+  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent.Infrastructure
 
   setup do
     registry_name = :"infra_test_registry_#{:erlang.unique_integer([:positive])}"
@@ -13,8 +14,7 @@ defmodule SkillKit.Agent.InfrastructureTest do
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",
-      path: "/tmp/test",
-      workspace: "/tmp/test"
+      path: "/tmp/test"
     }
 
     {:ok, registry: registry_name, agent_name: agent_name, definition: definition}

@@ -50,8 +50,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
               name: "project-a",
               description: "Manages project A",
               system_prompt: ".",
-              path: "/tmp",
-              workspace: "/tmp"
+              path: "/tmp"
             }
           ]
         }
@@ -141,8 +140,7 @@ defmodule SkillKit.Agent.ToolBuilderTest do
               name: "helper",
               description: ".",
               system_prompt: ".",
-              path: "/tmp",
-              workspace: "/tmp"
+              path: "/tmp"
             }
           ]
         }

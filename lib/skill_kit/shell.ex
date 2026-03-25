@@ -33,7 +33,7 @@ defmodule SkillKit.Shell do
   end
 
   defp maybe_add_cd(opts, %{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd} | opts]
-  defp maybe_add_cd(opts, _context), do: opts
+  defp maybe_add_cd(opts, _context), do: [{:cd, File.cwd!()} | opts]
 
   defp maybe_add_env(opts, %{env: env}) when is_list(env) do
     merged =
@@ -61,7 +61,7 @@ defmodule SkillKit.Shell do
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
           "fetching URLs (curl), git operations, and any system interaction. " <>
-          "The working directory is set to the agent's workspace.",
+          "The working directory defaults to the current process working directory.",
       input_schema: %{
         "type" => "object",
         "properties" => %{

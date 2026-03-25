@@ -17,7 +17,6 @@ defmodule SkillKitTest do
         description: "Test agent",
         system_prompt: "You are helpful.",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "test-model"
       }
 
@@ -43,8 +42,7 @@ defmodule SkillKitTest do
         name: "dead-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
-        workspace: "/tmp/test"
+        path: "/tmp/test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -59,8 +57,7 @@ defmodule SkillKitTest do
         name: "cleanup-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
-        workspace: "/tmp/test"
+        path: "/tmp/test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -89,7 +86,6 @@ defmodule SkillKitTest do
         description: "Test",
         system_prompt: "Test",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "test-model"
       }
 
@@ -125,7 +121,6 @@ defmodule SkillKitTest do
         description: "Test",
         system_prompt: "Test",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "test-model"
       }
 
@@ -142,8 +137,7 @@ defmodule SkillKitTest do
         name: "sync-error-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
-        workspace: "/tmp/test"
+        path: "/tmp/test"
       }
 
       SkillKit.Test.expect_error(500, "internal error")
@@ -159,7 +153,6 @@ defmodule SkillKitTest do
         description: "Test",
         system_prompt: "Test",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "test-model"
       }
 
@@ -179,8 +172,7 @@ defmodule SkillKitTest do
         name: "sync-timeout-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
-        workspace: "/tmp/test"
+        path: "/tmp/test"
       }
 
       # Mock that never returns — simulate a halted server

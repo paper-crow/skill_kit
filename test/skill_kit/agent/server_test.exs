@@ -27,8 +27,7 @@ defmodule SkillKit.Agent.ServerTest do
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test agent.",
-      path: "/tmp/test",
-      workspace: "/tmp/test"
+      path: "/tmp/test"
     }
 
     {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
@@ -128,7 +127,6 @@ defmodule SkillKit.Agent.ServerTest do
         description: "Test agent",
         system_prompt: "You are a calculator.",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "claude-sonnet-4-20250514"
       }
 

@@ -72,7 +72,6 @@ defmodule SkillKit do
 
     case extract_root_agent(kits) do
       {:ok, definition} ->
-        definition = %{definition | workspace: File.cwd!()}
         opts = Keyword.put(opts, :kits, kits)
         start_agent(definition, opts)
 

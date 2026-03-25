@@ -276,7 +276,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%ToolCall{id: id, input: input}, state) do
-    context = %{cwd: state.definition.workspace, scope: state.scope}
+    context = %{scope: state.scope}
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
     case SkillKit.Handler.run(skill_registry, input, context) do
@@ -372,7 +372,7 @@ defmodule SkillKit.Agent.Server do
     source_config = Map.get(skill.metadata, "source_config", [])
 
     context =
-      %{cwd: state.definition.workspace, scope: state.scope, agent_name: state.agent_name}
+      %{scope: state.scope, agent_name: state.agent_name}
       |> Map.merge(Map.new(source_config))
 
     execution = %Pipeline{skill: skill, input: input, context: context}

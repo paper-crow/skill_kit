@@ -28,7 +28,6 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
     agent_md = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve/AGENT.md")
     {:ok, definition} = Definition.parse(agent_md)
-    definition = %{definition | workspace: File.cwd!()}
 
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
