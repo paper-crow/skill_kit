@@ -249,7 +249,7 @@ defmodule SkillKit.Catalog do
   end
 
   # -------------------------------------------------------------------
-  # Tool building (matches ToolBuilder exactly)
+  # Tool building
   # -------------------------------------------------------------------
 
   defp build_tools(kits, state, opts) do
@@ -381,7 +381,7 @@ defmodule SkillKit.Catalog do
   end
 
   # -------------------------------------------------------------------
-  # Classification (matches ToolBuilder.classifier exactly)
+  # Classification
   # -------------------------------------------------------------------
 
   defp do_classify(kits, tool_name, activated_skills) do

@@ -47,13 +47,12 @@ defmodule SkillKit.Kit.Local.Parser do
 
       iex> SkillKit.Kit.Local.Parser.load_file("/path/to/summarize.skill.md")
       {:ok, %SkillKit.Skill{
-        type: :prompt,
         name: "files:summarize",
         namespace: "files",
         description: "Summarize a file's contents",
         required_scope: ["files:read"],
         body: "Please summarize: {{content}}",
-        source: "/path/to/summarize.skill.md"
+        location: "/path/to/summarize.skill.md"
       }}
   """
 
@@ -66,7 +65,7 @@ defmodule SkillKit.Kit.Local.Parser do
   @doc """
   Loads a `.skill.md` file from `path` and returns a parsed skill struct.
 
-  Returns `{:ok, %SkillKit.Skill{type: :prompt, ...}}` on success.
+  Returns `{:ok, %SkillKit.Skill{}}` on success.
 
   Returns `{:error, reason}` on failure:
   - `{:error, :enoent}` — file does not exist
@@ -134,7 +133,7 @@ defmodule SkillKit.Kit.Local.Parser do
   # Private: Skill construction
   # ---------------------------------------------------------------------------
 
-  # Validates required fields and builds a %Skill{type: :prompt} struct.
+  # Validates required fields and builds a %Skill{} struct.
   #
   # Field access always uses string keys — yaml_elixir with atoms: false
   # returns string-keyed maps.

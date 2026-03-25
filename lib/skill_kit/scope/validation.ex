@@ -24,7 +24,7 @@ defmodule SkillKit.Scope.Validation do
 
   `any_covers?/2` checks whether ANY scope in a granted list covers the required
   scope (OR semantics). ALL-of semantics — where a caller must hold every
-  required scope — are implemented in Phase 4's `SkillKit.Authorization` module.
+  required scope — are implemented in the `SkillKit.Authorization` module.
 
   ## Examples
 
@@ -47,7 +47,7 @@ defmodule SkillKit.Scope.Validation do
       true
   """
 
-  # Same pattern as @name_segment_regex in Loader and @segment_regex in Registry
+  # Same pattern as @name_segment_regex in Kit.Local.Parser
   @segment_regex ~r/^[a-z][a-z0-9_-]*$/
 
   @typedoc ~S(A scope string, e.g. "admin:read" or "admin:*")

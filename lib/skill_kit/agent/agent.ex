@@ -2,8 +2,9 @@ defmodule SkillKit.Agent do
   @moduledoc """
   Top-level supervisor for an agent.
 
-  Starts two isolated subtrees under `:one_for_one`:
-  - `Agent.Infrastructure` — skill registry (crash doesn't affect conversation)
+  Starts three children under `:one_for_one`:
+  - `Registry` — process registry for agent components
+  - `SkillKit.Catalog` — provider aggregation, authorization, tool definitions
   - `Agent.Core` — mailbox, server, subagent supervisor (`:rest_for_one`)
 
   ## Starting an agent
@@ -35,9 +36,7 @@ defmodule SkillKit.Agent do
           :registry => atom(),
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
-          optional(:conversation_store) => {module(), keyword()} | nil,
-          optional(:kits) => [SkillKit.Kit.t()] | nil,
-          optional(:handler_config) => map() | nil
+          optional(:conversation_store) => {module(), keyword()} | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()

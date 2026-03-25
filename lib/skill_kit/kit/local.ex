@@ -45,16 +45,21 @@ defmodule SkillKit.Kit.Local do
   end
 
   defp load_root_and_subdirs(dir) do
-    root_kit = load_kit(dir)
+    case File.ls(dir) do
+      {:ok, entries} ->
+        root_kit = load_kit(dir)
 
-    subdir_kits =
-      dir
-      |> File.ls!()
-      |> Enum.map(&Path.join(dir, &1))
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.map(&load_kit/1)
+        subdir_kits =
+          entries
+          |> Enum.map(&Path.join(dir, &1))
+          |> Enum.filter(&File.dir?/1)
+          |> Enum.map(&load_kit/1)
 
-    {:ok, [root_kit | subdir_kits]}
+        {:ok, [root_kit | subdir_kits]}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp list_from_dirs(config) do

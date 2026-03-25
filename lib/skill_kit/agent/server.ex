@@ -343,9 +343,7 @@ defmodule SkillKit.Agent.Server do
     case SkillKit.Catalog.get_skill(catalog(state), skill_name) do
       {:ok, skill} ->
         scope_context = %{agent: state.agent_name, skill: skill_name}
-        args = %{"arguments" => arguments}
-        rendered = Skill.render(skill, args, state.scope, scope_context)
-        handle_skill_activation(id, skill, rendered, state)
+        render_and_activate(id, skill, arguments, state, scope_context)
 
       {:error, :unauthorized} ->
         result = %ToolResult{
@@ -365,6 +363,11 @@ defmodule SkillKit.Agent.Server do
 
         {result, state}
     end
+  end
+
+  defp render_and_activate(id, skill, arguments, state, scope_context) do
+    rendered = Skill.render(skill, %{"arguments" => arguments}, state.scope, scope_context)
+    handle_skill_activation(id, skill, rendered, state)
   end
 
   defp handle_skill_activation(id, skill, {:ok, rendered_body}, state) do
