@@ -32,7 +32,7 @@ defmodule SkillKit.Supervisor do
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          skills: [{SkillKit.Kit.Local, dirs: ["priv/skills"]}]}
+          skills: [{SkillKit.Kit.Local, dir: "priv/skills"}]}
       ]
 
   ## Supervision Strategy

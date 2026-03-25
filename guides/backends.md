@@ -32,10 +32,10 @@ A `%SkillKit.Kit{}` wraps:
 `SkillKit.Kit.Local` loads kits from directories on disk. Each directory
 becomes one kit; the kit name is the directory's basename.
 
-**Config key:** `:dirs` — a list of absolute directory paths.
+**Config key:** `:dir` — an absolute directory path.
 
 ```elixir
-{SkillKit.Kit.Local, dirs: ["/app/skills/files", "/app/skills/tools"]}
+{SkillKit.Kit.Local, dir: "/app/skills/files"}
 ```
 
 ### Directory structure
@@ -109,7 +109,7 @@ children = [
   {SkillKit.Registry,
    name: MyApp.SkillRegistry,
    sources: [
-     {SkillKit.Kit.Local, dirs: ["/app/priv/skills"]},
+     {SkillKit.Kit.Local, dir: "/app/priv/skills"},
      {MyApp.FilesKit, []},
      {MyApp.DatabaseProvider, repo: MyApp.Repo}
    ]}
