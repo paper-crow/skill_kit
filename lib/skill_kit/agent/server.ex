@@ -35,7 +35,7 @@ defmodule SkillKit.Agent.Server do
     :caller,
     :kits,
     :parent_registry,
-    :sources,
+    :skills,
     :conversation_store,
     halted: false,
     messages: [],
@@ -54,7 +54,7 @@ defmodule SkillKit.Agent.Server do
           caller: pid() | nil,
           kits: list(),
           parent_registry: atom() | nil,
-          sources: list(),
+          skills: list(),
           conversation_store: {module(), keyword()} | nil,
           halted: boolean(),
           messages: list(),
@@ -81,7 +81,7 @@ defmodule SkillKit.Agent.Server do
     caller = Keyword.get(opts, :caller)
     kits = Keyword.get(opts, :kits, [])
     parent_registry = Keyword.get(opts, :parent_registry)
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
 
     messages =
@@ -107,7 +107,7 @@ defmodule SkillKit.Agent.Server do
        caller: caller,
        kits: kits,
        parent_registry: parent_registry,
-       sources: sources,
+       skills: skills,
        conversation_store: conversation_store,
        messages: messages,
        halted: false
@@ -425,7 +425,7 @@ defmodule SkillKit.Agent.Server do
       parent_registry: state.registry
     ]
 
-    spawn_opts = [sources: state.sources]
+    spawn_opts = [skills: state.skills]
 
     case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
       {:ok, agent_ref} ->

@@ -170,7 +170,7 @@ defmodule SkillKit.SupervisorTest do
   # Supervisor opts passthrough — skill_dirs and skills
   # ---------------------------------------------------------------------------
 
-  describe "Supervisor with sources passthrough" do
+  describe "Supervisor with skills passthrough" do
     @valid_fixtures_path Path.join([
                            __DIR__,
                            "..",
@@ -180,7 +180,7 @@ defmodule SkillKit.SupervisorTest do
                            "valid"
                          ])
 
-    test "supervisor with sources discovers and registers .skill.md files" do
+    test "supervisor with skills discovers and registers .skill.md files" do
       sup_name = :"sup_dirs_#{:erlang.unique_integer([:positive])}"
       reg_name = :"reg_dirs_#{:erlang.unique_integer([:positive])}"
 
@@ -188,7 +188,7 @@ defmodule SkillKit.SupervisorTest do
         Supervisor,
         name: sup_name,
         registry_name: reg_name,
-        sources: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]
+        skills: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]
       })
 
       skills = Registry.list_skills(reg_name)

@@ -55,7 +55,7 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -112,7 +112,7 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 

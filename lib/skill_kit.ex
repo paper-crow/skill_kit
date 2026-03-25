@@ -8,7 +8,7 @@ defmodule SkillKit do
   ## Quick Start
 
       {:ok, agent} = SkillKit.start_agent(definition,
-        sources: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
+        skills: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
         caller: self()
       )
 
@@ -60,15 +60,15 @@ defmodule SkillKit do
   ## Options
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
-    * `:sources` — list of `{module, config}` skill sources (default: `[]`)
+    * `:skills` — list of `{module, config}` skill sources (default: `[]`)
     * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
     * `:scope` — granted scopes for authorization (default: `nil`)
 
   """
   @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
   def start_agent(opts) when is_list(opts) do
-    sources = Keyword.fetch!(opts, :sources)
-    kits = load_all_kits(sources)
+    skills = Keyword.fetch!(opts, :skills)
+    kits = load_all_kits(skills)
 
     case extract_root_agent(kits) do
       {:ok, definition} ->
@@ -89,7 +89,7 @@ defmodule SkillKit do
   @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
   def start_agent(%Agent.Definition{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
     scope = Keyword.get(opts, :scope)
     kits = Keyword.get(opts, :kits)
@@ -103,7 +103,7 @@ defmodule SkillKit do
       depth: 0,
       parent_name: nil,
       scope: scope,
-      sources: sources,
+      skills: skills,
       registry: registry_name,
       caller: caller,
       conversation_store: conversation_store,
@@ -183,7 +183,7 @@ defmodule SkillKit do
     depth = Keyword.fetch!(parent_opts, :depth)
     parent_name = Keyword.fetch!(parent_opts, :parent_name)
     parent_registry = Keyword.fetch!(parent_opts, :parent_registry)
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
@@ -193,7 +193,7 @@ defmodule SkillKit do
       depth: depth + 1,
       parent_name: parent_name,
       scope: nil,
-      sources: sources,
+      skills: skills,
       registry: registry_name,
       caller: nil,
       parent_registry: parent_registry
@@ -216,8 +216,8 @@ defmodule SkillKit do
     Supervisor.stop(pid)
   end
 
-  defp load_all_kits(sources) do
-    Enum.flat_map(sources, fn {mod, config} ->
+  defp load_all_kits(skills) do
+    Enum.flat_map(skills, fn {mod, config} ->
       case mod.load_kits(config) do
         {:ok, kits} -> kits
         {:error, _} -> []

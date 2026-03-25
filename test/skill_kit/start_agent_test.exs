@@ -7,11 +7,11 @@ defmodule SkillKit.StartAgentTest do
   @fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "with_root_agent"])
   @no_agent_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "valid"])
 
-  describe "start_agent/1 source-driven" do
-    test "discovers and starts root agent from sources" do
+  describe "start_agent/1 skill-driven" do
+    test "discovers and starts root agent from skills" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 sources: [{Filesystem, dir: @fixtures_path}],
+                 skills: [{Filesystem, dir: @fixtures_path}],
                  caller: self()
                )
 
@@ -22,7 +22,7 @@ defmodule SkillKit.StartAgentTest do
     test "accepts :name override" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 sources: [{Filesystem, dir: @fixtures_path}],
+                 skills: [{Filesystem, dir: @fixtures_path}],
                  name: "custom-name",
                  caller: self()
                )
@@ -34,7 +34,7 @@ defmodule SkillKit.StartAgentTest do
     test "returns error when no root agent found" do
       assert {:error, :no_root_agent} =
                SkillKit.start_agent(
-                 sources: [{Filesystem, dir: @no_agent_path}],
+                 skills: [{Filesystem, dir: @no_agent_path}],
                  caller: self()
                )
     end
@@ -42,7 +42,7 @@ defmodule SkillKit.StartAgentTest do
     test "returns error when multiple root agents found" do
       assert {:error, :multiple_root_agents} =
                SkillKit.start_agent(
-                 sources: [
+                 skills: [
                    {Filesystem, dir: @fixtures_path},
                    {Filesystem, dir: @fixtures_path}
                  ],

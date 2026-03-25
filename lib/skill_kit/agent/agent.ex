@@ -14,7 +14,7 @@ defmodule SkillKit.Agent do
         depth: 0,
         parent_name: nil,
         scope: %MyApp.Scope{...},
-        sources: [{SkillKit.Backend.Filesystem, dirs: [...]}],
+        skills: [{SkillKit.Backend.Filesystem, dirs: [...]}],
         registry: Agent.Registry
       }
 
@@ -32,7 +32,7 @@ defmodule SkillKit.Agent do
           :depth => non_neg_integer(),
           :parent_name => String.t() | nil,
           :scope => term(),
-          :sources => [{module(), keyword()}],
+          :skills => [{module(), keyword()}],
           :registry => atom(),
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
@@ -53,19 +53,19 @@ defmodule SkillKit.Agent do
       depth: depth,
       parent_name: parent_name,
       scope: scope,
-      sources: sources,
+      skills: skills,
       registry: registry
     } = opts
 
     preloaded_kits = Map.get(opts, :kits)
-    kits = preloaded_kits || load_kits_from_sources(sources)
+    kits = preloaded_kits || load_kits_from(skills)
     definition = resolve_capabilities(definition, kits)
     caller = Map.get(opts, :caller)
 
     parent_registry = Map.get(opts, :parent_registry)
     conversation_store = Map.get(opts, :conversation_store)
 
-    server_opts = [kits: kits, sources: sources]
+    server_opts = [kits: kits, skills: skills]
 
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
@@ -81,7 +81,7 @@ defmodule SkillKit.Agent do
 
     children = [
       {Registry, keys: :unique, name: registry},
-      {Infrastructure, {agent_name, definition, sources, registry, kits}},
+      {Infrastructure, {agent_name, definition, skills, registry, kits}},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
@@ -109,8 +109,8 @@ defmodule SkillKit.Agent do
     end
   end
 
-  defp load_kits_from_sources(sources) do
-    Enum.flat_map(sources, fn {mod, config} ->
+  defp load_kits_from(skills) do
+    Enum.flat_map(skills, fn {mod, config} ->
       case mod.load_kits(config) do
         {:ok, kits} -> kits
         {:error, _} -> []

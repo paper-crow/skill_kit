@@ -38,7 +38,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -70,7 +70,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -103,7 +103,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 2,
         parent_name: "parent-agent",
         scope: scope,
-        sources: [],
+        skills: [],
         registry: registry
       }
 

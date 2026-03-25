@@ -24,13 +24,13 @@ defmodule SkillKit.Registry do
 
   ## Boot-time Loading
 
-  When starting the registry via a supervision tree, you can pass `sources`
+  When starting the registry via a supervision tree, you can pass `skills`
   to automatically load skills at boot time:
 
-  - `:sources` — list of `{backend_module, backend_config}` tuples. Each
+  - `:skills` — list of `{backend_module, backend_config}` tuples. Each
     backend module must implement `load_skills/1`, returning `{:ok, [%Skill{}]}`
     or `{:error, reason}`. Backends are iterated in order; first-registered-wins
-    semantics apply when multiple sources provide skills with the same name.
+    semantics apply when multiple skills backends provide skills with the same name.
     Backend failures are logged as warnings; the registry still starts successfully.
 
   Boot loading happens in `handle_continue/2`, which runs before any external
@@ -86,14 +86,14 @@ defmodule SkillKit.Registry do
 
   - `:name` — the name to register the GenServer under. Defaults to `__MODULE__`
     (`SkillKit.Registry`). Pass a unique atom for test isolation.
-  - `:sources` — list of `{backend_module, backend_config}` tuples for boot-time
+  - `:skills` — list of `{backend_module, backend_config}` tuples for boot-time
     skill loading. Defaults to `[]` (no skills loaded at boot).
 
   ## Examples
 
       iex> {:ok, _pid} = SkillKit.Registry.start_link([])
       iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry)
-      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, sources: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
+      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skills: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -236,12 +236,12 @@ defmodule SkillKit.Registry do
   @impl true
   def handle_continue(:load_skills, state) do
     kits = Keyword.get(state.opts, :kits)
-    sources = Keyword.get(state.opts, :sources, [])
+    skills = Keyword.get(state.opts, :skills, [])
 
     if kits do
       Enum.each(kits, &register_kit(&1, state.table))
     else
-      Enum.each(sources, &load_backend(&1, state.table))
+      Enum.each(skills, &load_backend(&1, state.table))
     end
 
     {:noreply, state}

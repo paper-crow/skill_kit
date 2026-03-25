@@ -27,12 +27,12 @@ defmodule SkillKit.Supervisor do
         {SkillKit.Supervisor, registry_name: MyApp.SkillRegistry}
       ]
 
-  To auto-load skills from directories at boot using sources:
+  To auto-load skills from directories at boot using skills:
 
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          sources: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
+          skills: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
       ]
 
   ## Supervision Strategy
@@ -48,7 +48,7 @@ defmodule SkillKit.Supervisor do
     Defaults to `SkillKit.Registry`. Override this when running multiple
     SkillKit instances in the same node (e.g., in tests or umbrella apps).
 
-  - `:sources` — list of `{module, keyword()}` backend configurations. Each
+  - `:skills` — list of `{module, keyword()}` backend configurations. Each
     backend implements `SkillKit.Backend` and is called at boot to load skills.
     Defaults to `[]`.
   """
@@ -63,7 +63,7 @@ defmodule SkillKit.Supervisor do
   - `:name` — the name to register the Supervisor under. Defaults to `__MODULE__`.
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
-  - `:sources` — list of `{module, keyword()}` backend configurations. Each backend
+  - `:skills` — list of `{module, keyword()}` backend configurations. Each backend
     implements `SkillKit.Backend` and is called at boot to load skills. Defaults to `[]`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
@@ -75,10 +75,10 @@ defmodule SkillKit.Supervisor do
   @impl true
   def init(opts) do
     registry_name = Keyword.get(opts, :registry_name, SkillKit.Registry)
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
     kits = Keyword.get(opts, :kits)
 
-    registry_opts = [name: registry_name, sources: sources, kits: kits]
+    registry_opts = [name: registry_name, skills: skills, kits: kits]
 
     children = [
       {SkillKit.Registry, registry_opts}
