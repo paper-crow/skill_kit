@@ -9,13 +9,25 @@ executes tools, and streams events back to the caller process.
 The public API follows a three-step pattern:
 
 ```elixir
-{:ok, agent} = SkillKit.start_agent(definition, sources: [...], caller: self())
-:ok          = SkillKit.send_message(agent, "Hello")
+# Source-driven: discovers root agent from providers
+{:ok, agent} = SkillKit.start_agent(
+  skills: [{SkillKit.Kit.Local, dir: ".skills"}],
+  caller: self(),
+  scope: my_scope
+)
+
+# Or definition-driven: pass an agent definition directly
+{:ok, agent} = SkillKit.start_agent(definition, skills: [...], caller: self())
+
+:ok = SkillKit.send_message(agent, "Hello")
 # ... receive events in caller process ...
-:ok          = SkillKit.stop_agent(agent)
+:ok = SkillKit.stop_agent(agent)
 ```
 
-`start_agent/2` builds an `AgentRef` — an opaque struct holding the agent name,
+The source-driven form starts a temporary Catalog to discover the root agent
+(the kit with `root_agent` set), then delegates to the definition-driven form.
+
+`start_agent` builds an `AgentRef` — an opaque struct holding the agent name,
 a unique Registry name, and the supervisor PID. `send_message/2` routes to the
 Mailbox via Registry lookup. `stop_agent/1` calls `Supervisor.stop/1` on the
 root supervisor, tearing down the entire tree.
