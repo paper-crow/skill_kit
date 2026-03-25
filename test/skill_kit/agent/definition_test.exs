@@ -15,11 +15,9 @@ defmodule SkillKit.Agent.DefinitionTest do
       assert definition.description ==
                "Manages project A. Use when the user asks about project A."
 
-      assert definition.capabilities == ["Read", "Grep", "Glob", "Bash"]
       assert definition.model == "claude-sonnet-4-6"
       assert definition.system_prompt =~ "project A manager"
       assert definition.path == path
-      assert definition.workspace =~ "project-a"
       assert definition.max_agent_depth == 2
       assert definition.mailbox.max_messages == 5
       assert definition.mailbox.flush_interval == 200
@@ -31,20 +29,11 @@ defmodule SkillKit.Agent.DefinitionTest do
 
       assert definition.name == "simple"
       assert definition.description == "A simple agent with defaults."
-      assert definition.capabilities == []
       assert definition.model == nil
       assert definition.system_prompt =~ "Do the thing"
       assert definition.max_agent_depth == 1
       assert definition.mailbox.max_messages == 10
       assert definition.mailbox.flush_interval == 500
-    end
-
-    test "defaults workspace to directory containing AGENT.md" do
-      path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
-      assert {:ok, definition} = Definition.parse(path)
-
-      expected_workspace = Path.join([@fixtures_path, "valid", "simple"])
-      assert definition.workspace == expected_workspace
     end
 
     test "returns error for missing name" do

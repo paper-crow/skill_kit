@@ -38,7 +38,7 @@ if Mix.env() == :test do
 
       caller = Keyword.get(opts, :caller, self())
       scope = Keyword.get(opts, :scope)
-      kits = Keyword.get(opts, :kits, [])
+      skills = Keyword.get(opts, :skills, [])
 
       definition =
         Keyword.get_lazy(opts, :definition, fn ->
@@ -46,15 +46,21 @@ if Mix.env() == :test do
             name: agent_name,
             description: "Test agent",
             system_prompt: "You are a test agent.",
-            path: "/tmp/test",
-            workspace: "/tmp/test"
+            path: "/tmp/test"
           }
         end)
 
       registry_name = :"test_registry_#{:erlang.unique_integer([:positive])}"
       ExUnit.Callbacks.start_supervised!({Registry, keys: :unique, name: registry_name})
 
-      server_opts = [caller: caller, kits: kits]
+      ExUnit.Callbacks.start_supervised!(
+        {SkillKit.Catalog,
+         name: {:via, Registry, {registry_name, {agent_name, :catalog}}},
+         providers: skills,
+         scope: scope}
+      )
+
+      server_opts = [caller: caller, skills: skills]
 
       {:ok, pid} =
         Server.start_link({agent_name, definition, 0, nil, scope, registry_name, server_opts})

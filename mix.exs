@@ -15,7 +15,8 @@ defmodule SkillKit.MixProject do
       source_url: "https://github.com/paper-crow/skill_kit",
       homepage_url: "https://github.com/paper-crow/skill_kit",
       docs: docs(),
-      aliases: aliases()
+      aliases: aliases(),
+      consolidate_protocols: Mix.env() != :test
     ]
   end
 
@@ -55,7 +56,7 @@ defmodule SkillKit.MixProject do
         "README.md",
         "guides/architecture.md",
         "guides/llm-providers.md",
-        "guides/backends.md",
+        "guides/providers.md",
         "guides/hooks-and-execution.md",
         "guides/authorization.md",
         "guides/telemetry.md",
@@ -89,9 +90,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Agent.Server,
           SkillKit.Agent.Mailbox,
           SkillKit.Agent.Core,
-          SkillKit.Agent.Infrastructure,
-          SkillKit.Agent.SubagentSupervisor,
-          SkillKit.Agent.ToolBuilder
+          SkillKit.Agent.SubagentSupervisor
         ],
         "LLM Providers": [
           SkillKit.LLM,
@@ -113,16 +112,17 @@ defmodule SkillKit.MixProject do
         "Skills & Kits": [
           SkillKit.Skill,
           SkillKit.Kit,
+          SkillKit.Kit.Memory,
           SkillKit.Catalog,
-          SkillKit.Backend,
-          SkillKit.Backend.Filesystem,
-          SkillKit.Backend.Filesystem.Parser,
+          SkillKit.Kit.Provider,
+          SkillKit.Kit.Local,
+          SkillKit.Kit.Local.Parser,
           SkillKit.Frontmatter
         ],
         "Execution & Hooks": [
           SkillKit.Handler,
           SkillKit.Handler.Behaviour,
-          SkillKit.Handler.Shell,
+          SkillKit.Shell,
           SkillKit.Handler.ToolDefinition,
           SkillKit.Pipeline,
           SkillKit.Hook
@@ -138,10 +138,6 @@ defmodule SkillKit.MixProject do
         ],
         Telemetry: [
           SkillKit.Telemetry
-        ],
-        Infrastructure: [
-          SkillKit.Supervisor,
-          SkillKit.Registry
         ]
       ]
     ]

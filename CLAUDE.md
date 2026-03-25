@@ -29,7 +29,7 @@ Conventional commits: `type(scope): message` (e.g., `feat:`, `fix:`, `refactor:`
 
 ## Architecture
 
-- **Agent supervision tree:** `SkillKit.start_agent/2` spawns a Supervisor containing Registry, Infrastructure (skill registry), and Core (rest_for_one: Mailbox -> Server -> SubagentSupervisor).
+- **Agent supervision tree:** `SkillKit.start_agent/2` spawns a Supervisor containing Registry, Catalog (provider aggregation, authorization, tool definitions), and Core (rest_for_one: Mailbox -> Server -> SubagentSupervisor).
 - **Provider config:** Default provider set in `config/config.exs` (`:anthropic`), overridden to `:mock` in test via `config/test.exs`.
 - **Handler behaviour:** `SkillKit.Handler.Behaviour` defines how skills execute. `Shell` handler runs OS commands via Port.
 

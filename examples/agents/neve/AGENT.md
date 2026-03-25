@@ -1,7 +1,6 @@
 ---
 name: "neve"
 description: "A helpful coding assistant"
-capabilities: bash, activate_skill, system:memory
 metadata:
   max_agent_depth: 2
 ---

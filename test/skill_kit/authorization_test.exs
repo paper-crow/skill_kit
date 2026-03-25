@@ -1,7 +1,8 @@
 defmodule SkillKit.AuthorizationTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Authorization, Skill}
+  alias SkillKit.Authorization
+  alias SkillKit.Skill
 
   # ---------------------------------------------------------------------------
   # Inline test provider modules

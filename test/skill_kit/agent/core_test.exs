@@ -20,9 +20,13 @@ defmodule SkillKit.Agent.CoreTest do
       description: "Test agent",
       system_prompt: "You are a test.",
       path: "/tmp/test",
-      workspace: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 500}
     }
+
+    start_supervised!(
+      {SkillKit.Catalog,
+       name: {:via, Registry, {registry_name, {agent_name, :catalog}}}, providers: []}
+    )
 
     {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
   end

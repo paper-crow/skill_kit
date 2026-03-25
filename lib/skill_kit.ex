@@ -8,7 +8,7 @@ defmodule SkillKit do
   ## Quick Start
 
       {:ok, agent} = SkillKit.start_agent(definition,
-        sources: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
+        skills: [{SkillKit.Kit.Local, dir: "skills"}],
         caller: self()
       )
 
@@ -35,9 +35,6 @@ defmodule SkillKit do
 
   ## Configuration
 
-      # Default handler
-      config :skill_kit, :handler, SkillKit.Handler.Shell
-
       # Default LLM provider
       config :skill_kit, SkillKit.LLM,
         {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
@@ -60,27 +57,48 @@ defmodule SkillKit do
   ## Options
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
-    * `:sources` — list of `{module, config}` skill sources (default: `[]`)
+    * `:skills` — list of `{module, config}` skill sources (default: `[]`)
     * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
     * `:scope` — granted scopes for authorization (default: `nil`)
 
   """
+  @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
+  def start_agent(opts) when is_list(opts) do
+    skills = Keyword.fetch!(opts, :skills)
+    scope = Keyword.get(opts, :scope)
+
+    {:ok, temp_catalog} = SkillKit.Catalog.start_link(providers: skills, scope: scope)
+    root = SkillKit.Catalog.root_agent(temp_catalog)
+    GenServer.stop(temp_catalog)
+
+    case root do
+      nil -> {:error, :no_root_agent}
+      definition -> start_agent(definition, opts)
+    end
+  end
+
+  @spec start_agent(Agent.Definition.t()) :: {:ok, agent()} | {:error, term()}
+  def start_agent(%Agent.Definition{} = definition) do
+    start_agent(definition, [])
+  end
+
   @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(definition, opts \\ []) do
+  def start_agent(%Agent.Definition{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
     scope = Keyword.get(opts, :scope)
+    agent_name = Keyword.get(opts, :name, definition.name)
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
     agent_opts = %{
-      agent_name: definition.name,
+      agent_name: agent_name,
       definition: definition,
       depth: 0,
       parent_name: nil,
       scope: scope,
-      sources: sources,
+      skills: skills,
       registry: registry_name,
       caller: caller,
       conversation_store: conversation_store
@@ -88,7 +106,7 @@ defmodule SkillKit do
 
     case Agent.start_link(agent_opts) do
       {:ok, sup_pid} ->
-        {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
+        {:ok, %AgentRef{name: agent_name, registry: registry_name, supervisor_pid: sup_pid}}
 
       {:error, reason} ->
         {:error, reason}
@@ -159,7 +177,7 @@ defmodule SkillKit do
     depth = Keyword.fetch!(parent_opts, :depth)
     parent_name = Keyword.fetch!(parent_opts, :parent_name)
     parent_registry = Keyword.fetch!(parent_opts, :parent_registry)
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
@@ -169,7 +187,7 @@ defmodule SkillKit do
       depth: depth + 1,
       parent_name: parent_name,
       scope: nil,
-      sources: sources,
+      skills: skills,
       registry: registry_name,
       caller: nil,
       parent_registry: parent_registry

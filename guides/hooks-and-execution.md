@@ -103,7 +103,7 @@ When a step returns `{:pending, state}`, `Pipeline.run/1` returns
 To continue, call `Handler.resume/2` (or `Pipeline.resume/2` directly):
 
 ```elixir
-{:pending, exec} = Handler.run(registry, skill, input, context)
+{:pending, exec} = Handler.run(catalog, skill, input, context)
 
 case Handler.resume(exec, :approved) do
   {:ok, exec}      -> :done
@@ -184,12 +184,13 @@ config :skill_kit, handler: MyApp.Handler.Sandbox
 
 ## How Hooks Are Collected
 
-Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3` calls
-`SkillKit.Registry.list_skills/2`, flat-maps each skill's `:hooks` list, filters
-by handler name, and builds the step list for the `%SkillKit.Pipeline{}` struct.
+Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/4`
+calls `SkillKit.Catalog.hooks/1`, which flat-maps every skill's `:hooks` list
+across all loaded kits, then filters by handler name and builds the step list
+for the `%SkillKit.Pipeline{}` struct.
 
 The matcher regex is tested against only the last segment of the handler module
-name. A hook with `~r/Shell/` matches `SkillKit.Handler.Shell` but not
+name. A hook with `~r/Shell/` matches `SkillKit.Shell` but not
 `MyApp.Handler.Sandbox`. A catch-all hook can use `~r/.*/`.
 
 Because hooks are lifetime-scoped to their defining skill, unregistering a

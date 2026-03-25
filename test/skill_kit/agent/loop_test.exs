@@ -22,7 +22,6 @@ defmodule SkillKit.Agent.LoopTest do
       description: "Test agent for loop",
       system_prompt: "You are a helpful test agent.",
       path: "/tmp/test",
-      workspace: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 60_000}
     }
 
@@ -55,7 +54,7 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -112,7 +111,7 @@ defmodule SkillKit.Agent.LoopTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 

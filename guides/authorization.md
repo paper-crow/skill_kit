@@ -18,7 +18,7 @@ A scope is a two-segment string: `"namespace:action"`.
 Valid examples: `"admin:read"`, `"skills:execute"`, `"tools:delete-all"`,
 `"tools:*"`.
 
-Use `SkillKit.Scope.valid?/1` or `SkillKit.Scope.validate/1` to check a scope
+Use `SkillKit.Scope.Validation.valid?/1` or `SkillKit.Scope.Validation.validate/1` to check a scope
 string at runtime.
 
 ## ALL-of Semantics
@@ -107,30 +107,38 @@ keys. Pattern-match on whatever structure your application uses and return
 
 ## Catalog Integration
 
-`SkillKit.Catalog` wraps the Registry and applies authorization automatically.
+`SkillKit.Catalog` applies authorization automatically based on a scope
+configured at start time.
 
-**Discovery** — `Catalog.list_skills/2` accepts a `:scopes` option. When
-provided, skills whose `required_scope` is not covered are filtered out of the
-result. Omitting `:scopes` returns all skills (useful for admin contexts).
-
-```elixir
-# caller holds tools:* — sees only skills covered by that grant
-skills = Catalog.list_skills(server, scopes: ["tools:*"])
-
-# no scopes option — returns everything
-all = Catalog.list_skills(server)
-```
-
-**Activation** — `Catalog.activate/4` accepts the same `:scopes` option. It
-calls `get_skill/3` internally, which returns `{:error, :unauthorized}` before
-rendering if the caller lacks the required scopes.
+**Scopes are set at start time** — pass the `:scope` option to
+`Catalog.start_link/1`. The catalog resolves permissions once from that scope
+and applies them to every subsequent query.
 
 ```elixir
-{:ok, body}              = Catalog.activate(server, "tools:search", args, scopes: ["tools:*"])
-{:error, :unauthorized}  = Catalog.activate(server, "admin:purge", args, scopes: ["tools:*"])
-{:error, :not_found}     = Catalog.activate(server, "missing:skill", args, scopes: ["admin:*"])
+# Start a catalog that only exposes skills covered by tools:*
+{:ok, server} = Catalog.start_link(providers: [...], scope: ["tools:*"])
+
+# Start an unrestricted catalog (admin context)
+{:ok, server} = Catalog.start_link(providers: [...])
 ```
 
-Note that `:not_found` and `:unauthorized` are distinct — `:not_found` is
-returned exclusively by the Registry and is never produced by the authorization
-layer.
+**Discovery** — `Catalog.list_skills/1` takes no options. It returns only
+skills the configured scope covers (or all skills when no scope was set).
+
+```elixir
+# returns only skills authorized by the scope set at start_link
+skills = Catalog.list_skills(server)
+```
+
+**Lookup** — `Catalog.get_skill/2` returns `{:error, :unauthorized}` when the
+configured scope does not cover the requested skill's `required_scope`.
+
+```elixir
+{:ok, skill}             = Catalog.get_skill(server, "tools:search")
+{:error, :unauthorized}  = Catalog.get_skill(server, "admin:purge")
+{:error, :not_found}     = Catalog.get_skill(server, "missing:skill")
+```
+
+Note that `:not_found` and `:unauthorized` are distinct — `:not_found` means
+the skill does not exist; `:unauthorized` means it exists but the configured
+scope does not cover it.

@@ -2,8 +2,9 @@ defmodule SkillKit.Agent do
   @moduledoc """
   Top-level supervisor for an agent.
 
-  Starts two isolated subtrees under `:one_for_one`:
-  - `Agent.Infrastructure` — skill registry (crash doesn't affect conversation)
+  Starts three children under `:one_for_one`:
+  - `Registry` — process registry for agent components
+  - `SkillKit.Catalog` — provider aggregation, authorization, tool definitions
   - `Agent.Core` — mailbox, server, subagent supervisor (`:rest_for_one`)
 
   ## Starting an agent
@@ -14,7 +15,7 @@ defmodule SkillKit.Agent do
         depth: 0,
         parent_name: nil,
         scope: %MyApp.Scope{...},
-        sources: [{SkillKit.Backend.Filesystem, dirs: [...]}],
+        skills: [{SkillKit.Kit.Local, dir: "skills"}],
         registry: Agent.Registry
       }
 
@@ -24,7 +25,6 @@ defmodule SkillKit.Agent do
   use Supervisor
 
   alias SkillKit.Agent.Core
-  alias SkillKit.Agent.Infrastructure
 
   @type opts :: %{
           :agent_name => String.t(),
@@ -32,7 +32,7 @@ defmodule SkillKit.Agent do
           :depth => non_neg_integer(),
           :parent_name => String.t() | nil,
           :scope => term(),
-          :sources => [{module(), keyword()}],
+          :skills => [{module(), keyword()}],
           :registry => atom(),
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
@@ -52,19 +52,15 @@ defmodule SkillKit.Agent do
       depth: depth,
       parent_name: parent_name,
       scope: scope,
-      sources: sources,
+      skills: skills,
       registry: registry
     } = opts
 
-    kits = load_kits_from_sources(sources)
-    definition = resolve_capabilities(definition, kits)
     caller = Map.get(opts, :caller)
-
     parent_registry = Map.get(opts, :parent_registry)
     conversation_store = Map.get(opts, :conversation_store)
 
-    server_opts = [kits: kits, sources: sources]
-
+    server_opts = [skills: skills]
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
     server_opts =
@@ -79,40 +75,11 @@ defmodule SkillKit.Agent do
 
     children = [
       {Registry, keys: :unique, name: registry},
-      {Infrastructure, {agent_name, definition, sources, registry}},
+      {SkillKit.Catalog,
+       name: {:via, Registry, {registry, {agent_name, :catalog}}}, providers: skills, scope: scope},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
-  end
-
-  defp resolve_capabilities(definition, kits) do
-    all_skills = Enum.flat_map(kits, & &1.skills)
-    skill_names = MapSet.new(all_skills, & &1.name)
-
-    matched_skills =
-      definition.capabilities
-      |> Enum.filter(&MapSet.member?(skill_names, &1))
-      |> Enum.map(fn name -> Enum.find(all_skills, &(&1.name == name)) end)
-
-    case matched_skills do
-      [] ->
-        definition
-
-      skills ->
-        skill_blocks =
-          Enum.map_join(skills, &"\n\n## #{&1.name}\n\n#{&1.body}")
-
-        %{definition | system_prompt: definition.system_prompt <> skill_blocks}
-    end
-  end
-
-  defp load_kits_from_sources(sources) do
-    Enum.flat_map(sources, fn {mod, config} ->
-      case mod.load_kits(config) do
-        {:ok, kits} -> kits
-        {:error, _} -> []
-      end
-    end)
   end
 end

@@ -11,7 +11,7 @@ defmodule SkillKit.PipelineTest do
       namespace: "test",
       description: "Test skill",
       body: "Do something",
-      handler: Keyword.get(opts, :handler, SkillKit.Handler.Shell),
+      handler: Keyword.get(opts, :handler, SkillKit.Shell),
       hooks: Keyword.get(opts, :hooks, [])
     }
   end

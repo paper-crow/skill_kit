@@ -28,10 +28,13 @@ SkillKit gives you a composable agent runtime:
 ## Usage
 
 ```elixir
-# Start an agent
-{:ok, agent} = SkillKit.start_agent(definition,
-  sources: [{SkillKit.Backend.Filesystem, dirs: ["examples/skills"]}],
-  provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
+# Start an agent from a directory — provider discovers the root AGENT.md
+{:ok, agent} = SkillKit.start_agent(
+  skills: [
+    {SkillKit.Kit.Local, dir: "my_agent"},
+    {SkillKit.Shell, []}
+  ],
+  scope: my_scope,
   conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"},
   caller: self()
 )
@@ -41,10 +44,9 @@ SkillKit gives you a composable agent runtime:
 
 # Receive streamed events
 receive do
-  {:skill_kit, agent_name, {:delta, text}} -> IO.write(text)
-  {:skill_kit, agent_name, {:response, text}} -> IO.puts("\nDone.")
-  {:skill_kit, agent_name, {:tool_call, name, input}} -> IO.puts("Using #{name}...")
-  {:skill_kit, agent_name, {:error, reason}} -> IO.puts("Error: #{inspect(reason)}")
+  %SkillKit.Event.Delta{text: text} -> IO.write(text)
+  %SkillKit.Types.AssistantMessage{} -> IO.puts("\nDone.")
+  %SkillKit.Event.Error{reason: reason} -> IO.puts("Error: #{inspect(reason)}")
 end
 
 # Stop
@@ -60,17 +62,11 @@ Agents are defined in `AGENT.md` files with YAML frontmatter:
 name: "neve"
 description: "A helpful coding assistant"
 model: "claude-sonnet-4-20250514"
-capabilities: bash, activate_skill, system:memory
 metadata:
   max_agent_depth: 2
 ---
 Your name is Neve. You are a helpful coding assistant.
 ```
-
-The `capabilities` field determines what the agent can do:
-- **Tool names** (e.g. `bash`) register the tool with the LLM
-- **Skill names** (e.g. `system:memory`) inject the skill's instructions into the system prompt
-- Both can share a name (e.g. `bash` is both a tool and a skill with usage guidelines)
 
 ## Skills
 
@@ -105,7 +101,6 @@ Agents can delegate work to subagents asynchronously:
 ---
 name: "code-reviewer"
 description: "Reviews code for issues and reports findings"
-capabilities: bash, activate_skill, report_result
 ---
 You are a code reviewer. Use bash to read files, analyze them,
 then call report_result with your findings.
@@ -135,17 +130,29 @@ Attach handlers with `:telemetry.attach/4` or use a GenServer-based handler patt
 ## Configuration
 
 ```elixir
-# Default handler (swappable)
-config :skill_kit, :handler, SkillKit.Handler.Shell
-
-# Default LLM provider
+# LLM provider
 config :skill_kit, SkillKit.LLM,
   {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
 ```
 
+Capabilities are registered per-agent through `skills:`. For example, to give an agent bash execution:
+
+```elixir
+SkillKit.start_agent(
+  skills: [
+    {SkillKit.Kit.Local, dir: ".skills"},
+    {SkillKit.Shell, cwd: File.cwd!()}
+  ]
+)
+```
+
 ## Examples
 
-See `examples/` for sample agents and skills:
+### Persona Chat
+
+A full example app in `examples/persona_chat/` that exercises skills, kits, agents, subagent delegation, authorization, dynamic context injection, and conversation isolation. See `examples/persona_chat/README.md`.
+
+### Sample agents and skills
 
 ```
 examples/
@@ -166,10 +173,10 @@ Run any agent: `mix skill_kit.chat neve` or `mix skill_kit.chat researcher`
 ## Architecture
 
 ```
-SkillKit.start_agent/2
+SkillKit.start_agent/1
   |-> Agent (Supervisor)
        |-> Registry (process discovery)
-       |-> Infrastructure (skill registry)
+       |-> Catalog (provider aggregation, authorization, tool definitions)
        |-> Core (rest_for_one)
             |-> Mailbox (message buffering)
             |-> Server (LLM loop, tool execution, streaming)

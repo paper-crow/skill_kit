@@ -9,8 +9,11 @@ defmodule SkillKit.Agent.ServerTest do
   alias SkillKit.Agent.Server
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Kit
+  alias SkillKit.Kit.Memory
   alias SkillKit.Response.Text
   alias SkillKit.Response.ToolCall
+  alias SkillKit.Skill
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.UserMessage
@@ -27,9 +30,13 @@ defmodule SkillKit.Agent.ServerTest do
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test agent.",
-      path: "/tmp/test",
-      workspace: "/tmp/test"
+      path: "/tmp/test"
     }
+
+    start_supervised!(
+      {SkillKit.Catalog,
+       name: {:via, Registry, {registry_name, {agent_name, :catalog}}}, providers: []}
+    )
 
     {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
   end
@@ -128,7 +135,6 @@ defmodule SkillKit.Agent.ServerTest do
         description: "Test agent",
         system_prompt: "You are a calculator.",
         path: "/tmp/test",
-        workspace: "/tmp/test",
         model: "claude-sonnet-4-20250514"
       }
 
@@ -148,28 +154,48 @@ defmodule SkillKit.Agent.ServerTest do
   end
 
   describe "tools from kits" do
-    test "passes tools to LLM when kits have skills", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
+    test "passes tools to LLM when catalog has skills" do
+      # Create a fresh registry and catalog with kits for this test
+      reg = :"tools_test_registry_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, keys: :unique, name: reg}, id: :tools_reg)
+
+      agent = "tools-agent-#{:erlang.unique_integer([:positive])}"
+
+      def_for_test = %Definition{
+        name: agent,
+        description: "Test agent",
+        system_prompt: "You are a test agent.",
+        path: "/tmp/test"
+      }
+
+      {:ok, provider} = Memory.start_link([])
+
+      Memory.put_kit(provider, %Kit{
+        name: "shell",
+        metadata: %{handler: SkillKit.Shell}
+      })
+
+      Memory.put(provider, %Skill{
+        name: "tools:echo",
+        namespace: "tools",
+        description: "Echo"
+      })
+
+      start_supervised!(
+        {SkillKit.Catalog,
+         name: {:via, Registry, {reg, {agent, :catalog}}},
+         providers: [{Memory, provider: provider}]},
+        id: :tools_catalog
+      )
+
       assert_response(%Text{content: "ok"}, fn _messages, opts ->
         tools = Keyword.get(opts, :tools, [])
         assert Enum.any?(tools, fn t -> t.name == "bash" end)
         assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
       end)
 
-      kits = [
-        %SkillKit.Kit{
-          name: "test",
-          skills: [%SkillKit.Skill{name: "tools:echo", namespace: "tools", description: "Echo"}]
-        }
-      ]
-
       {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 0, nil, nil, registry, caller: self(), kits: kits}
-        )
+        Server.start_link({agent, def_for_test, 0, nil, nil, reg, caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 

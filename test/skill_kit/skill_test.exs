@@ -3,6 +3,16 @@ defmodule SkillKit.SkillTest do
 
   alias SkillKit.Skill
 
+  defmodule TestScope do
+    defstruct [:user]
+  end
+
+  defimpl SkillKit.Scope, for: TestScope do
+    def permissions(_scope), do: []
+    def resolve(scope, "USERNAME", _context), do: {:ok, scope.user}
+    def resolve(_scope, _key, _context), do: :error
+  end
+
   describe "Skill struct" do
     test "has expected fields" do
       skill = %Skill{}
@@ -27,8 +37,8 @@ defmodule SkillKit.SkillTest do
       assert %Skill{}.required_scope == []
     end
 
-    test "handler defaults to SkillKit.Handler.Shell" do
-      assert %Skill{}.handler == SkillKit.Handler.Shell
+    test "handler defaults to SkillKit.Shell" do
+      assert %Skill{}.handler == SkillKit.Shell
     end
 
     test "hooks defaults to empty list" do
@@ -104,6 +114,85 @@ defmodule SkillKit.SkillTest do
       skill = %Skill{body: "Process $0"}
       args = %{"arguments" => "file.txt"}
       assert {:ok, "Process file.txt"} = Skill.render(skill, args)
+    end
+  end
+
+  describe "render/3 with unified syntax" do
+    test "substitutes $SKILL_DIR (new name for ${CLAUDE_SKILL_DIR})" do
+      skill = %Skill{body: "Run $SKILL_DIR/build.sh", location: "/skills/builder/SKILL.md"}
+      assert {:ok, "Run /skills/builder/build.sh"} = Skill.render(skill, %{})
+    end
+
+    test "substitutes ${SKILL_DIR} with braces" do
+      skill = %Skill{body: "Run ${SKILL_DIR}/build.sh", location: "/skills/builder/SKILL.md"}
+      assert {:ok, "Run /skills/builder/build.sh"} = Skill.render(skill, %{})
+    end
+
+    test "substitutes $SESSION_ID (new name for ${CLAUDE_SESSION_ID})" do
+      skill = %Skill{body: "Log to $SESSION_ID.log"}
+      assert {:ok, "Log to abc-123.log"} = Skill.render(skill, %{"session_id" => "abc-123"})
+    end
+
+    test "resolves unmatched variables via scope" do
+      skill = %Skill{name: "memory_kit:user_memory", body: "Hello $USERNAME"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "pirate_pete", skill: "memory_kit:user_memory"}
+      assert {:ok, "Hello alice"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "scope resolution works with braces syntax" do
+      skill = %Skill{name: "memory_kit:user_memory", body: "Hello ${USERNAME}"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "pirate_pete", skill: "memory_kit:user_memory"}
+      assert {:ok, "Hello alice"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "unresolved scope variables are left as-is" do
+      skill = %Skill{name: "test:skill", body: "Value is $UNKNOWN"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "test", skill: "test:skill"}
+      assert {:ok, "Value is $UNKNOWN"} = Skill.render(skill, %{}, scope, scope_context)
+    end
+
+    test "$ARGUMENTS takes precedence over scope variables" do
+      skill = %Skill{name: "test:skill", body: "User: $ARGUMENTS"}
+      scope = %TestScope{user: "alice"}
+      scope_context = %{agent: "test", skill: "test:skill"}
+
+      assert {:ok, "User: bob"} =
+               Skill.render(skill, %{"arguments" => "bob"}, scope, scope_context)
+    end
+
+    test "render/2 without scope still works (backwards compatible)" do
+      skill = %Skill{body: "Fix issue $ARGUMENTS"}
+      assert {:ok, "Fix issue 123"} = Skill.render(skill, %{"arguments" => "123"})
+    end
+  end
+
+  describe "dynamic command injection (!`command`)" do
+    test "executes command and substitutes output" do
+      skill = %Skill{body: "Today is !`echo hello`"}
+      assert {:ok, "Today is hello"} = Skill.render(skill, %{})
+    end
+
+    test "handles multiple commands" do
+      skill = %Skill{body: "A: !`echo one` B: !`echo two`"}
+      assert {:ok, "A: one B: two"} = Skill.render(skill, %{})
+    end
+
+    test "shows error for failed commands" do
+      skill = %Skill{body: "Result: !`exit 1`"}
+      assert {:ok, "Result: [command failed: ]"} = Skill.render(skill, %{})
+    end
+
+    test "command output is subject to variable substitution" do
+      skill = %Skill{body: "Count: !`echo 3` files with $ARGUMENTS"}
+      assert {:ok, "Count: 3 files with hello"} = Skill.render(skill, %{"arguments" => "hello"})
+    end
+
+    test "body without commands is unchanged" do
+      skill = %Skill{body: "No commands here"}
+      assert {:ok, "No commands here"} = Skill.render(skill, %{})
     end
   end
 end

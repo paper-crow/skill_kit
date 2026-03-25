@@ -14,41 +14,40 @@ defmodule SkillKit.Handler do
 
   alias SkillKit.Hook
   alias SkillKit.Pipeline
-  alias SkillKit.Registry
+  alias SkillKit.Skill
 
   @doc """
-  Runs input through the execution pipeline without a specific skill.
+  Runs input through the execution pipeline.
 
-  Accepts a map or bare command string. Uses the configured handler
-  from `config :skill_kit, :handler` (defaults to `SkillKit.Handler.Shell`).
+  Two forms:
+
+    * `run(catalog, %Skill{}, input, context)` — uses the handler from the skill struct.
+    * `run(handler_module, catalog, input, context)` — explicit handler module
+      (must be an atom). Used by the agent server for bare commands.
+
+  The catalog (or any process implementing hooks retrieval) is used to
+  collect lifecycle hooks for the pipeline.
   """
-  def run(registry, input, context) do
-    handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
-    hooks = collect_and_filter_hooks(registry, handler)
-
-    %Pipeline{
-      skill: nil,
-      input: wrap_input(input),
-      context: context,
-      steps: build_steps(hooks, handler)
-    }
-    |> Pipeline.run()
-  end
-
-  @doc """
-  Runs a skill's input through the execution pipeline.
-
-  Accepts a map or bare command string. Collects hooks from all
-  registered skills, builds the pipeline, and runs it.
-  """
-  def run(registry, skill, input, context) do
-    hooks = collect_and_filter_hooks(registry, skill.handler)
+  def run(catalog, %Skill{} = skill, input, context) do
+    hooks = collect_and_filter_hooks(catalog, skill.handler)
 
     %Pipeline{
       skill: skill,
       input: wrap_input(input),
       context: context,
       steps: build_steps(hooks, skill.handler)
+    }
+    |> Pipeline.run()
+  end
+
+  def run(handler, catalog, input, context) when is_atom(handler) do
+    hooks = collect_and_filter_hooks(catalog, handler)
+
+    %Pipeline{
+      skill: nil,
+      input: wrap_input(input),
+      context: context,
+      steps: build_steps(hooks, handler)
     }
     |> Pipeline.run()
   end
@@ -63,12 +62,11 @@ defmodule SkillKit.Handler do
   defp wrap_input(input) when is_map(input), do: input
   defp wrap_input(command) when is_binary(command), do: %{"command" => command}
 
-  defp collect_and_filter_hooks(registry, handler) do
+  defp collect_and_filter_hooks(catalog, handler) do
     handler_name = handler |> Module.split() |> List.last()
 
-    registry
-    |> Registry.list_skills()
-    |> Enum.flat_map(& &1.hooks)
+    catalog
+    |> SkillKit.Catalog.hooks()
     |> Enum.filter(&Regex.match?(&1.matcher, handler_name))
   rescue
     _ -> []

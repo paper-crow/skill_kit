@@ -19,7 +19,6 @@ defmodule SkillKit.Agent.AgentTest do
       description: "Test agent",
       system_prompt: "You are a test.",
       path: "/tmp/test",
-      workspace: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 500}
     }
 
@@ -38,7 +37,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -47,7 +46,7 @@ defmodule SkillKit.Agent.AgentTest do
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :skill_registry})
+      assert [{_, _}] = Registry.lookup(registry, {agent_name, :catalog})
     end
 
     test "mailbox can deliver messages to server", %{
@@ -70,7 +69,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 0,
         parent_name: nil,
         scope: nil,
-        sources: [],
+        skills: [],
         registry: registry
       }
 
@@ -103,7 +102,7 @@ defmodule SkillKit.Agent.AgentTest do
         depth: 2,
         parent_name: "parent-agent",
         scope: scope,
-        sources: [],
+        skills: [],
         registry: registry
       }
 

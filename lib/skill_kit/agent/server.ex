@@ -10,7 +10,6 @@ defmodule SkillKit.Agent.Server do
   use GenServer
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Agent.ToolBuilder
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
@@ -18,6 +17,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Pipeline
+  alias SkillKit.Skill
   alias SkillKit.Telemetry
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
@@ -32,9 +32,8 @@ defmodule SkillKit.Agent.Server do
     :scope,
     :registry,
     :caller,
-    :kits,
     :parent_registry,
-    :sources,
+    :skills,
     :conversation_store,
     halted: false,
     messages: [],
@@ -51,9 +50,8 @@ defmodule SkillKit.Agent.Server do
           scope: term(),
           registry: atom(),
           caller: pid() | nil,
-          kits: list(),
           parent_registry: atom() | nil,
-          sources: list(),
+          skills: list(),
           conversation_store: {module(), keyword()} | nil,
           halted: boolean(),
           messages: list(),
@@ -78,9 +76,8 @@ defmodule SkillKit.Agent.Server do
     Registry.register(registry, {agent_name, :server}, [])
 
     caller = Keyword.get(opts, :caller)
-    kits = Keyword.get(opts, :kits, [])
     parent_registry = Keyword.get(opts, :parent_registry)
-    sources = Keyword.get(opts, :sources, [])
+    skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
 
     messages =
@@ -104,9 +101,8 @@ defmodule SkillKit.Agent.Server do
        scope: scope,
        registry: registry,
        caller: caller,
-       kits: kits,
        parent_registry: parent_registry,
-       sources: sources,
+       skills: skills,
        conversation_store: conversation_store,
        messages: messages,
        halted: false
@@ -204,7 +200,7 @@ defmodule SkillKit.Agent.Server do
     state = %{state | messages: state.messages ++ new_messages}
 
     tools =
-      ToolBuilder.build_tools(state.kits,
+      SkillKit.Catalog.tool_definitions(catalog(state),
         subagent: state.depth > 0,
         activated_skills: state.activated_skills
       )
@@ -240,8 +236,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
-    classifier = ToolBuilder.classifier(state.kits, state.activated_skills)
-    {results, state} = execute_tool_calls(tool_calls, state, classifier)
+    {results, state} = execute_tool_calls(tool_calls, state)
 
     Enum.each(results, fn result ->
       Telemetry.event([:agent, :tool_result], %{}, %{
@@ -255,12 +250,12 @@ defmodule SkillKit.Agent.Server do
     run_agent_loop(state, [])
   end
 
-  defp execute_tool_calls(tool_calls, state, classifier) do
+  defp execute_tool_calls(tool_calls, state) do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
       Telemetry.event([:agent, :tool_call], %{}, %{agent_name: acc.agent_name, tool_call: tc})
 
       {result, acc} =
-        case classifier.(tc) do
+        case SkillKit.Catalog.classify(catalog(acc), tc.name, acc.activated_skills) do
           :handler -> {execute_command(tc, acc), acc}
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
@@ -275,10 +270,10 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%ToolCall{id: id, input: input}, state) do
-    context = %{cwd: state.definition.workspace, scope: state.scope}
-    skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
+    handler = find_handler(state)
+    context = build_handler_context(state)
 
-    case SkillKit.Handler.run(skill_registry, input, context) do
+    case SkillKit.Handler.run(handler, catalog(state), input, context) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,
@@ -296,6 +291,34 @@ defmodule SkillKit.Agent.Server do
         }
     end
   end
+
+  defp find_handler(state) do
+    case SkillKit.Catalog.handler_config(catalog(state)) do
+      nil -> SkillKit.Shell
+      {handler, _metadata} -> handler
+    end
+  end
+
+  defp build_handler_context(state) do
+    base_context = %{scope: state.scope}
+
+    case SkillKit.Catalog.handler_config(catalog(state)) do
+      nil -> base_context
+      {_handler, metadata} -> merge_handler_config(base_context, metadata)
+    end
+  end
+
+  defp merge_handler_config(context, metadata) do
+    context
+    |> maybe_put_cwd(metadata)
+    |> maybe_put_env(metadata)
+  end
+
+  defp maybe_put_cwd(context, %{cwd: cwd}), do: Map.put(context, :cwd, cwd)
+  defp maybe_put_cwd(context, _metadata), do: context
+
+  defp maybe_put_env(context, %{env: env}), do: Map.put(context, :env, env)
+  defp maybe_put_env(context, _metadata), do: context
 
   defp extract_output({:ok, output}), do: ensure_non_empty(output)
   defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
@@ -315,51 +338,56 @@ defmodule SkillKit.Agent.Server do
 
   defp activate_skill(%ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
-    skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
+    arguments = Map.get(input, "arguments", "")
 
-    opts = if state.scope, do: [scopes: state.scope], else: []
-
-    case SkillKit.Catalog.activate(skill_registry, skill_name, %{}, opts) do
-      {:ok, rendered_body} ->
-        skill = find_skill_by_name(skill_name, state)
-        already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))
-
-        state =
-          if skill && skill.handler != SkillKit.Handler.Shell && !already_activated do
-            %{state | activated_skills: [skill | state.activated_skills]}
-          else
-            state
-          end
-
-        {%ToolResult{tool_call_id: id, content: rendered_body}, state}
+    case SkillKit.Catalog.get_skill(catalog(state), skill_name) do
+      {:ok, skill} ->
+        scope_context = %{agent: state.agent_name, skill: skill_name}
+        render_and_activate(id, skill, arguments, state, scope_context)
 
       {:error, :unauthorized} ->
-        {%ToolResult{
-           tool_call_id: id,
-           content: "Unauthorized: insufficient scope for skill #{skill_name}",
-           is_error: true
-         }, state}
+        result = %ToolResult{
+          tool_call_id: id,
+          content: "Unauthorized: insufficient scope for skill #{skill_name}",
+          is_error: true
+        }
+
+        {result, state}
 
       {:error, reason} ->
-        {%ToolResult{
-           tool_call_id: id,
-           content: "Error: #{inspect(reason)}",
-           is_error: true
-         }, state}
+        result = %ToolResult{
+          tool_call_id: id,
+          content: "Error: #{inspect(reason)}",
+          is_error: true
+        }
+
+        {result, state}
     end
   end
 
-  defp find_skill_by_name(name, state) do
-    state.kits
-    |> Enum.flat_map(& &1.skills)
-    |> Enum.find(&(&1.name == name))
+  defp render_and_activate(id, skill, arguments, state, scope_context) do
+    rendered = Skill.render(skill, %{"arguments" => arguments}, state.scope, scope_context)
+    handle_skill_activation(id, skill, rendered, state)
+  end
+
+  defp handle_skill_activation(id, skill, {:ok, rendered_body}, state) do
+    already_activated = Enum.any?(state.activated_skills, &(&1.name == skill.name))
+
+    state =
+      if skill.handler != SkillKit.Shell and not already_activated do
+        %{state | activated_skills: [skill | state.activated_skills]}
+      else
+        state
+      end
+
+    {%ToolResult{tool_call_id: id, content: rendered_body}, state}
   end
 
   defp execute_module_skill(%ToolCall{id: id, input: input}, skill, state) do
     source_config = Map.get(skill.metadata, "source_config", [])
 
     context =
-      %{cwd: state.definition.workspace, scope: state.scope, agent_name: state.agent_name}
+      %{scope: state.scope, agent_name: state.agent_name}
       |> Map.merge(Map.new(source_config))
 
     execution = %Pipeline{skill: skill, input: input, context: context}
@@ -386,8 +414,8 @@ defmodule SkillKit.Agent.Server do
 
       {result, state}
     else
-      case find_agent_definition(name, state.kits) do
-        nil ->
+      case SkillKit.Catalog.get_agent(catalog(state), name) do
+        {:error, :not_found} ->
           result = %ToolResult{
             tool_call_id: id,
             content: "Unknown agent: #{name}",
@@ -396,7 +424,7 @@ defmodule SkillKit.Agent.Server do
 
           {result, state}
 
-        agent_def ->
+        {:ok, agent_def} ->
           do_spawn_subagent(id, name, task, agent_def, state)
       end
     end
@@ -412,7 +440,7 @@ defmodule SkillKit.Agent.Server do
       parent_registry: state.registry
     ]
 
-    spawn_opts = [sources: state.sources]
+    spawn_opts = [skills: state.skills]
 
     case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
       {:ok, agent_ref} ->
@@ -450,12 +478,6 @@ defmodule SkillKit.Agent.Server do
 
         {result, state}
     end
-  end
-
-  defp find_agent_definition(name, kits) do
-    kits
-    |> Enum.flat_map(& &1.agents)
-    |> Enum.find(&(&1.name == name))
   end
 
   defp get_last_assistant_content(messages) do
@@ -577,5 +599,9 @@ defmodule SkillKit.Agent.Server do
 
   defp save_conversation(%{conversation_store: {mod, config}, agent_name: id, messages: msgs}) do
     mod.save(id, msgs, config)
+  end
+
+  defp catalog(state) do
+    {:via, Registry, {state.registry, {state.agent_name, :catalog}}}
   end
 end
