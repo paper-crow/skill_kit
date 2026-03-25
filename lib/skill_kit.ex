@@ -35,9 +35,6 @@ defmodule SkillKit do
 
   ## Configuration
 
-      # Default handler
-      config :skill_kit, :handler, SkillKit.Shell
-
       # Default LLM provider
       config :skill_kit, SkillKit.LLM,
         {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
