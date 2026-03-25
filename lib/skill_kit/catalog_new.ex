@@ -16,6 +16,8 @@ defmodule SkillKit.CatalogNew do
 
   use GenServer
 
+  require Logger
+
   alias SkillKit.Agent.Definition
   alias SkillKit.Authorization
   alias SkillKit.Handler.ToolDefinition
@@ -71,7 +73,7 @@ defmodule SkillKit.CatalogNew do
   end
 
   @spec tool_definitions(GenServer.server(), keyword()) :: [ToolDefinition.t()]
-  def tool_definitions(catalog, opts) do
+  def tool_definitions(catalog, opts \\ []) do
     GenServer.call(catalog, {:tool_definitions, opts})
   end
 
@@ -160,7 +162,6 @@ defmodule SkillKit.CatalogNew do
         kits
 
       {:error, reason} ->
-        require Logger
         Logger.warning("CatalogNew: provider #{inspect(module)} failed: #{inspect(reason)}")
         []
     end
@@ -175,7 +176,12 @@ defmodule SkillKit.CatalogNew do
   defp resolve_permissions(scope) do
     SkillKit.Scope.permissions(scope)
   rescue
-    Protocol.UndefinedError -> []
+    Protocol.UndefinedError ->
+      Logger.warning(
+        "CatalogNew: scope #{inspect(scope)} does not implement SkillKit.Scope protocol"
+      )
+
+      []
   end
 
   # -------------------------------------------------------------------
