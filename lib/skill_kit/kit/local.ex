@@ -20,6 +20,69 @@ defmodule SkillKit.Kit.Local do
     end
   end
 
+  @impl true
+  def list_kits(config) do
+    case Keyword.fetch(config, :dir) do
+      {:ok, dir} -> list_from_dir(dir)
+      :error -> list_from_dirs(config)
+    end
+  end
+
+  @impl true
+  def get_kit(config, name) do
+    case list_kits(config) do
+      {:ok, kits} -> find_kit_by_name(kits, name)
+      error -> error
+    end
+  end
+
+  defp list_from_dir(dir) do
+    if File.dir?(dir) do
+      load_subdirs_as_kits(dir)
+    else
+      {:ok, []}
+    end
+  end
+
+  defp load_subdirs_as_kits(dir) do
+    kits =
+      dir
+      |> File.ls!()
+      |> Enum.map(&Path.join(dir, &1))
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.flat_map(fn subdir ->
+        case load_single_dir(subdir) do
+          {:ok, [kit]} -> [kit]
+          _ -> []
+        end
+      end)
+
+    {:ok, kits}
+  end
+
+  defp list_from_dirs(config) do
+    dirs = Keyword.get(config, :dirs, [])
+
+    kits =
+      dirs
+      |> Enum.filter(&File.dir?/1)
+      |> Enum.flat_map(fn dir ->
+        case load_single_dir(dir) do
+          {:ok, [kit]} -> [kit]
+          _ -> []
+        end
+      end)
+
+    {:ok, kits}
+  end
+
+  defp find_kit_by_name(kits, name) do
+    case Enum.find(kits, &(&1.name == name)) do
+      nil -> {:error, :not_found}
+      kit -> {:ok, kit}
+    end
+  end
+
   defp load_single_dir(dir) do
     if File.dir?(dir) do
       {:ok, [load_kit(dir)]}
