@@ -33,12 +33,14 @@ defmodule SkillKit.Kit do
           name: String.t(),
           skills: [Skill.t()],
           agents: [Definition.t()],
+          root_agent: Definition.t() | nil,
           metadata: map()
         }
 
   @enforce_keys [:name]
   defstruct [
     :name,
+    :root_agent,
     skills: [],
     agents: [],
     metadata: %{}

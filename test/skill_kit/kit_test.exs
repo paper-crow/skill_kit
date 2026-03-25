@@ -83,5 +83,23 @@ defmodule SkillKit.KitTest do
       assert kit.agents == []
       assert kit.metadata == %{}
     end
+
+    test "root_agent defaults to nil" do
+      kit = %Kit{name: "empty"}
+      assert kit.root_agent == nil
+    end
+
+    test "root_agent can hold a Definition struct" do
+      root = %Definition{
+        name: "root",
+        description: "Root agent",
+        system_prompt: "You are the root.",
+        path: "/tmp",
+        workspace: "/tmp"
+      }
+
+      kit = %Kit{name: "my-kit", root_agent: root}
+      assert kit.root_agent == root
+    end
   end
 end
