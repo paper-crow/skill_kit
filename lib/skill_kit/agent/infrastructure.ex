@@ -8,19 +8,20 @@ defmodule SkillKit.Agent.Infrastructure do
 
   use Supervisor
 
-  def start_link({agent_name, definition, sources, registry}) do
-    Supervisor.start_link(__MODULE__, {agent_name, definition, sources, registry})
+  def start_link({agent_name, definition, sources, registry, kits}) do
+    Supervisor.start_link(__MODULE__, {agent_name, definition, sources, registry, kits})
   end
 
   @impl true
-  def init({agent_name, _definition, sources, registry}) do
+  def init({agent_name, _definition, sources, registry, kits}) do
     skill_registry_name = {:via, Registry, {registry, {agent_name, :skill_registry}}}
 
     children = [
       {SkillKit.Supervisor,
        name: {:via, Registry, {registry, {agent_name, :skill_supervisor}}},
        registry_name: skill_registry_name,
-       sources: sources}
+       sources: sources,
+       kits: kits}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

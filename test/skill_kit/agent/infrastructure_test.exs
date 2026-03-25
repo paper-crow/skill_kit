@@ -26,7 +26,7 @@ defmodule SkillKit.Agent.InfrastructureTest do
       agent_name: agent_name,
       definition: definition
     } do
-      {:ok, _sup} = Infrastructure.start_link({agent_name, definition, [], registry})
+      {:ok, _sup} = Infrastructure.start_link({agent_name, definition, [], registry, nil})
 
       # Skill registry should be registered via :via naming through SkillKit.Supervisor
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :skill_registry})

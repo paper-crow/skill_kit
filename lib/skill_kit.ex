@@ -65,17 +65,39 @@ defmodule SkillKit do
     * `:scope` — granted scopes for authorization (default: `nil`)
 
   """
+  @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
+  def start_agent(opts) when is_list(opts) do
+    sources = Keyword.fetch!(opts, :sources)
+    kits = load_all_kits(sources)
+
+    case extract_root_agent(kits) do
+      {:ok, definition} ->
+        opts = Keyword.put(opts, :kits, kits)
+        start_agent(definition, opts)
+
+      {:error, _} = error ->
+        error
+    end
+  end
+
+  @spec start_agent(Agent.Definition.t()) :: {:ok, agent()} | {:error, term()}
+  def start_agent(%Agent.Definition{} = definition) do
+    start_agent(definition, [])
+  end
+
   @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(definition, opts \\ []) do
+  def start_agent(%Agent.Definition{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
     sources = Keyword.get(opts, :sources, [])
     conversation_store = Keyword.get(opts, :conversation_store)
     scope = Keyword.get(opts, :scope)
+    kits = Keyword.get(opts, :kits)
+    agent_name = Keyword.get(opts, :name, definition.name)
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
     agent_opts = %{
-      agent_name: definition.name,
+      agent_name: agent_name,
       definition: definition,
       depth: 0,
       parent_name: nil,
@@ -83,12 +105,13 @@ defmodule SkillKit do
       sources: sources,
       registry: registry_name,
       caller: caller,
-      conversation_store: conversation_store
+      conversation_store: conversation_store,
+      kits: kits
     }
 
     case Agent.start_link(agent_opts) do
       {:ok, sup_pid} ->
-        {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
+        {:ok, %AgentRef{name: agent_name, registry: registry_name, supervisor_pid: sup_pid}}
 
       {:error, reason} ->
         {:error, reason}
@@ -190,5 +213,27 @@ defmodule SkillKit do
   @spec stop_agent(agent()) :: :ok
   def stop_agent(%AgentRef{supervisor_pid: pid}) do
     Supervisor.stop(pid)
+  end
+
+  defp load_all_kits(sources) do
+    Enum.flat_map(sources, fn {mod, config} ->
+      case mod.load_kits(config) do
+        {:ok, kits} -> kits
+        {:error, _} -> []
+      end
+    end)
+  end
+
+  defp extract_root_agent(kits) do
+    root_agents =
+      kits
+      |> Enum.map(& &1.root_agent)
+      |> Enum.reject(&is_nil/1)
+
+    case root_agents do
+      [definition] -> {:ok, definition}
+      [] -> {:error, :no_root_agent}
+      _ -> {:error, :multiple_root_agents}
+    end
   end
 end

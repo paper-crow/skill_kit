@@ -36,7 +36,8 @@ defmodule SkillKit.Agent do
           :registry => atom(),
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
-          optional(:conversation_store) => {module(), keyword()} | nil
+          optional(:conversation_store) => {module(), keyword()} | nil,
+          optional(:kits) => [SkillKit.Kit.t()] | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()
@@ -56,7 +57,8 @@ defmodule SkillKit.Agent do
       registry: registry
     } = opts
 
-    kits = load_kits_from_sources(sources)
+    preloaded_kits = Map.get(opts, :kits)
+    kits = preloaded_kits || load_kits_from_sources(sources)
     definition = resolve_capabilities(definition, kits)
     caller = Map.get(opts, :caller)
 
@@ -79,7 +81,7 @@ defmodule SkillKit.Agent do
 
     children = [
       {Registry, keys: :unique, name: registry},
-      {Infrastructure, {agent_name, definition, sources, registry}},
+      {Infrastructure, {agent_name, definition, sources, registry, kits}},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 

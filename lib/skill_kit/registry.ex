@@ -235,9 +235,14 @@ defmodule SkillKit.Registry do
 
   @impl true
   def handle_continue(:load_skills, state) do
+    kits = Keyword.get(state.opts, :kits)
     sources = Keyword.get(state.opts, :sources, [])
 
-    Enum.each(sources, &load_backend(&1, state.table))
+    if kits do
+      Enum.each(kits, &register_kit(&1, state.table))
+    else
+      Enum.each(sources, &load_backend(&1, state.table))
+    end
 
     {:noreply, state}
   end
@@ -268,6 +273,10 @@ defmodule SkillKit.Registry do
   # ---------------------------------------------------------------------------
   # Private: Boot-time backend loading
   # ---------------------------------------------------------------------------
+
+  defp register_kit(kit, table) do
+    Enum.each(kit.skills, &insert_if_new(table, &1))
+  end
 
   defp load_backend({backend_mod, backend_config}, table) do
     case backend_mod.load_kits(backend_config) do
