@@ -1,6 +1,6 @@
 defmodule SkillKit.RegistryTest.OverlappingBackend do
   @moduledoc false
-  @behaviour SkillKit.Backend
+  @behaviour SkillKit.Skills.Provider
 
   @impl true
   def load_kits(_config) do
@@ -23,7 +23,7 @@ end
 
 defmodule SkillKit.RegistryTest.FailingBackend do
   @moduledoc false
-  @behaviour SkillKit.Backend
+  @behaviour SkillKit.Skills.Provider
 
   @impl true
   def load_kits(_config) do
@@ -33,7 +33,7 @@ end
 
 defmodule SkillKit.TestBackends.SkillsOnly do
   @moduledoc false
-  @behaviour SkillKit.Backend
+  @behaviour SkillKit.Skills.Provider
 
   @impl true
   def load_kits(_config), do: {:ok, [%SkillKit.Kit{name: "empty"}]}

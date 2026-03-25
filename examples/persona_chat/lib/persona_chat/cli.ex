@@ -22,6 +22,7 @@ defmodule PersonaChat.CLI do
         strict: [user: :string, persona: :string, manage: :boolean]
       )
 
+    validate_api_key!()
     username = opts[:user] || raise "Missing required --user flag"
     owner = owner?(username)
 
@@ -43,7 +44,7 @@ defmodule PersonaChat.CLI do
     {:ok, agent} =
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Backend.Filesystem, dir: ".skills"},
+          {SkillKit.Skills.Local, dir: ".skills"},
           {SkillKit.Shell, []}
         ],
         scope: scope
@@ -71,8 +72,8 @@ defmodule PersonaChat.CLI do
     {:ok, agent} =
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Backend.Filesystem, dir: "#{@personas_dir}/#{persona_name}"},
-          {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"},
+          {SkillKit.Skills.Local, dir: "#{@personas_dir}/#{persona_name}"},
+          {SkillKit.Skills.Local, dir: ".skills/memory_kit"},
           {SkillKit.Shell, []}
         ],
         name: "#{persona_name}:#{username}",
@@ -129,10 +130,13 @@ defmodule PersonaChat.CLI do
       %AssistantMessage{} ->
         IO.puts("\n")
 
+      %SkillKit.Event.Error{reason: reason} ->
+        IO.puts("\n[error: #{inspect(reason)}]")
+
       _other ->
         receive_response()
     after
-      30_000 ->
+      60_000 ->
         IO.puts("\n[timeout waiting for response]")
     end
   end
@@ -211,5 +215,21 @@ defmodule PersonaChat.CLI do
     File.write!(@config_file, Jason.encode!(%{"owner" => username}))
     IO.puts("Registered #{username} as the owner.")
     true
+  end
+
+  defp validate_api_key! do
+    case System.get_env("ANTHROPIC_API_KEY") do
+      nil ->
+        IO.puts("Error: ANTHROPIC_API_KEY environment variable is not set.")
+        IO.puts("Set it with: export ANTHROPIC_API_KEY=your-key-here")
+        System.halt(1)
+
+      "" ->
+        IO.puts("Error: ANTHROPIC_API_KEY is empty.")
+        System.halt(1)
+
+      _key ->
+        :ok
+    end
   end
 end

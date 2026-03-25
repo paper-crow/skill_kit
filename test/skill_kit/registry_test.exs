@@ -231,8 +231,7 @@ defmodule SkillKit.RegistryTest do
       name = :"boot_valid_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
-        {Registry,
-         name: name, skills: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
+        {Registry, name: name, skills: [{SkillKit.Skills.Local, dirs: [@valid_fixtures_path]}]}
       )
 
       skills = Registry.list_skills(name)
@@ -246,8 +245,7 @@ defmodule SkillKit.RegistryTest do
       name = :"boot_nested_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
-        {Registry,
-         name: name, skills: [{SkillKit.Backend.Filesystem, dirs: [@nested_fixtures_path]}]}
+        {Registry, name: name, skills: [{SkillKit.Skills.Local, dirs: [@nested_fixtures_path]}]}
       )
 
       assert {:ok, skill} = Registry.get_skill(name, "admin:delete-user")
@@ -258,8 +256,7 @@ defmodule SkillKit.RegistryTest do
       name = :"boot_invalid_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
-        {Registry,
-         name: name, skills: [{SkillKit.Backend.Filesystem, dirs: [@invalid_fixtures_path]}]}
+        {Registry, name: name, skills: [{SkillKit.Skills.Local, dirs: [@invalid_fixtures_path]}]}
       )
 
       # Registry started successfully — skills list may be empty (all invalid)
@@ -272,7 +269,7 @@ defmodule SkillKit.RegistryTest do
       # The fixtures root contains ignored.md (no .skill.md extension)
 
       start_supervised!(
-        {Registry, name: name, skills: [{SkillKit.Backend.Filesystem, dirs: [@fixtures_root]}]}
+        {Registry, name: name, skills: [{SkillKit.Skills.Local, dirs: [@fixtures_root]}]}
       )
 
       # ignored.md has name "should:ignore" — it must NOT be registered
@@ -290,8 +287,7 @@ defmodule SkillKit.RegistryTest do
       name = :"boot_list_#{:erlang.unique_integer([:positive])}"
 
       start_supervised!(
-        {Registry,
-         name: name, skills: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]}
+        {Registry, name: name, skills: [{SkillKit.Skills.Local, dirs: [@valid_fixtures_path]}]}
       )
 
       skills = Registry.list_skills(name)
@@ -308,7 +304,7 @@ defmodule SkillKit.RegistryTest do
         {Registry,
          name: name,
          skills: [
-           {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]},
+           {SkillKit.Skills.Local, dirs: [@valid_fixtures_path]},
            {SkillKit.RegistryTest.OverlappingBackend, []}
          ]}
       )
@@ -327,7 +323,7 @@ defmodule SkillKit.RegistryTest do
          name: name,
          skills: [
            {SkillKit.RegistryTest.FailingBackend, []},
-           {SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}
+           {SkillKit.Skills.Local, dirs: [@valid_fixtures_path]}
          ]}
       )
 

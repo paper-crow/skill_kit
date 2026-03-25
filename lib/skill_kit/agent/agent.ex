@@ -14,7 +14,7 @@ defmodule SkillKit.Agent do
         depth: 0,
         parent_name: nil,
         scope: %MyApp.Scope{...},
-        skills: [{SkillKit.Backend.Filesystem, dirs: [...]}],
+        skills: [{SkillKit.Skills.Local, dirs: [...]}],
         registry: Agent.Registry
       }
 

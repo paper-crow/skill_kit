@@ -1,21 +1,21 @@
-# Skill Backends
+# Skill Providers
 
-A **backend** is a data source that produces kits — bundles of `%SkillKit.Skill{}`
-structs and agent definitions. SkillKit loads backends at boot time and registers
+A **provider** is a data source that produces kits — bundles of `%SkillKit.Skill{}`
+structs and agent definitions. SkillKit loads providers at boot time and registers
 all skills they return into the registry.
 
 ---
 
-## The Backend Behaviour
+## The Provider Behaviour
 
-Any module that implements `SkillKit.Backend` is a valid backend:
+Any module that implements `SkillKit.Skills.Provider` is a valid provider:
 
 ```elixir
 @callback load_kits(config :: keyword()) :: {:ok, [SkillKit.Kit.t()]} | {:error, term()}
 ```
 
 `load_kits/1` receives the config keyword list you supply when registering the
-backend as a source. It must return `{:ok, kits}` where each kit is a
+provider as a source. It must return `{:ok, kits}` where each kit is a
 `%SkillKit.Kit{}`, or `{:error, reason}` on failure.
 
 A `%SkillKit.Kit{}` wraps:
@@ -27,15 +27,15 @@ A `%SkillKit.Kit{}` wraps:
 
 ---
 
-## Built-in: Filesystem Backend
+## Built-in: Filesystem Provider
 
-`SkillKit.Backend.Filesystem` loads kits from directories on disk. Each directory
+`SkillKit.Skills.Local` loads kits from directories on disk. Each directory
 becomes one kit; the kit name is the directory's basename.
 
 **Config key:** `:dirs` — a list of absolute directory paths.
 
 ```elixir
-{SkillKit.Backend.Filesystem, dirs: ["/app/skills/files", "/app/skills/tools"]}
+{SkillKit.Skills.Local, dirs: ["/app/skills/files", "/app/skills/tools"]}
 ```
 
 ### Directory structure
@@ -72,7 +72,7 @@ Parse failures are logged as warnings and skipped; the rest of the kit still loa
 
 ## Module-backed Kits
 
-`use SkillKit.Kit` turns an Elixir module into a backend that loads skill files
+`use SkillKit.Kit` turns an Elixir module into a provider that loads skill files
 from a `skills/` directory co-located with the module's source file.
 
 ```elixir
@@ -93,44 +93,44 @@ The kit name is inferred from the last module segment, downcased and underscored
 use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
 ```
 
-`use SkillKit.Kit` implements both `SkillKit.Backend` (to load skills) and
+`use SkillKit.Kit` implements both `SkillKit.Skills.Provider` (to load skills) and
 `SkillKit.Handler.Behaviour` (to execute them). The macro generates default
 `tool_definition/0` and `resume/3` implementations; you must supply `execute/1`.
 
 ---
 
-## Registering Backends as Sources
+## Registering Providers as Sources
 
 Pass a `:sources` list to `SkillKit.Registry.start_link/1` (or embed it in your
-supervision tree). Each entry is a `{backend_module, config}` tuple:
+supervision tree). Each entry is a `{provider_module, config}` tuple:
 
 ```elixir
 children = [
   {SkillKit.Registry,
    name: MyApp.SkillRegistry,
    sources: [
-     {SkillKit.Backend.Filesystem, dirs: ["/app/priv/skills"]},
+     {SkillKit.Skills.Local, dirs: ["/app/priv/skills"]},
      {MyApp.FilesKit, []},
-     {MyApp.DatabaseBackend, repo: MyApp.Repo}
+     {MyApp.DatabaseProvider, repo: MyApp.Repo}
    ]}
 ]
 
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-Sources are loaded in order. **First-registered-wins**: if two backends provide
-a skill with the same name, the earlier source's version is kept. Backend
+Sources are loaded in order. **First-registered-wins**: if two providers provide
+a skill with the same name, the earlier source's version is kept. Provider
 failures emit a `Logger.warning` but do not prevent the registry from starting.
 
 ---
 
-## Writing a Custom Backend
+## Writing a Custom Provider
 
-Implement `SkillKit.Backend` and return `%SkillKit.Kit{}` structs:
+Implement `SkillKit.Skills.Provider` and return `%SkillKit.Kit{}` structs:
 
 ```elixir
-defmodule MyApp.DatabaseBackend do
-  @behaviour SkillKit.Backend
+defmodule MyApp.DatabaseProvider do
+  @behaviour SkillKit.Skills.Provider
 
   alias MyApp.Repo
   alias MyApp.SkillRecord
@@ -165,8 +165,8 @@ end
 Then register it as a source:
 
 ```elixir
-{MyApp.DatabaseBackend, repo: MyApp.Repo}
+{MyApp.DatabaseProvider, repo: MyApp.Repo}
 ```
 
 Any error returned from `load_kits/1` (or raised and rescued) is logged and
-the backend is skipped without crashing the registry.
+the provider is skipped without crashing the registry.

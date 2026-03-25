@@ -29,7 +29,7 @@ top-level `:one_for_one` supervisor:
 SkillKit.Agent (one_for_one)
 ├── Registry              (process discovery for this agent)
 ├── Agent.Infrastructure  (one_for_one)
-│   └── SkillKit.Supervisor  (skill registry + backends)
+│   └── SkillKit.Supervisor  (skill registry + providers)
 └── Agent.Core            (rest_for_one)
     ├── Agent.Mailbox         (message buffering)
     ├── Agent.Server          (LLM loop + tool execution)
@@ -114,7 +114,7 @@ have no direct caller process — they communicate only through the parent Regis
 | Concern | Where to look |
 |---|---|
 | LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |
-| Skill loading (filesystem, etc.) | `SkillKit.Backend` behaviours |
+| Skill loading (filesystem, etc.) | `SkillKit.Skills.Provider` behaviours |
 | Tool execution + hooks | `SkillKit.Handler` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |

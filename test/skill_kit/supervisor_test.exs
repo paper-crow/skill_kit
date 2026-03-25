@@ -188,7 +188,7 @@ defmodule SkillKit.SupervisorTest do
         Supervisor,
         name: sup_name,
         registry_name: reg_name,
-        skills: [{SkillKit.Backend.Filesystem, dirs: [@valid_fixtures_path]}]
+        skills: [{SkillKit.Skills.Local, dirs: [@valid_fixtures_path]}]
       })
 
       skills = Registry.list_skills(reg_name)

@@ -98,6 +98,7 @@ defmodule SkillKit.Skill do
       |> substitute_skill_dir(location)
       |> substitute_session_id(session_id)
       |> substitute_scope_variables(scope, scope_context)
+      |> substitute_dynamic_commands()
 
     result = maybe_append_arguments(result, has_arguments_token, arguments)
 
@@ -109,6 +110,15 @@ defmodule SkillKit.Skill do
   end
 
   defp maybe_append_arguments(result, _has_token, _arguments), do: result
+
+  defp substitute_dynamic_commands(body) do
+    Regex.replace(~r/!\`([^`]+)\`/, body, fn _full_match, command ->
+      case System.cmd("sh", ["-c", command], stderr_to_stdout: true) do
+        {output, 0} -> String.trim(output)
+        {output, _code} -> "[command failed: #{String.trim(output)}]"
+      end
+    end)
+  end
 
   defp substitute_arguments_indexed(body, positional) do
     Regex.replace(~r/\$ARGUMENTS\[(\d+)\]/, body, fn _, index ->

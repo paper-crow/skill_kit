@@ -1,9 +1,9 @@
-defmodule SkillKit.Backend.Filesystem.Parser do
+defmodule SkillKit.Skills.Local.Parser do
   @moduledoc """
-  Internal parser for the Filesystem backend.
+  Internal parser for the Local provider.
 
   Parses `.skill.md` files into `%SkillKit.Skill{}` structs. This module is
-  internal to the Filesystem backend — callers outside the backend should not
+  internal to the Local provider — callers outside the provider should not
   depend on it directly.
 
   A `.skill.md` file combines a YAML frontmatter section with a markdown
@@ -45,7 +45,7 @@ defmodule SkillKit.Backend.Filesystem.Parser do
 
   ## Example
 
-      iex> SkillKit.Backend.Filesystem.Parser.load_file("/path/to/summarize.skill.md")
+      iex> SkillKit.Skills.Local.Parser.load_file("/path/to/summarize.skill.md")
       {:ok, %SkillKit.Skill{
         type: :prompt,
         name: "files:summarize",

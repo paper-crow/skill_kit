@@ -32,7 +32,7 @@ defmodule SkillKit.Supervisor do
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          skills: [{SkillKit.Backend.Filesystem, dirs: ["priv/skills"]}]}
+          skills: [{SkillKit.Skills.Local, dirs: ["priv/skills"]}]}
       ]
 
   ## Supervision Strategy
@@ -48,8 +48,8 @@ defmodule SkillKit.Supervisor do
     Defaults to `SkillKit.Registry`. Override this when running multiple
     SkillKit instances in the same node (e.g., in tests or umbrella apps).
 
-  - `:skills` — list of `{module, keyword()}` backend configurations. Each
-    backend implements `SkillKit.Backend` and is called at boot to load skills.
+  - `:skills` — list of `{module, keyword()}` provider configurations. Each
+    provider implements `SkillKit.Skills.Provider` and is called at boot to load skills.
     Defaults to `[]`.
   """
 
@@ -63,8 +63,8 @@ defmodule SkillKit.Supervisor do
   - `:name` — the name to register the Supervisor under. Defaults to `__MODULE__`.
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
-  - `:skills` — list of `{module, keyword()}` backend configurations. Each backend
-    implements `SkillKit.Backend` and is called at boot to load skills. Defaults to `[]`.
+  - `:skills` — list of `{module, keyword()}` provider configurations. Each provider
+    implements `SkillKit.Skills.Provider` and is called at boot to load skills. Defaults to `[]`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do

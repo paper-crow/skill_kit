@@ -1,9 +1,9 @@
-defmodule SkillKit.Backend do
+defmodule SkillKit.Skills.Provider do
   @moduledoc """
   Behaviour for loading kits (bundles of skills and agent definitions).
 
-  A backend is a data source that returns `%SkillKit.Kit{}` structs.
-  SkillKit ships `SkillKit.Backend.Filesystem` for loading from disk.
+  A provider is a data source that returns `%SkillKit.Kit{}` structs.
+  SkillKit ships `SkillKit.Skills.Local` for loading from disk.
   Host applications implement this behaviour for their own storage.
   """
 

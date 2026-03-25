@@ -1,6 +1,6 @@
 # Persona Chat
 
-An example app that exercises SkillKit's core primitives — skills, kits, agents, conversation store, authorization, and subagent delegation.
+An example app that exercises SkillKit's core primitives — skills, kits, agents, conversation store, authorization, subagent delegation, and dynamic context injection.
 
 Users create AI personas through conversation, then chat with them. Each user gets isolated conversation history and the persona remembers things about each user across sessions.
 
@@ -8,12 +8,15 @@ Users create AI personas through conversation, then chat with them. Each user ge
 
 | SkillKit Feature | How it's used |
 |---|---|
+| **Source-driven start_agent** | `start_agent(skills: [...])` discovers the root agent from sources — no Definition parsing |
 | **Skills** | 7 skills across 2 kits drive all behavior (brainstorming, voice development, memory, etc.) |
-| **Kits via Backend.Filesystem** | Skills loaded from directories — no module-backed kits, no `.ex` files beyond the CLI |
-| **Agent definitions** | Lobby agent + dynamically created persona agents, all from AGENT.md files |
+| **SkillKit.Shell as Kit** | Shell handler registered through `skills:` like any other kit |
+| **Backend.Filesystem** | Skills and agents loaded from directories via `dir:` option |
+| **Root agent convention** | AGENT.md at root of source dir is the top-level agent; nested agents are subagents |
 | **Subagent delegation** | Lobby delegates file writing to a `persona_writer` subagent |
+| **Dynamic context injection** | `` !`command` `` in skills runs at render time, injecting live data (persona list, user memories) |
 | **Conversation store** | Per-user conversation isolation via agent naming (`persona:username`) |
-| **Scope protocol** | Owner vs visitor authorization, plus `$USERNAME`/`$PERSONA` variable resolution in skills |
+| **Scope protocol** | Owner vs visitor authorization, plus `$USERNAME`/`$PERSONA` variable resolution in skills and system prompts |
 | **activate_skill with arguments** | Multi-skill chaining — output of one skill feeds as `$ARGUMENTS` to the next |
 
 ## Setup
@@ -23,7 +26,7 @@ cd examples/persona_chat
 mix deps.get
 ```
 
-Requires `ANTHROPIC_API_KEY` in your environment (or in `.env` at the project root).
+Requires `ANTHROPIC_API_KEY` in your environment.
 
 ## Usage
 
@@ -38,7 +41,7 @@ The first user to run the app becomes the **owner** and can create/delete person
 1. **Brainstorm** — generates persona concepts, you pick one
 2. **Develop voice** — builds tone, quirks, speaking style
 3. **Build backstory** — creates name, origin, motivations
-4. **Finalize** — delegates to a subagent that writes the AGENT.md file
+4. **Finalize** — delegates to a `persona_writer` subagent that writes the AGENT.md file silently
 
 ### Chat with a persona
 
@@ -82,8 +85,7 @@ examples/persona_chat/
 │   ├── cli.ex              # CLI harness — the only app logic
 │   └── scope.ex            # Scope struct + SkillKit.Scope protocol impl
 ├── .skills/
-│   ├── lobby/
-│   │   └── AGENT.md        # Management agent
+│   ├── AGENT.md            # Lobby — root agent for management
 │   ├── persona_kit/
 │   │   ├── brainstorm.skill.md
 │   │   ├── develop_voice.skill.md
@@ -104,13 +106,73 @@ examples/persona_chat/
 
 Only two `.ex` files. Everything else is markdown — agent definitions and skill templates that SkillKit loads and executes.
 
-## SkillKit gaps identified
+## Key SkillKit features demonstrated
 
-Building this app surfaced these library gaps (some already fixed in this branch):
+### Source-driven agent startup
 
-1. **activate_skill arguments** — `$ARGUMENTS` rendering existed but wasn't wired through the server. Fixed.
-2. **Scope protocol** — Scope was a flat permission list. Now it's a protocol carrying identity, permissions, and variable resolution. Fixed.
-3. **Variable syntax** — Inconsistent `$ARGUMENTS` vs `${CLAUDE_SKILL_DIR}`. Unified to `$VAR`/`${VAR}` with scope fallback. Fixed.
-4. **Agent handoff** — No way for one agent to transfer a conversation to another. The CLI works around this by managing agent lifecycle directly.
-5. **Lobby conversation persistence** — Persisting lobby conversations caused the agent to resume mid-roleplay. Lobby now starts fresh each session.
-6. **System prompt boundaries** — LLMs will fill instruction gaps by doing what seems helpful (e.g., roleplaying as a persona it just created). Explicit "you CANNOT do X" instructions are essential.
+The CLI doesn't parse AGENT.md files or construct Definition structs. It just points `start_agent` at source directories:
+
+```elixir
+# Lobby — .skills/ contains AGENT.md at root + all skills
+SkillKit.start_agent(
+  skills: [
+    {SkillKit.Backend.Filesystem, dir: ".skills"},
+    {SkillKit.Shell, []}
+  ],
+  scope: scope
+)
+
+# Persona — persona dir has AGENT.md, memory_kit has skills
+SkillKit.start_agent(
+  skills: [
+    {SkillKit.Backend.Filesystem, dir: "personas/valentina_restrepo"},
+    {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"},
+    {SkillKit.Shell, []}
+  ],
+  name: "valentina_restrepo:alice",
+  scope: scope,
+  conversation_store: {SkillKit.Conversation.Store.Filesystem, path: "data/conversations"}
+)
+```
+
+### Dynamic context injection
+
+Skills use `` !`command` `` to inject live data at render time. The command runs during `Skill.render` — the LLM sees actual data, not scripts to execute.
+
+```markdown
+## Available personas
+!`for dir in personas/*/; do ... done`
+```
+
+The LLM receives the persona list directly. No bash tool call needed for read operations.
+
+### Scope-based variable resolution
+
+The `SkillKit.Scope` protocol resolves `$USERNAME` and `$PERSONA` in both skill bodies and system prompts:
+
+```markdown
+To chat: `mix persona_chat --user $USERNAME --persona PERSONA_NAME`
+```
+
+Renders as `mix persona_chat --user alice --persona PERSONA_NAME` — the LLM sees the real username.
+
+### Per-user memory
+
+The `user_memory` skill uses dynamic injection to read existing memories and scope variables for file paths:
+
+```markdown
+## What you remember about this user
+!`cat data/memories/$PERSONA/$USERNAME.md 2>/dev/null || echo "No memories yet."`
+```
+
+Memories are injected at skill activation — the persona starts each conversation already knowing what it learned before.
+
+## DX findings
+
+Building this app surfaced these insights:
+
+1. **Skills with code blocks get treated as documentation** — LLMs display bash scripts rather than executing them. Dynamic injection (`` !`command` ``) solves the read case. Write operations still need explicit "run this command" instructions.
+2. **System prompt boundaries matter** — LLMs fill instruction gaps with what seems helpful (e.g., roleplaying as a persona it just created). Explicit "you CANNOT do X" is as important as "you can do Y."
+3. **Lobby conversations shouldn't persist** — Management agents should start fresh each session. Persisted conversations caused the lobby to resume mid-roleplay.
+4. **Agent handoff is a gap** — No way for one agent to signal "transfer to agent B." The CLI manages transitions directly.
+5. **Missing API key causes silent hang** — The CLI now validates `ANTHROPIC_API_KEY` at startup with a clear error message.

@@ -1,13 +1,13 @@
-defmodule SkillKit.Backend.Filesystem do
+defmodule SkillKit.Skills.Local do
   @moduledoc """
-  Backend that loads kits from filesystem directories.
+  Provider that loads kits from filesystem directories.
   Each directory becomes a Kit containing skills and agent definitions.
   """
 
-  @behaviour SkillKit.Backend
+  @behaviour SkillKit.Skills.Provider
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Backend.Filesystem.Parser
+  alias SkillKit.Skills.Local.Parser
   alias SkillKit.Kit
 
   require Logger

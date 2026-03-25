@@ -8,7 +8,7 @@ defmodule SkillKit do
   ## Quick Start
 
       {:ok, agent} = SkillKit.start_agent(definition,
-        skills: [{SkillKit.Backend.Filesystem, dirs: ["skills"]}],
+        skills: [{SkillKit.Skills.Local, dirs: ["skills"]}],
         caller: self()
       )
 

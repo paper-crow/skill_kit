@@ -28,10 +28,13 @@ SkillKit gives you a composable agent runtime:
 ## Usage
 
 ```elixir
-# Start an agent
-{:ok, agent} = SkillKit.start_agent(definition,
-  sources: [{SkillKit.Backend.Filesystem, dirs: ["examples/skills"]}],
-  provider: {SkillKit.LLM.Anthropic, [api_key: api_key]},
+# Start an agent from a directory — provider discovers the root AGENT.md
+{:ok, agent} = SkillKit.start_agent(
+  skills: [
+    {SkillKit.Skills.Local, dir: "my_agent"},
+    {SkillKit.Shell, []}
+  ],
+  scope: my_scope,
   conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"},
   caller: self()
 )
@@ -41,10 +44,9 @@ SkillKit gives you a composable agent runtime:
 
 # Receive streamed events
 receive do
-  {:skill_kit, agent_name, {:delta, text}} -> IO.write(text)
-  {:skill_kit, agent_name, {:response, text}} -> IO.puts("\nDone.")
-  {:skill_kit, agent_name, {:tool_call, name, input}} -> IO.puts("Using #{name}...")
-  {:skill_kit, agent_name, {:error, reason}} -> IO.puts("Error: #{inspect(reason)}")
+  %SkillKit.Event.Delta{text: text} -> IO.write(text)
+  %SkillKit.Types.AssistantMessage{} -> IO.puts("\nDone.")
+  %SkillKit.Event.Error{reason: reason} -> IO.puts("Error: #{inspect(reason)}")
 end
 
 # Stop
@@ -135,17 +137,29 @@ Attach handlers with `:telemetry.attach/4` or use a GenServer-based handler patt
 ## Configuration
 
 ```elixir
-# Default handler (swappable)
-config :skill_kit, :handler, SkillKit.Shell
-
-# Default LLM provider
+# LLM provider
 config :skill_kit, SkillKit.LLM,
   {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
 ```
 
+Capabilities are registered per-agent through `skills:`. For example, to give an agent bash execution:
+
+```elixir
+SkillKit.start_agent(
+  skills: [
+    {SkillKit.Skills.Local, dir: ".skills"},
+    {SkillKit.Shell, cwd: File.cwd!()}
+  ]
+)
+```
+
 ## Examples
 
-See `examples/` for sample agents and skills:
+### Persona Chat
+
+A full example app in `examples/persona_chat/` that exercises skills, kits, agents, subagent delegation, authorization, dynamic context injection, and conversation isolation. See `examples/persona_chat/README.md`.
+
+### Sample agents and skills
 
 ```
 examples/
@@ -166,7 +180,7 @@ Run any agent: `mix skill_kit.chat neve` or `mix skill_kit.chat researcher`
 ## Architecture
 
 ```
-SkillKit.start_agent/2
+SkillKit.start_agent/1
   |-> Agent (Supervisor)
        |-> Registry (process discovery)
        |-> Infrastructure (skill registry)

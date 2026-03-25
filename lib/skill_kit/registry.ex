@@ -29,9 +29,9 @@ defmodule SkillKit.Registry do
 
   - `:skills` — list of `{backend_module, backend_config}` tuples. Each
     backend module must implement `load_skills/1`, returning `{:ok, [%Skill{}]}`
-    or `{:error, reason}`. Backends are iterated in order; first-registered-wins
-    semantics apply when multiple skills backends provide skills with the same name.
-    Backend failures are logged as warnings; the registry still starts successfully.
+    or `{:error, reason}`. Providers are iterated in order; first-registered-wins
+    semantics apply when multiple skill providers provide skills with the same name.
+    Provider failures are logged as warnings; the registry still starts successfully.
 
   Boot loading happens in `handle_continue/2`, which runs before any external
   calls can reach the GenServer. This means skills are available immediately
@@ -93,7 +93,7 @@ defmodule SkillKit.Registry do
 
       iex> {:ok, _pid} = SkillKit.Registry.start_link([])
       iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry)
-      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skills: [{SkillKit.Backend.Filesystem, dirs: ["/path/to/skills"]}])
+      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skills: [{SkillKit.Skills.Local, dirs: ["/path/to/skills"]}])
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -241,7 +241,7 @@ defmodule SkillKit.Registry do
     if kits do
       Enum.each(kits, &register_kit(&1, state.table))
     else
-      Enum.each(skills, &load_backend(&1, state.table))
+      Enum.each(skills, &load_provider(&1, state.table))
     end
 
     {:noreply, state}
@@ -271,22 +271,22 @@ defmodule SkillKit.Registry do
   end
 
   # ---------------------------------------------------------------------------
-  # Private: Boot-time backend loading
+  # Private: Boot-time provider loading
   # ---------------------------------------------------------------------------
 
   defp register_kit(kit, table) do
     Enum.each(kit.skills, &insert_if_new(table, &1))
   end
 
-  defp load_backend({backend_mod, backend_config}, table) do
-    case backend_mod.load_kits(backend_config) do
+  defp load_provider({provider_mod, provider_config}, table) do
+    case provider_mod.load_kits(provider_config) do
       {:ok, kits} ->
         Enum.each(kits, fn kit ->
           Enum.each(kit.skills, &insert_if_new(table, &1))
         end)
 
       {:error, reason} ->
-        Logger.warning("SkillKit: backend #{inspect(backend_mod)} failed: #{inspect(reason)}")
+        Logger.warning("SkillKit: provider #{inspect(provider_mod)} failed: #{inspect(reason)}")
     end
   end
 

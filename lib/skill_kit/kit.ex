@@ -9,7 +9,7 @@ defmodule SkillKit.Kit do
   ## `use SkillKit.Kit`
 
   When a module does `use SkillKit.Kit`, it becomes both a
-  `SkillKit.Backend` (can load skills from `*.skill.md` files) and a
+  `SkillKit.Skills.Provider` (can load skills from `*.skill.md` files) and a
   `SkillKit.Handler.Behaviour` (can execute them).
 
   The kit name is inferred from the module's last segment, downcased and
@@ -51,13 +51,13 @@ defmodule SkillKit.Kit do
     kit_name = Keyword.get(opts, :name, infer_kit_name(__CALLER__.module))
 
     quote do
-      @behaviour SkillKit.Backend
+      @behaviour SkillKit.Skills.Provider
       @behaviour SkillKit.Handler.Behaviour
 
       @kit_name unquote(kit_name)
       @skills_dir unquote(skills_dir)
 
-      @impl SkillKit.Backend
+      @impl SkillKit.Skills.Provider
       def load_kits(config) do
         SkillKit.Kit.do_load_kits(@kit_name, @skills_dir, __MODULE__, config)
       end
