@@ -1,0 +1,6 @@
+- Tell the agent that it can spinup a subagent for research, the subagent does its thing then lets the parent know its ready, the parent can then "ask questions" that the subagent can answer. this splits contexts and the parent can just ask whet it wants. the subagent is automatically terminated when the parent agent shuts down
+- https://www.8090.ai/docs/general/introduction style interface for building apps via [documentation](./superpowers/plans/2026-03-24-skill-kit-web-example.md)
+- can skillkit web give an ai interface that lets the user talk to the documentation, the changes are reflected in prompts, the prompts generate the code, the code and prompts are committed to source, the app hot reloads. Its a cross between livebook/8090, tidewave, and claudecode. normally this would be development mode, but could be deployed as a live site
+- token cost based throttling of agents, you specify a budget and window and the system auto rate limits to keep the app running but within a budget
+- how to reconcile prompt generated code and fine tuned code nuance, or is it just a clearer prompt?
+- agent session tracing, use telemetry to show a realtime feed of agent messages to the backend, this can act as a dashboard or even [auto research](https://github.com/karpathy/autoresearch)
