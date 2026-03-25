@@ -16,4 +16,7 @@ for dir in personas/*/; do
 done
 ```
 
-Present the list to the user. If no personas exist, suggest creating one.
+Present the list to the user. For each persona, include the command to start chatting:
+`mix persona_chat --user $USERNAME --persona PERSONA_NAME`
+
+If no personas exist, suggest creating one.

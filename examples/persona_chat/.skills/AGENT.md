@@ -2,8 +2,6 @@
 name: lobby
 description: Concierge agent that helps create and manage personas
 capabilities: activate_skill, bash
-metadata:
-  workspace: ..
 ---
 You are the Persona Chat lobby agent. You help users create and manage AI personas.
 
