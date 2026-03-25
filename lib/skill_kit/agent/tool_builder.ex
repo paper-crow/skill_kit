@@ -20,30 +20,33 @@ defmodule SkillKit.Agent.ToolBuilder do
   @doc """
   Builds the full tool list for the LLM.
 
+  Handler tools are discovered from kits that declare a `:handler` in their metadata.
+
   Options:
-  - `:handlers` — list of handler modules (default: `[SkillKit.Shell]`)
   - `:subagent` — if true, includes report_status/report_result (default: false)
   - `:activated_skills` — list of `%Skill{}` structs with module-backed handlers
   """
   @spec build_tools([Kit.t()], keyword()) :: [ToolDefinition.t()]
   def build_tools(kits, opts \\ []) do
-    handlers = Keyword.get(opts, :handlers, [SkillKit.Shell])
     subagent = Keyword.get(opts, :subagent, false)
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
     all_skills = Enum.flat_map(kits, & &1.skills)
     all_agents = Enum.flat_map(kits, & &1.agents)
 
-    handler_tools = Enum.map(handlers, & &1.tool_definition())
+    handler_modules = discover_handler_modules(kits)
+    handler_tools = Enum.map(handler_modules, & &1.tool_definition())
 
     activated_tools =
       activated_skills
       |> Enum.filter(&Code.ensure_loaded?(&1.handler))
       |> Enum.map(&skill_to_tool/1)
 
+    handler_set = MapSet.new(handler_modules)
+
     visible_skills =
       Enum.filter(all_skills, fn skill ->
-        skill.handler == SkillKit.Shell or Code.ensure_loaded?(skill.handler)
+        MapSet.member?(handler_set, skill.handler) or Code.ensure_loaded?(skill.handler)
       end)
 
     skill_tool = if visible_skills != [], do: [activate_skill_tool(visible_skills)], else: []
@@ -155,6 +158,12 @@ defmodule SkillKit.Agent.ToolBuilder do
         "required" => ["task"]
       }
     }
+  end
+
+  defp discover_handler_modules(kits) do
+    kits
+    |> Enum.filter(&Map.has_key?(&1.metadata, :handler))
+    |> Enum.map(& &1.metadata.handler)
   end
 
   defp builtin_tools do

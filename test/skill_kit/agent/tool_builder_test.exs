@@ -6,9 +6,11 @@ defmodule SkillKit.Agent.ToolBuilderTest do
   alias SkillKit.Kit
   alias SkillKit.Skill
 
+  @shell_kit %Kit{name: "shell", metadata: %{handler: SkillKit.Shell}}
+
   describe "build_tools/2" do
     test "includes handler tool definitions" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
+      tools = ToolBuilder.build_tools([@shell_kit])
 
       bash = Enum.find(tools, &(&1.name == "bash"))
       assert bash != nil
@@ -16,17 +18,15 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "includes activate_skill when kits have skills" do
-      kits = [
-        %Kit{
-          name: "test",
-          skills: [
-            %Skill{name: "tools:echo", namespace: "tools", description: "Echo input back"},
-            %Skill{name: "tools:search", namespace: "tools", description: "Search files"}
-          ]
-        }
-      ]
+      skill_kit = %Kit{
+        name: "test",
+        skills: [
+          %Skill{name: "tools:echo", namespace: "tools", description: "Echo input back"},
+          %Skill{name: "tools:search", namespace: "tools", description: "Search files"}
+        ]
+      }
 
-      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Shell])
+      tools = ToolBuilder.build_tools([@shell_kit, skill_kit])
 
       activate = Enum.find(tools, &(&1.name == "activate_skill"))
       assert activate != nil
@@ -36,27 +36,25 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "does not include activate_skill when no skills" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
+      tools = ToolBuilder.build_tools([@shell_kit])
 
       refute Enum.any?(tools, &(&1.name == "activate_skill"))
     end
 
     test "includes agent delegation tools" do
-      kits = [
-        %Kit{
-          name: "test",
-          agents: [
-            %Definition{
-              name: "project-a",
-              description: "Manages project A",
-              system_prompt: ".",
-              path: "/tmp"
-            }
-          ]
-        }
-      ]
+      kit = %Kit{
+        name: "test",
+        agents: [
+          %Definition{
+            name: "project-a",
+            description: "Manages project A",
+            system_prompt: ".",
+            path: "/tmp"
+          }
+        ]
+      }
 
-      tools = ToolBuilder.build_tools(kits, handlers: [SkillKit.Shell])
+      tools = ToolBuilder.build_tools([@shell_kit, kit])
 
       agent_tool = Enum.find(tools, &(&1.name == "project-a"))
       assert agent_tool != nil
@@ -65,17 +63,43 @@ defmodule SkillKit.Agent.ToolBuilderTest do
     end
 
     test "includes builtins when subagent: true" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell], subagent: true)
+      tools = ToolBuilder.build_tools([@shell_kit], subagent: true)
 
       assert Enum.any?(tools, &(&1.name == "report_status"))
       assert Enum.any?(tools, &(&1.name == "report_result"))
     end
 
     test "excludes builtins by default" do
-      tools = ToolBuilder.build_tools([], handlers: [SkillKit.Shell])
+      tools = ToolBuilder.build_tools([@shell_kit])
 
       refute Enum.any?(tools, &(&1.name == "report_status"))
       refute Enum.any?(tools, &(&1.name == "report_result"))
+    end
+
+    test "discovers handler tools from kits with metadata.handler" do
+      skill_kit = %Kit{
+        name: "my_kit",
+        skills: [
+          %Skill{name: "my_kit:test", description: "test", handler: SkillKit.Shell}
+        ]
+      }
+
+      tools = ToolBuilder.build_tools([@shell_kit, skill_kit])
+      tool_names = Enum.map(tools, & &1.name)
+      assert "bash" in tool_names
+    end
+
+    test "no bash tool when Shell kit not in kits list" do
+      skill_kit = %Kit{
+        name: "my_kit",
+        skills: [
+          %Skill{name: "my_kit:test", description: "test", handler: SkillKit.Shell}
+        ]
+      }
+
+      tools = ToolBuilder.build_tools([skill_kit])
+      tool_names = Enum.map(tools, & &1.name)
+      refute "bash" in tool_names
     end
 
     test "activate_skill tool includes arguments property" do

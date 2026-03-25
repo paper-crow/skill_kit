@@ -158,6 +158,7 @@ defmodule SkillKit.Agent.ServerTest do
       end)
 
       kits = [
+        %SkillKit.Kit{name: "shell", metadata: %{handler: SkillKit.Shell}},
         %SkillKit.Kit{
           name: "test",
           skills: [%SkillKit.Skill{name: "tools:echo", namespace: "tools", description: "Echo"}]
