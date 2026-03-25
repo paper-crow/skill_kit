@@ -1,119 +1,379 @@
 defmodule SkillKit.CatalogTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Catalog, Skill}
+  alias SkillKit.Agent.Definition
+  alias SkillKit.Catalog
+  alias SkillKit.Hook
+  alias SkillKit.Kit
+  alias SkillKit.Kit.Memory
+  alias SkillKit.Skill
 
-  setup do
-    name = :"registry_#{:erlang.unique_integer([:positive])}"
-    _pid = start_supervised!({SkillKit.Registry, name: name})
+  # --- Test scope struct ---
 
-    skill = %Skill{
-      name: "files:read",
-      namespace: "files",
-      description: "Read files",
-      body: "Read $ARGUMENTS",
-      required_scope: ["files:read"]
+  defmodule TestScope do
+    defstruct permissions: []
+  end
+
+  defimpl SkillKit.Scope, for: TestScope do
+    def permissions(scope), do: scope.permissions
+    def resolve(_scope, _variable, _context), do: :error
+  end
+
+  # --- Failing provider for error handling ---
+
+  defmodule FailingProvider do
+    @behaviour SkillKit.Kit.Provider
+
+    @impl true
+    def list_kits(_config), do: {:error, :connection_refused}
+
+    @impl true
+    def get_kit(_config, _name), do: {:error, :not_found}
+  end
+
+  # --- Helpers ---
+
+  defp start_catalog(provider, opts \\ []) do
+    scope = Keyword.get(opts, :scope)
+    extra_providers = Keyword.get(opts, :extra_providers, [])
+    providers = [{Memory, provider: provider} | extra_providers]
+    start_supervised!({Catalog, providers: providers, scope: scope})
+  end
+
+  defp make_skill(name, opts \\ []) do
+    %Skill{
+      name: name,
+      description: Keyword.get(opts, :description, "#{name} skill"),
+      body: Keyword.get(opts, :body, "do the thing"),
+      handler: Keyword.get(opts, :handler, SkillKit.Shell),
+      required_scope: Keyword.get(opts, :required_scope, []),
+      hooks: Keyword.get(opts, :hooks, []),
+      metadata: Keyword.get(opts, :metadata, %{})
     }
+  end
 
-    open_skill = %Skill{
-      name: "test:open",
-      namespace: "test",
-      description: "No auth needed",
-      body: "Open stuff"
+  defp make_agent(name, opts \\ []) do
+    %Definition{
+      name: name,
+      description: Keyword.get(opts, :description, "#{name} agent"),
+      system_prompt: "You are #{name}.",
+      path: "/test/#{name}"
     }
-
-    SkillKit.Registry.register(name, skill)
-    SkillKit.Registry.register(name, open_skill)
-
-    %{catalog: name}
   end
 
-  describe "list_skills/2" do
-    test "returns only authorized skills when scopes provided", %{catalog: cat} do
-      skills = Catalog.list_skills(cat, scopes: ["files:read"])
-      names = Enum.map(skills, & &1.name)
-      assert "files:read" in names
-      assert "test:open" in names
+  # =====================================================================
+  # list_skills
+  # =====================================================================
+
+  describe "list_skills/1" do
+    test "returns {name, description} tuples" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:hello", description: "Says hello"))
+      Memory.put(provider, make_skill("ns:goodbye", description: "Says goodbye"))
+
+      catalog = start_catalog(provider)
+      skills = Catalog.list_skills(catalog)
+
+      assert Enum.sort(skills) == [
+               {"ns:goodbye", "Says goodbye"},
+               {"ns:hello", "Says hello"}
+             ]
     end
 
-    test "filters out skills the caller lacks scopes for", %{catalog: cat} do
-      skills = Catalog.list_skills(cat, scopes: ["test:write"])
-      names = Enum.map(skills, & &1.name)
-      refute "files:read" in names
-      assert "test:open" in names
+    test "filters by authorization when scope is set" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:public"))
+      Memory.put(provider, make_skill("ns:admin", required_scope: ["admin:read"]))
+
+      scope = %TestScope{permissions: []}
+      catalog = start_catalog(provider, scope: scope)
+
+      skills = Catalog.list_skills(catalog)
+      assert skills == [{"ns:public", "ns:public skill"}]
     end
 
-    test "returns all skills when no scopes option provided", %{catalog: cat} do
-      skills = Catalog.list_skills(cat, [])
-      assert length(skills) == 2
-    end
+    test "shows all skills when scope is nil" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:public"))
+      Memory.put(provider, make_skill("ns:admin", required_scope: ["admin:read"]))
 
-    test "wildcard scope covers required scope", %{catalog: cat} do
-      skills = Catalog.list_skills(cat, scopes: ["files:*"])
-      names = Enum.map(skills, & &1.name)
-      assert "files:read" in names
-    end
-  end
-
-  describe "get_skill/3" do
-    test "returns skill when authorized", %{catalog: cat} do
-      assert {:ok, %Skill{name: "files:read"}} =
-               Catalog.get_skill(cat, "files:read", scopes: ["files:*"])
-    end
-
-    test "returns {:error, :unauthorized} when lacking scope", %{catalog: cat} do
-      assert {:error, :unauthorized} =
-               Catalog.get_skill(cat, "files:read", scopes: ["test:read"])
-    end
-
-    test "returns {:error, :not_found} for nonexistent skill", %{catalog: cat} do
-      assert {:error, :not_found} =
-               Catalog.get_skill(cat, "nope:nope", scopes: ["admin:*"])
-    end
-
-    test "returns skill without auth check when no scopes option", %{catalog: cat} do
-      assert {:ok, %Skill{name: "files:read"}} = Catalog.get_skill(cat, "files:read")
+      catalog = start_catalog(provider)
+      assert length(Catalog.list_skills(catalog)) == 2
     end
   end
 
-  describe "activate/4" do
-    test "returns rendered body for authorized skill", %{catalog: cat} do
-      assert {:ok, rendered} =
-               Catalog.activate(cat, "files:read", %{"arguments" => "README.md"},
-                 scopes: ["files:*"]
-               )
+  # =====================================================================
+  # get_skill
+  # =====================================================================
 
-      assert rendered == "Read README.md"
+  describe "get_skill/2" do
+    test "returns full skill" do
+      {:ok, provider} = Memory.start_link([])
+      skill = make_skill("ns:hello", description: "Says hello")
+      Memory.put(provider, skill)
+
+      catalog = start_catalog(provider)
+      assert {:ok, fetched} = Catalog.get_skill(catalog, "ns:hello")
+      assert fetched.name == "ns:hello"
+      assert fetched.description == "Says hello"
     end
 
-    test "returns {:error, :unauthorized} when lacking scope", %{catalog: cat} do
-      assert {:error, :unauthorized} =
-               Catalog.activate(cat, "files:read", %{}, scopes: [])
+    test "returns :not_found for unknown skill" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+      assert {:error, :not_found} = Catalog.get_skill(catalog, "ns:nope")
     end
 
-    test "returns {:error, :not_found} for nonexistent skill", %{catalog: cat} do
-      assert {:error, :not_found} =
-               Catalog.activate(cat, "nope:nope", %{}, scopes: ["admin:*"])
-    end
+    test "returns :unauthorized when scope doesn't cover required_scope" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:admin", required_scope: ["admin:write"]))
 
-    test "activates without auth check when no scopes option", %{catalog: cat} do
-      assert {:ok, rendered} =
-               Catalog.activate(cat, "test:open", %{}, [])
+      scope = %TestScope{permissions: ["user:read"]}
+      catalog = start_catalog(provider, scope: scope)
 
-      assert rendered == "Open stuff"
+      assert {:error, :unauthorized} = Catalog.get_skill(catalog, "ns:admin")
     end
   end
 
-  describe "register/2 and unregister/2" do
-    test "register passes through to Registry", %{catalog: cat} do
-      new_skill = %Skill{name: "new:skill", namespace: "new", description: "New", body: "Do new"}
-      assert :ok = Catalog.register(cat, new_skill)
-      assert {:ok, _} = Catalog.get_skill(cat, "new:skill")
+  # =====================================================================
+  # list_agents
+  # =====================================================================
+
+  describe "list_agents/1" do
+    test "returns definitions from kits" do
+      {:ok, provider} = Memory.start_link([])
+      agent = make_agent("reviewer")
+      kit = %Kit{name: "test", agents: [agent]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      agents = Catalog.list_agents(catalog)
+
+      assert length(agents) == 1
+      assert hd(agents).name == "reviewer"
+    end
+  end
+
+  # =====================================================================
+  # get_agent
+  # =====================================================================
+
+  describe "get_agent/2" do
+    test "returns agent by name" do
+      {:ok, provider} = Memory.start_link([])
+      agent = make_agent("reviewer")
+      kit = %Kit{name: "test", agents: [agent]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      assert {:ok, found} = Catalog.get_agent(catalog, "reviewer")
+      assert found.name == "reviewer"
     end
 
-    test "unregister passes through to Registry", %{catalog: cat} do
-      assert :ok = Catalog.unregister(cat, "files:read")
-      assert {:error, :not_found} = Catalog.get_skill(cat, "files:read")
+    test "returns :not_found for unknown agent" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+      assert {:error, :not_found} = Catalog.get_agent(catalog, "nope")
+    end
+  end
+
+  # =====================================================================
+  # root_agent
+  # =====================================================================
+
+  describe "root_agent/1" do
+    test "returns root agent when set" do
+      {:ok, provider} = Memory.start_link([])
+      agent = make_agent("main")
+      kit = %Kit{name: "test", root_agent: agent}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      root = Catalog.root_agent(catalog)
+      assert root.name == "main"
+    end
+
+    test "returns nil when no root agent" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:hello"))
+
+      catalog = start_catalog(provider)
+      assert Catalog.root_agent(catalog) == nil
+    end
+  end
+
+  # =====================================================================
+  # hooks
+  # =====================================================================
+
+  describe "hooks/1" do
+    test "returns hooks from skills" do
+      {:ok, provider} = Memory.start_link([])
+      hook = %Hook{phase: :pre, matcher: ~r/Shell/, handler: fn _ -> :ok end}
+      Memory.put(provider, make_skill("ns:hooked", hooks: [hook]))
+
+      catalog = start_catalog(provider)
+      hooks = Catalog.hooks(catalog)
+      assert length(hooks) == 1
+      assert hd(hooks).phase == :pre
+    end
+  end
+
+  # =====================================================================
+  # tool_definitions
+  # =====================================================================
+
+  describe "tool_definitions/2" do
+    test "includes activate_skill when skills exist" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:hello", description: "Says hello"))
+
+      catalog = start_catalog(provider)
+      tools = Catalog.tool_definitions(catalog, [])
+
+      activate = Enum.find(tools, &(&1.name == "activate_skill"))
+      assert activate != nil
+      assert activate.input_schema["properties"]["name"]["enum"] == ["ns:hello"]
+    end
+
+    test "includes builtins when subagent: true" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+
+      tools = Catalog.tool_definitions(catalog, subagent: true)
+      names = Enum.map(tools, & &1.name)
+      assert "report_status" in names
+      assert "report_result" in names
+    end
+
+    test "excludes builtins when subagent: false" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+
+      tools = Catalog.tool_definitions(catalog, [])
+      names = Enum.map(tools, & &1.name)
+      refute "report_status" in names
+    end
+
+    test "includes agent tools" do
+      {:ok, provider} = Memory.start_link([])
+      agent = make_agent("reviewer", description: "Reviews code")
+      kit = %Kit{name: "test", agents: [agent]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      tools = Catalog.tool_definitions(catalog, [])
+
+      agent_tool = Enum.find(tools, &(&1.name == "reviewer"))
+      assert agent_tool != nil
+      assert agent_tool.input_schema["properties"]["task"] != nil
+      assert agent_tool.input_schema["required"] == ["task"]
+    end
+
+    test "includes handler tools from kit metadata" do
+      {:ok, provider} = Memory.start_link([])
+
+      kit = %Kit{
+        name: "shell_kit",
+        skills: [],
+        metadata: %{handler: SkillKit.Shell}
+      }
+
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      tools = Catalog.tool_definitions(catalog, [])
+
+      handler_tool = Enum.find(tools, &(&1.name == SkillKit.Shell.tool_definition().name))
+      assert handler_tool != nil
+    end
+
+    test "includes activated skill tools" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+
+      activated = [make_skill("ns:schedule", handler: SkillKit.Shell)]
+      tools = Catalog.tool_definitions(catalog, activated_skills: activated)
+
+      skill_tool = Enum.find(tools, &(&1.name == "schedule"))
+      assert skill_tool != nil
+    end
+  end
+
+  # =====================================================================
+  # classify
+  # =====================================================================
+
+  describe "classify/3" do
+    test "classifies activate_skill" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "activate_skill") == :activate_skill
+    end
+
+    test "classifies builtins" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "report_status") == :builtin
+      assert Catalog.classify(catalog, "report_result") == :builtin
+    end
+
+    test "classifies subagent" do
+      {:ok, provider} = Memory.start_link([])
+      agent = make_agent("reviewer")
+      kit = %Kit{name: "test", agents: [agent]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "reviewer") == :subagent
+    end
+
+    test "classifies module_skill from activated skills" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+
+      skill = make_skill("scheduler:schedule")
+      assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
+    end
+
+    test "classifies handler as default" do
+      {:ok, provider} = Memory.start_link([])
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "bash") == :handler
+    end
+  end
+
+  # =====================================================================
+  # dynamic updates
+  # =====================================================================
+
+  describe "dynamic updates" do
+    test "adding skill to provider is reflected in next list_skills call" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:first"))
+
+      catalog = start_catalog(provider)
+      assert length(Catalog.list_skills(catalog)) == 1
+
+      Memory.put(provider, make_skill("ns:second"))
+      assert length(Catalog.list_skills(catalog)) == 2
+    end
+  end
+
+  # =====================================================================
+  # provider failure
+  # =====================================================================
+
+  describe "provider failure" do
+    test "returns partial results when one provider fails" do
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, make_skill("ns:hello"))
+
+      extra = [{FailingProvider, []}]
+      catalog = start_catalog(provider, extra_providers: extra)
+
+      skills = Catalog.list_skills(catalog)
+      assert skills == [{"ns:hello", "ns:hello skill"}]
     end
   end
 end

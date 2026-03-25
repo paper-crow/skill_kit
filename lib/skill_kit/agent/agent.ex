@@ -24,7 +24,6 @@ defmodule SkillKit.Agent do
   use Supervisor
 
   alias SkillKit.Agent.Core
-  alias SkillKit.Agent.Infrastructure
 
   @type opts :: %{
           :agent_name => String.t(),
@@ -37,7 +36,8 @@ defmodule SkillKit.Agent do
           optional(:caller) => pid() | nil,
           optional(:parent_registry) => atom() | nil,
           optional(:conversation_store) => {module(), keyword()} | nil,
-          optional(:kits) => [SkillKit.Kit.t()] | nil
+          optional(:kits) => [SkillKit.Kit.t()] | nil,
+          optional(:handler_config) => map() | nil
         }
 
   @spec start_link(opts()) :: Supervisor.on_start()
@@ -57,15 +57,11 @@ defmodule SkillKit.Agent do
       registry: registry
     } = opts
 
-    preloaded_kits = Map.get(opts, :kits)
-    kits = preloaded_kits || load_kits_from(skills)
     caller = Map.get(opts, :caller)
-
     parent_registry = Map.get(opts, :parent_registry)
     conversation_store = Map.get(opts, :conversation_store)
 
-    server_opts = [kits: kits, skills: skills]
-
+    server_opts = [skills: skills]
     server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
 
     server_opts =
@@ -80,19 +76,11 @@ defmodule SkillKit.Agent do
 
     children = [
       {Registry, keys: :unique, name: registry},
-      {Infrastructure, {agent_name, definition, skills, registry, kits}},
+      {SkillKit.Catalog,
+       name: {:via, Registry, {registry, {agent_name, :catalog}}}, providers: skills, scope: scope},
       {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
-  end
-
-  defp load_kits_from(skills) do
-    Enum.flat_map(skills, fn {mod, config} ->
-      case mod.load_kits(config) do
-        {:ok, kits} -> kits
-        {:error, _} -> []
-      end
-    end)
   end
 end

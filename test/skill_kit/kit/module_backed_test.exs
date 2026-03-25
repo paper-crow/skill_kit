@@ -14,7 +14,7 @@ end
 defmodule SkillKit.Kit.ModuleBackedTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Agent.ToolBuilder
+  alias SkillKit.Kit.Memory
   alias SkillKit.Pipeline
   alias SkillKit.Skill
   alias SkillKit.Test.EchoKit
@@ -23,11 +23,20 @@ defmodule SkillKit.Kit.ModuleBackedTest do
     setup do
       {:ok, [kit]} = EchoKit.load_kits([])
       [skill] = kit.skills
-      %{kit: kit, skill: skill}
+
+      {:ok, provider} = Memory.start_link([])
+      Memory.put_kit(provider, kit)
+
+      catalog =
+        start_supervised!({SkillKit.Catalog, providers: [{Memory, provider: provider}]})
+
+      %{kit: kit, skill: skill, catalog: catalog}
     end
 
-    test "skill appears in activate_skill enum but not as a tool before activation", %{kit: kit} do
-      tools = ToolBuilder.build_tools([kit])
+    test "skill appears in activate_skill enum but not as a tool before activation", %{
+      catalog: catalog
+    } do
+      tools = SkillKit.Catalog.tool_definitions(catalog, [])
       activate_tool = Enum.find(tools, &(&1.name == "activate_skill"))
 
       assert "test_kit:greet" in activate_tool.input_schema["properties"]["name"]["enum"]
@@ -36,15 +45,21 @@ defmodule SkillKit.Kit.ModuleBackedTest do
       refute "greet" in tool_names
     end
 
-    test "after activation, skill's tool appears in tool list", %{kit: kit, skill: skill} do
-      tools = ToolBuilder.build_tools([kit], activated_skills: [skill])
+    test "after activation, skill's tool appears in tool list", %{
+      catalog: catalog,
+      skill: skill
+    } do
+      tools = SkillKit.Catalog.tool_definitions(catalog, activated_skills: [skill])
       tool_names = Enum.map(tools, & &1.name)
       assert "greet" in tool_names
     end
 
-    test "classifier routes activated skill to {:module_skill, skill}", %{kit: kit, skill: skill} do
-      classify = ToolBuilder.classifier([kit], [skill])
-      assert {:module_skill, ^skill} = classify.(%{name: "greet"})
+    test "classifier routes activated skill to {:module_skill, skill}", %{
+      catalog: catalog,
+      skill: skill
+    } do
+      assert {:module_skill, ^skill} =
+               SkillKit.Catalog.classify(catalog, "greet", [skill])
     end
 
     test "execute dispatches through Kit module", %{skill: skill} do

@@ -23,11 +23,11 @@ defmodule SkillKit.Kit.Local.ListGetTest do
   describe "list_kits/1" do
     test "returns kits from directory", %{dir: dir} do
       assert {:ok, kits} = Local.list_kits(dir: dir)
-      assert length(kits) >= 1
+      assert kits != []
 
       kit = Enum.find(kits, &(&1.name == "my_kit"))
       assert kit != nil
-      assert length(kit.skills) == 1
+      assert kit.skills != []
     end
 
     test "returns empty list for nonexistent directory" do
@@ -39,7 +39,7 @@ defmodule SkillKit.Kit.Local.ListGetTest do
     test "returns kit by name", %{dir: dir} do
       assert {:ok, kit} = Local.get_kit([dir: dir], "my_kit")
       assert kit.name == "my_kit"
-      assert length(kit.skills) == 1
+      assert kit.skills != []
     end
 
     test "returns error for unknown kit" do

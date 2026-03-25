@@ -46,7 +46,7 @@ defmodule SkillKit.Agent.AgentTest do
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :skill_registry})
+      assert [{_, _}] = Registry.lookup(registry, {agent_name, :catalog})
     end
 
     test "mailbox can deliver messages to server", %{

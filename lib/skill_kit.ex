@@ -65,15 +65,15 @@ defmodule SkillKit do
   @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
   def start_agent(opts) when is_list(opts) do
     skills = Keyword.fetch!(opts, :skills)
-    kits = load_all_kits(skills)
+    scope = Keyword.get(opts, :scope)
 
-    case extract_root_agent(kits) do
-      {:ok, definition} ->
-        opts = Keyword.put(opts, :kits, kits)
-        start_agent(definition, opts)
+    {:ok, temp_catalog} = SkillKit.Catalog.start_link(providers: skills, scope: scope)
+    root = SkillKit.Catalog.root_agent(temp_catalog)
+    GenServer.stop(temp_catalog)
 
-      {:error, _} = error ->
-        error
+    case root do
+      nil -> {:error, :no_root_agent}
+      definition -> start_agent(definition, opts)
     end
   end
 
@@ -88,7 +88,6 @@ defmodule SkillKit do
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
     scope = Keyword.get(opts, :scope)
-    kits = Keyword.get(opts, :kits)
     agent_name = Keyword.get(opts, :name, definition.name)
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
@@ -102,8 +101,7 @@ defmodule SkillKit do
       skills: skills,
       registry: registry_name,
       caller: caller,
-      conversation_store: conversation_store,
-      kits: kits
+      conversation_store: conversation_store
     }
 
     case Agent.start_link(agent_opts) do
@@ -210,27 +208,5 @@ defmodule SkillKit do
   @spec stop_agent(agent()) :: :ok
   def stop_agent(%AgentRef{supervisor_pid: pid}) do
     Supervisor.stop(pid)
-  end
-
-  defp load_all_kits(skills) do
-    Enum.flat_map(skills, fn {mod, config} ->
-      case mod.load_kits(config) do
-        {:ok, kits} -> kits
-        {:error, _} -> []
-      end
-    end)
-  end
-
-  defp extract_root_agent(kits) do
-    root_agents =
-      kits
-      |> Enum.map(& &1.root_agent)
-      |> Enum.reject(&is_nil/1)
-
-    case root_agents do
-      [definition] -> {:ok, definition}
-      [] -> {:error, :no_root_agent}
-      _ -> {:error, :multiple_root_agents}
-    end
   end
 end

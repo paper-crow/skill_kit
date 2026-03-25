@@ -39,8 +39,8 @@ defmodule SkillKit.StartAgentTest do
                )
     end
 
-    test "returns error when multiple root agents found" do
-      assert {:error, :multiple_root_agents} =
+    test "uses first root agent when multiple providers have root agents" do
+      assert {:ok, agent} =
                SkillKit.start_agent(
                  skills: [
                    {Local, dir: @fixtures_path},
@@ -48,6 +48,9 @@ defmodule SkillKit.StartAgentTest do
                  ],
                  caller: self()
                )
+
+      assert agent.name == "root-agent"
+      SkillKit.stop_agent(agent)
     end
   end
 

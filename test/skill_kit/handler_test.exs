@@ -1,12 +1,15 @@
 defmodule SkillKit.HandlerTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.{Handler, Hook, Skill}
+  alias SkillKit.Handler
+  alias SkillKit.Hook
+  alias SkillKit.Kit.Memory
+  alias SkillKit.Skill
 
   setup do
-    name = :"registry_#{:erlang.unique_integer([:positive])}"
-    _pid = start_supervised!({SkillKit.Registry, name: name})
-    %{registry: name}
+    {:ok, provider} = Memory.start_link([])
+    catalog = start_supervised!({SkillKit.Catalog, providers: [{Memory, provider: provider}]})
+    %{catalog: catalog, provider: provider}
   end
 
   defp skill do
@@ -19,13 +22,13 @@ defmodule SkillKit.HandlerTest do
   end
 
   describe "run/4" do
-    test "executes a command and returns {:ok, %Pipeline{}}", %{registry: registry} do
-      assert {:ok, result} = Handler.run(registry, skill(), "echo hello", %{})
+    test "executes a command and returns {:ok, %Pipeline{}}", %{catalog: catalog} do
+      assert {:ok, result} = Handler.run(catalog, skill(), "echo hello", %{})
       assert result.status == :complete
       assert result.results["execute"] == {:ok, "hello\n"}
     end
 
-    test "collects hooks from all registered skills", %{registry: registry} do
+    test "collects hooks from all registered skills", %{catalog: catalog, provider: provider} do
       hook_skill = %Skill{
         name: "hooks:blocker",
         namespace: "hooks",
@@ -40,41 +43,41 @@ defmodule SkillKit.HandlerTest do
         ]
       }
 
-      SkillKit.Registry.register(registry, hook_skill)
+      Memory.put(provider, hook_skill)
 
-      assert {:error, result} = Handler.run(registry, skill(), "echo hello", %{})
+      assert {:error, result} = Handler.run(catalog, skill(), "echo hello", %{})
       assert result.status == :failed
     end
 
-    test "works with no hooks registered", %{registry: registry} do
-      assert {:ok, result} = Handler.run(registry, skill(), "echo clean", %{})
+    test "works with no hooks registered", %{catalog: catalog} do
+      assert {:ok, result} = Handler.run(catalog, skill(), "echo clean", %{})
       assert result.status == :complete
     end
 
-    test "accepts a pre-formed input map", %{registry: registry} do
-      assert {:ok, result} = Handler.run(registry, skill(), %{"command" => "echo hello"}, %{})
+    test "accepts a pre-formed input map", %{catalog: catalog} do
+      assert {:ok, result} = Handler.run(catalog, skill(), %{"command" => "echo hello"}, %{})
       assert result.results["execute"] == {:ok, "hello\n"}
     end
 
-    test "passes context with cwd through to Shell handler", %{registry: registry} do
+    test "passes context with cwd through to Shell handler", %{catalog: catalog} do
       tmp = System.tmp_dir!()
       # Resolve symlinks for macOS
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
       context = %{cwd: tmp}
-      assert {:ok, result} = Handler.run(registry, skill(), "pwd", context)
+      assert {:ok, result} = Handler.run(catalog, skill(), "pwd", context)
       assert result.results["execute"] == {:ok, resolved_tmp <> "\n"}
     end
 
-    test "passes context with env through to Shell handler", %{registry: registry} do
+    test "passes context with env through to Shell handler", %{catalog: catalog} do
       context = %{env: [{"SKILL_KIT_INT_TEST", "integration"}]}
-      assert {:ok, result} = Handler.run(registry, skill(), "echo $SKILL_KIT_INT_TEST", context)
+      assert {:ok, result} = Handler.run(catalog, skill(), "echo $SKILL_KIT_INT_TEST", context)
       assert result.results["execute"] == {:ok, "integration\n"}
     end
   end
 
   describe "resume/2" do
-    test "delegates to Pipeline.resume/2", %{registry: registry} do
+    test "delegates to Pipeline.resume/2", %{catalog: catalog} do
       pending_skill = %Skill{
         name: "test:pending",
         namespace: "test",
@@ -83,7 +86,7 @@ defmodule SkillKit.HandlerTest do
         handler: SkillKit.HandlerTest.PendingHandler
       }
 
-      {:pending, suspended} = Handler.run(registry, pending_skill, "do thing", %{})
+      {:pending, suspended} = Handler.run(catalog, pending_skill, "do thing", %{})
       assert {:ok, result} = Handler.resume(suspended, :approved)
       assert result.status == :complete
     end
