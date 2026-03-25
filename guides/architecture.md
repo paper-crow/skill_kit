@@ -114,7 +114,7 @@ have no direct caller process — they communicate only through the parent Regis
 | Concern | Where to look |
 |---|---|
 | LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |
-| Skill loading (filesystem, etc.) | `SkillKit.Skills.Provider` behaviours |
+| Skill loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | Tool execution + hooks | `SkillKit.Handler` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |

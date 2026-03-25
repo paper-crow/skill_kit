@@ -115,9 +115,9 @@ defmodule SkillKit.MixProject do
           SkillKit.Skill,
           SkillKit.Kit,
           SkillKit.Catalog,
-          SkillKit.Skills.Provider,
-          SkillKit.Skills.Local,
-          SkillKit.Skills.Local.Parser,
+          SkillKit.Kit.Provider,
+          SkillKit.Kit.Local,
+          SkillKit.Kit.Local.Parser,
           SkillKit.Frontmatter
         ],
         "Execution & Hooks": [

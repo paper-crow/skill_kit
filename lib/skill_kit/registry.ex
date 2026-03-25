@@ -93,7 +93,7 @@ defmodule SkillKit.Registry do
 
       iex> {:ok, _pid} = SkillKit.Registry.start_link([])
       iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry)
-      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skills: [{SkillKit.Skills.Local, dirs: ["/path/to/skills"]}])
+      iex> {:ok, _pid} = SkillKit.Registry.start_link(name: MyApp.Registry, skills: [{SkillKit.Kit.Local, dirs: ["/path/to/skills"]}])
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do

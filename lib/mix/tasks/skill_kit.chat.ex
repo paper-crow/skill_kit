@@ -44,7 +44,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, agent} =
       SkillKit.start_agent(definition,
         skills: [
-          {SkillKit.Skills.Local, dirs: [skills_dir]},
+          {SkillKit.Kit.Local, dirs: [skills_dir]},
           {SkillKit.Shell, []}
         ],
         caller: self()

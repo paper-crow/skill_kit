@@ -32,7 +32,7 @@ defmodule SkillKit.Supervisor do
       children = [
         {SkillKit.Supervisor,
           registry_name: MyApp.SkillRegistry,
-          skills: [{SkillKit.Skills.Local, dirs: ["priv/skills"]}]}
+          skills: [{SkillKit.Kit.Local, dirs: ["priv/skills"]}]}
       ]
 
   ## Supervision Strategy
@@ -49,7 +49,7 @@ defmodule SkillKit.Supervisor do
     SkillKit instances in the same node (e.g., in tests or umbrella apps).
 
   - `:skills` — list of `{module, keyword()}` provider configurations. Each
-    provider implements `SkillKit.Skills.Provider` and is called at boot to load skills.
+    provider implements `SkillKit.Kit.Provider` and is called at boot to load skills.
     Defaults to `[]`.
   """
 
@@ -64,7 +64,7 @@ defmodule SkillKit.Supervisor do
   - `:registry_name` — the name for the child `SkillKit.Registry`. Defaults to
     `SkillKit.Registry`.
   - `:skills` — list of `{module, keyword()}` provider configurations. Each provider
-    implements `SkillKit.Skills.Provider` and is called at boot to load skills. Defaults to `[]`.
+    implements `SkillKit.Kit.Provider` and is called at boot to load skills. Defaults to `[]`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) do

@@ -31,7 +31,7 @@ SkillKit gives you a composable agent runtime:
 # Start an agent from a directory — provider discovers the root AGENT.md
 {:ok, agent} = SkillKit.start_agent(
   skills: [
-    {SkillKit.Skills.Local, dir: "my_agent"},
+    {SkillKit.Kit.Local, dir: "my_agent"},
     {SkillKit.Shell, []}
   ],
   scope: my_scope,
@@ -147,7 +147,7 @@ Capabilities are registered per-agent through `skills:`. For example, to give an
 ```elixir
 SkillKit.start_agent(
   skills: [
-    {SkillKit.Skills.Local, dir: ".skills"},
+    {SkillKit.Kit.Local, dir: ".skills"},
     {SkillKit.Shell, cwd: File.cwd!()}
   ]
 )

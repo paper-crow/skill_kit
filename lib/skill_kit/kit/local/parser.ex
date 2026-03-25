@@ -1,4 +1,4 @@
-defmodule SkillKit.Skills.Local.Parser do
+defmodule SkillKit.Kit.Local.Parser do
   @moduledoc """
   Internal parser for the Local provider.
 
@@ -45,7 +45,7 @@ defmodule SkillKit.Skills.Local.Parser do
 
   ## Example
 
-      iex> SkillKit.Skills.Local.Parser.load_file("/path/to/summarize.skill.md")
+      iex> SkillKit.Kit.Local.Parser.load_file("/path/to/summarize.skill.md")
       {:ok, %SkillKit.Skill{
         type: :prompt,
         name: "files:summarize",

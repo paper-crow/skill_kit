@@ -44,7 +44,7 @@ defmodule PersonaChat.CLI do
     {:ok, agent} =
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Skills.Local, dir: ".skills"},
+          {SkillKit.Kit.Local, dir: ".skills"},
           {SkillKit.Shell, []}
         ],
         scope: scope
@@ -72,8 +72,8 @@ defmodule PersonaChat.CLI do
     {:ok, agent} =
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Skills.Local, dir: "#{@personas_dir}/#{persona_name}"},
-          {SkillKit.Skills.Local, dir: ".skills/memory_kit"},
+          {SkillKit.Kit.Local, dir: "#{@personas_dir}/#{persona_name}"},
+          {SkillKit.Kit.Local, dir: ".skills/memory_kit"},
           {SkillKit.Shell, []}
         ],
         name: "#{persona_name}:#{username}",

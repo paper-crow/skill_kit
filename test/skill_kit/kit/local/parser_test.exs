@@ -1,7 +1,7 @@
-defmodule SkillKit.Skills.Local.ParserTest do
+defmodule SkillKit.Kit.Local.ParserTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Skills.Local.Parser
+  alias SkillKit.Kit.Local.Parser
   alias SkillKit.Skill
 
   @fixtures_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills"])

@@ -8,7 +8,7 @@ all skills they return into the registry.
 
 ## The Provider Behaviour
 
-Any module that implements `SkillKit.Skills.Provider` is a valid provider:
+Any module that implements `SkillKit.Kit.Provider` is a valid provider:
 
 ```elixir
 @callback load_kits(config :: keyword()) :: {:ok, [SkillKit.Kit.t()]} | {:error, term()}
@@ -29,13 +29,13 @@ A `%SkillKit.Kit{}` wraps:
 
 ## Built-in: Filesystem Provider
 
-`SkillKit.Skills.Local` loads kits from directories on disk. Each directory
+`SkillKit.Kit.Local` loads kits from directories on disk. Each directory
 becomes one kit; the kit name is the directory's basename.
 
 **Config key:** `:dirs` — a list of absolute directory paths.
 
 ```elixir
-{SkillKit.Skills.Local, dirs: ["/app/skills/files", "/app/skills/tools"]}
+{SkillKit.Kit.Local, dirs: ["/app/skills/files", "/app/skills/tools"]}
 ```
 
 ### Directory structure
@@ -93,7 +93,7 @@ The kit name is inferred from the last module segment, downcased and underscored
 use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
 ```
 
-`use SkillKit.Kit` implements both `SkillKit.Skills.Provider` (to load skills) and
+`use SkillKit.Kit` implements both `SkillKit.Kit.Provider` (to load skills) and
 `SkillKit.Handler.Behaviour` (to execute them). The macro generates default
 `tool_definition/0` and `resume/3` implementations; you must supply `execute/1`.
 
@@ -109,7 +109,7 @@ children = [
   {SkillKit.Registry,
    name: MyApp.SkillRegistry,
    sources: [
-     {SkillKit.Skills.Local, dirs: ["/app/priv/skills"]},
+     {SkillKit.Kit.Local, dirs: ["/app/priv/skills"]},
      {MyApp.FilesKit, []},
      {MyApp.DatabaseProvider, repo: MyApp.Repo}
    ]}
@@ -126,11 +126,11 @@ failures emit a `Logger.warning` but do not prevent the registry from starting.
 
 ## Writing a Custom Provider
 
-Implement `SkillKit.Skills.Provider` and return `%SkillKit.Kit{}` structs:
+Implement `SkillKit.Kit.Provider` and return `%SkillKit.Kit{}` structs:
 
 ```elixir
 defmodule MyApp.DatabaseProvider do
-  @behaviour SkillKit.Skills.Provider
+  @behaviour SkillKit.Kit.Provider
 
   alias MyApp.Repo
   alias MyApp.SkillRecord

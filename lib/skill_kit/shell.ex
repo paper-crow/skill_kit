@@ -7,7 +7,7 @@ defmodule SkillKit.Shell do
       SkillKit.start_agent(
         skills: [
           {SkillKit.Shell, cwd: File.cwd!()},
-          {SkillKit.Skills.Local, dir: ".skills"}
+          {SkillKit.Kit.Local, dir: ".skills"}
         ]
       )
 
@@ -21,7 +21,7 @@ defmodule SkillKit.Shell do
 
   alias SkillKit.Pipeline
 
-  @impl SkillKit.Skills.Provider
+  @impl SkillKit.Kit.Provider
   def load_kits(config) do
     {:ok, [kit]} = super(config)
     metadata = Map.merge(kit.metadata, config_to_metadata(config))

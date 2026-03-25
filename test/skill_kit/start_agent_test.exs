@@ -2,7 +2,7 @@ defmodule SkillKit.StartAgentTest do
   use ExUnit.Case
 
   alias SkillKit.Agent.Definition
-  alias SkillKit.Skills.Local
+  alias SkillKit.Kit.Local
 
   @fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "with_root_agent"])
   @no_agent_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "valid"])

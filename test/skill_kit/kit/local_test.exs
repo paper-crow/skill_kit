@@ -1,9 +1,9 @@
-defmodule SkillKit.Skills.LocalTest do
+defmodule SkillKit.Kit.LocalTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
 
-  alias SkillKit.Skills.Local
+  alias SkillKit.Kit.Local
 
   @valid_fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "valid"])
   @invalid_fixtures_path Path.join([
