@@ -18,7 +18,7 @@ A scope is a two-segment string: `"namespace:action"`.
 Valid examples: `"admin:read"`, `"skills:execute"`, `"tools:delete-all"`,
 `"tools:*"`.
 
-Use `SkillKit.Scope.valid?/1` or `SkillKit.Scope.validate/1` to check a scope
+Use `SkillKit.Scope.Validation.valid?/1` or `SkillKit.Scope.Validation.validate/1` to check a scope
 string at runtime.
 
 ## ALL-of Semantics

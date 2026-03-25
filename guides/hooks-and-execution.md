@@ -184,7 +184,7 @@ config :skill_kit, handler: MyApp.Handler.Sandbox
 
 ## How Hooks Are Collected
 
-Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/3`
+Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/4`
 calls `SkillKit.Catalog.hooks/1`, which flat-maps every skill's `:hooks` list
 across all loaded kits, then filters by handler name and builds the step list
 for the `%SkillKit.Pipeline{}` struct.
