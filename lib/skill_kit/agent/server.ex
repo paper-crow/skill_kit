@@ -276,10 +276,11 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%ToolCall{id: id, input: input}, state) do
-    context = %{scope: state.scope}
+    handler = find_handler(state.kits)
+    context = build_handler_context(state)
     skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-    case SkillKit.Handler.run(skill_registry, input, context) do
+    case SkillKit.Handler.run(handler, skill_registry, input, context) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,
@@ -297,6 +298,36 @@ defmodule SkillKit.Agent.Server do
         }
     end
   end
+
+  defp find_handler(kits) do
+    case Enum.find(kits, &handler_kit?/1) do
+      nil -> Application.get_env(:skill_kit, :handler, SkillKit.Shell)
+      kit -> kit.metadata.handler
+    end
+  end
+
+  defp handler_kit?(kit), do: Map.has_key?(kit.metadata, :handler)
+
+  defp build_handler_context(state) do
+    base_context = %{scope: state.scope}
+
+    case Enum.find(state.kits, &handler_kit?/1) do
+      nil -> base_context
+      kit -> merge_handler_config(base_context, kit.metadata)
+    end
+  end
+
+  defp merge_handler_config(context, metadata) do
+    context
+    |> maybe_put_cwd(metadata)
+    |> maybe_put_env(metadata)
+  end
+
+  defp maybe_put_cwd(context, %{cwd: cwd}), do: Map.put(context, :cwd, cwd)
+  defp maybe_put_cwd(context, _metadata), do: context
+
+  defp maybe_put_env(context, %{env: env}), do: Map.put(context, :env, env)
+  defp maybe_put_env(context, _metadata), do: context
 
   defp extract_output({:ok, output}), do: ensure_non_empty(output)
   defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
