@@ -42,7 +42,10 @@ defmodule PersonaChat.CLI do
 
     {:ok, agent} =
       SkillKit.start_agent(
-        skills: [{SkillKit.Backend.Filesystem, dir: ".skills"}],
+        skills: [
+          {SkillKit.Backend.Filesystem, dir: ".skills"},
+          {SkillKit.Shell, []}
+        ],
         scope: scope
       )
 
@@ -69,7 +72,8 @@ defmodule PersonaChat.CLI do
       SkillKit.start_agent(
         skills: [
           {SkillKit.Backend.Filesystem, dir: "#{@personas_dir}/#{persona_name}"},
-          {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"}
+          {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"},
+          {SkillKit.Shell, []}
         ],
         name: "#{persona_name}:#{username}",
         scope: scope,

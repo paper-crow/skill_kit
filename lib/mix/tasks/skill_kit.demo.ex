@@ -33,7 +33,10 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
     {:ok, agent} =
       SkillKit.start_agent(definition,
-        skills: [{SkillKit.Backend.Filesystem, dirs: [skills_dir]}],
+        skills: [
+          {SkillKit.Backend.Filesystem, dirs: [skills_dir]},
+          {SkillKit.Shell, []}
+        ],
         caller: self()
       )
 
