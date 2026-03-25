@@ -14,6 +14,21 @@ defmodule SkillKit.Backend.Filesystem do
 
   @impl true
   def load_kits(config) do
+    case Keyword.fetch(config, :dir) do
+      {:ok, dir} -> load_single_dir(dir)
+      :error -> load_multiple_dirs(config)
+    end
+  end
+
+  defp load_single_dir(dir) do
+    if File.dir?(dir) do
+      {:ok, [load_kit(dir)]}
+    else
+      {:ok, []}
+    end
+  end
+
+  defp load_multiple_dirs(config) do
     dirs = Keyword.fetch!(config, :dirs)
 
     kits =
@@ -27,7 +42,8 @@ defmodule SkillKit.Backend.Filesystem do
   defp load_kit(dir) do
     {skills, skill_errors} = load_skills_from(dir)
     {agents, agent_errors} = load_agents_from(dir)
-    errors = skill_errors ++ agent_errors
+    {root_agent, root_errors} = load_root_agent(dir)
+    errors = skill_errors ++ agent_errors ++ root_errors
 
     if errors != [] do
       error_summary =
@@ -40,7 +56,7 @@ defmodule SkillKit.Backend.Filesystem do
       )
     end
 
-    %Kit{name: Path.basename(dir), skills: skills, agents: agents}
+    %Kit{name: Path.basename(dir), skills: skills, agents: agents, root_agent: root_agent}
   end
 
   defp load_skills_from(dir) do
@@ -55,6 +71,19 @@ defmodule SkillKit.Backend.Filesystem do
     end)
   end
 
+  defp load_root_agent(dir) do
+    root_path = Path.join(dir, "AGENT.md")
+
+    if File.exists?(root_path) do
+      case Definition.parse(root_path) do
+        {:ok, agent} -> {agent, []}
+        {:error, reason} -> {nil, [{"AGENT.md", reason}]}
+      end
+    else
+      {nil, []}
+    end
+  end
+
   defp load_agents_from(dir) do
     dir
     |> discover_agent_files()
@@ -63,11 +92,13 @@ defmodule SkillKit.Backend.Filesystem do
 
   defp discover_agent_files(dir) do
     dir
-    |> File.ls!()
-    |> Enum.map(&Path.join(dir, &1))
-    |> Enum.filter(&File.dir?/1)
-    |> Enum.map(&Path.join(&1, "AGENT.md"))
-    |> Enum.filter(&File.exists?/1)
+    |> Path.join("**/AGENT.md")
+    |> Path.wildcard()
+    |> Enum.reject(&root_agent_path?(dir, &1))
+  end
+
+  defp root_agent_path?(dir, path) do
+    Path.dirname(path) == dir
   end
 
   defp load_agent_file(file, {agents, errors}) do
