@@ -12,7 +12,6 @@ Write the persona's AGENT.md file. The file must have this exact format:
 ---
 name: {persona_name_lowercase_underscored}
 description: {one-line description}
-capabilities: activate_skill, bash
 ---
 {Full system prompt that embodies the persona's voice, backstory, and personality.
 Include instructions for how to use the user_memory skill to remember things about users.

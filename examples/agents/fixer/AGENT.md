@@ -1,7 +1,6 @@
 ---
 name: "fixer"
 description: "Fixes bugs and implements changes in code"
-capabilities: bash, activate_skill, system:memory, dev:elixir-style
 metadata:
   max_agent_depth: 2
 ---

@@ -59,7 +59,6 @@ defmodule SkillKit.Agent do
 
     preloaded_kits = Map.get(opts, :kits)
     kits = preloaded_kits || load_kits_from(skills)
-    definition = resolve_capabilities(definition, kits)
     caller = Map.get(opts, :caller)
 
     parent_registry = Map.get(opts, :parent_registry)
@@ -86,27 +85,6 @@ defmodule SkillKit.Agent do
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
-  end
-
-  defp resolve_capabilities(definition, kits) do
-    all_skills = Enum.flat_map(kits, & &1.skills)
-    skill_names = MapSet.new(all_skills, & &1.name)
-
-    matched_skills =
-      definition.capabilities
-      |> Enum.filter(&MapSet.member?(skill_names, &1))
-      |> Enum.map(fn name -> Enum.find(all_skills, &(&1.name == name)) end)
-
-    case matched_skills do
-      [] ->
-        definition
-
-      skills ->
-        skill_blocks =
-          Enum.map_join(skills, &"\n\n## #{&1.name}\n\n#{&1.body}")
-
-        %{definition | system_prompt: definition.system_prompt <> skill_blocks}
-    end
   end
 
   defp load_kits_from(skills) do

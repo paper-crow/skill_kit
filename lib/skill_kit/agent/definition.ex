@@ -10,7 +10,6 @@ defmodule SkillKit.Agent.Definition do
   @type t :: %__MODULE__{
           name: String.t(),
           description: String.t(),
-          capabilities: [String.t()],
           model: String.t() | nil,
           system_prompt: String.t(),
           path: String.t(),
@@ -25,7 +24,6 @@ defmodule SkillKit.Agent.Definition do
     :model,
     :system_prompt,
     :path,
-    capabilities: [],
     max_agent_depth: 1,
     mailbox: %{max_messages: 10, flush_interval: 500}
   ]
@@ -51,7 +49,6 @@ defmodule SkillKit.Agent.Definition do
        %__MODULE__{
          name: name,
          description: description,
-         capabilities: parse_list(Map.get(yaml, "capabilities")),
          model: Map.get(yaml, "model"),
          system_prompt: body,
          path: path,
@@ -70,10 +67,6 @@ defmodule SkillKit.Agent.Definition do
       _ -> {:error, {:missing_field, key}}
     end
   end
-
-  defp parse_list(nil), do: []
-  defp parse_list(items) when is_binary(items), do: String.split(items, ~r/[\s,]+/, trim: true)
-  defp parse_list(items) when is_list(items), do: items
 
   defp parse_int(metadata, key, default) do
     case Map.get(metadata, key) do
