@@ -67,7 +67,7 @@ defmodule SkillKit.Shell do
   def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
   defp config_to_metadata(config) do
-    %{}
+    %{handler: __MODULE__}
     |> maybe_put(:cwd, Keyword.get(config, :cwd))
     |> maybe_put(:env, Keyword.get(config, :env))
   end

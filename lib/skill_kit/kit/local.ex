@@ -75,12 +75,16 @@ defmodule SkillKit.Kit.Local do
     root_path = Path.join(dir, "AGENT.md")
 
     if File.exists?(root_path) do
-      case Definition.parse(root_path) do
-        {:ok, agent} -> {agent, []}
-        {:error, reason} -> {nil, [{"AGENT.md", reason}]}
-      end
+      parse_root_agent(root_path)
     else
       {nil, []}
+    end
+  end
+
+  defp parse_root_agent(path) do
+    case Definition.parse(path) do
+      {:ok, agent} -> {agent, []}
+      {:error, reason} -> {nil, [{"AGENT.md", reason}]}
     end
   end
 
