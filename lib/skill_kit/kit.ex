@@ -76,7 +76,7 @@ defmodule SkillKit.Kit do
         }
       end
 
-      defoverridable resume: 3, tool_definition: 0
+      defoverridable resume: 3, tool_definition: 0, load_kits: 1
     end
   end
 

@@ -1,19 +1,34 @@
 defmodule SkillKit.Shell do
   @moduledoc """
-  Default handler that runs commands via the system shell.
+  Shell handler kit — provides bash command execution.
 
-  Executes the command string using `Port.open/2` with `:stderr_to_stdout`.
-  Returns stdout on success, or `{output, exit_code}` on failure.
+  Registered through `skills:` like any other kit:
 
-  `resume/3` delegates to `execute/1` — shell commands have no approval
-  concept, so resuming just re-executes the command from the Pipeline struct.
+      SkillKit.start_agent(
+        skills: [
+          {SkillKit.Shell, cwd: File.cwd!()},
+          {SkillKit.Backend.Filesystem, dir: ".skills"}
+        ]
+      )
+
+  ## Options
+
+    * `:cwd` — working directory for commands (default: `File.cwd!()`)
+    * `:env` — list of `{key, value}` environment variables
   """
 
-  @behaviour SkillKit.Handler.Behaviour
+  use SkillKit.Kit, name: "shell"
 
   alias SkillKit.Pipeline
 
-  @impl true
+  @impl SkillKit.Backend
+  def load_kits(config) do
+    {:ok, [kit]} = super(config)
+    metadata = Map.merge(kit.metadata, config_to_metadata(config))
+    {:ok, [%{kit | metadata: metadata}]}
+  end
+
+  @impl SkillKit.Handler.Behaviour
   def execute(%Pipeline{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
@@ -25,6 +40,40 @@ defmodule SkillKit.Shell do
 
     collect(port, [])
   end
+
+  @impl SkillKit.Handler.Behaviour
+  def tool_definition do
+    %SkillKit.Handler.ToolDefinition{
+      name: "bash",
+      description:
+        "Execute a shell command. Use for running scripts, reading/writing files, " <>
+          "fetching URLs (curl), git operations, and any system interaction. " <>
+          "The working directory defaults to the current process working directory.",
+      input_schema: %{
+        "type" => "object",
+        "properties" => %{
+          "command" => %{
+            "type" => "string",
+            "description" => "The shell command to execute"
+          }
+        },
+        "required" => ["command"]
+      }
+    }
+  end
+
+  @impl SkillKit.Handler.Behaviour
+  def resume(%Pipeline{} = exec, _state, :approved), do: execute(exec)
+  def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
+
+  defp config_to_metadata(config) do
+    %{}
+    |> maybe_put(:cwd, Keyword.get(config, :cwd))
+    |> maybe_put(:env, Keyword.get(config, :env))
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp port_opts(context) do
     []
@@ -52,35 +101,5 @@ defmodule SkillKit.Shell do
       {^port, {:exit_status, 0}} -> {:ok, IO.iodata_to_binary(acc)}
       {^port, {:exit_status, code}} -> {:error, {IO.iodata_to_binary(acc), code}}
     end
-  end
-
-  @impl true
-  def tool_definition do
-    %SkillKit.Handler.ToolDefinition{
-      name: "bash",
-      description:
-        "Execute a shell command. Use for running scripts, reading/writing files, " <>
-          "fetching URLs (curl), git operations, and any system interaction. " <>
-          "The working directory defaults to the current process working directory.",
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{
-          "command" => %{
-            "type" => "string",
-            "description" => "The shell command to execute"
-          }
-        },
-        "required" => ["command"]
-      }
-    }
-  end
-
-  @impl true
-  def resume(%Pipeline{} = exec, _state, :approved) do
-    execute(exec)
-  end
-
-  def resume(_exec, _state, {:denied, reason}) do
-    {:error, {:denied, reason}}
   end
 end

@@ -1,8 +1,8 @@
 defmodule SkillKit.ShellTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Shell
   alias SkillKit.Pipeline
+  alias SkillKit.Shell
 
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do
@@ -95,6 +95,23 @@ defmodule SkillKit.ShellTest do
                })
 
       assert String.trim(output) == "works from #{resolved_tmp}"
+    end
+  end
+
+  describe "load_kits/1 (Backend)" do
+    test "returns a kit named shell" do
+      assert {:ok, [kit]} = SkillKit.Shell.load_kits([])
+      assert kit.name == "shell"
+    end
+
+    test "stores cwd in metadata when provided" do
+      assert {:ok, [kit]} = SkillKit.Shell.load_kits(cwd: "/tmp")
+      assert kit.metadata.cwd == "/tmp"
+    end
+
+    test "stores env in metadata when provided" do
+      assert {:ok, [kit]} = SkillKit.Shell.load_kits(env: [{"FOO", "bar"}])
+      assert kit.metadata.env == [{"FOO", "bar"}]
     end
   end
 
