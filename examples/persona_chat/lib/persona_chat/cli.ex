@@ -40,14 +40,10 @@ defmodule PersonaChat.CLI do
   defp run_lobby(username, owner) do
     scope = PersonaChat.Scope.build(username, nil, owner: owner)
 
-    {:ok, definition} = Definition.parse("agents/lobby/AGENT.md")
-
     {:ok, agent} =
-      SkillKit.start_agent(definition,
-        scope: scope,
-        sources: [{SkillKit.Backend.Filesystem, dirs: ["skills/persona_kit"]}],
-        conversation_store:
-          {SkillKit.Conversation.Store.Filesystem, path: "#{@data_dir}/conversations"}
+      SkillKit.start_agent(
+        sources: [{SkillKit.Backend.Filesystem, dir: ".skills"}],
+        scope: scope
       )
 
     IO.puts("=== Persona Chat Lobby ===")
@@ -59,24 +55,24 @@ defmodule PersonaChat.CLI do
   end
 
   defp run_persona_chat(username, persona_name, owner) do
-    persona_path = "#{@personas_dir}/#{persona_name}/AGENT.md"
+    persona_dir = "#{@personas_dir}/#{persona_name}"
 
-    unless File.exists?(persona_path) do
+    unless File.dir?(persona_dir) do
       IO.puts("Persona '#{persona_name}' not found. Available personas:")
       list_available_personas()
       System.halt(1)
     end
 
     scope = PersonaChat.Scope.build(username, persona_name, owner: owner)
-    {:ok, definition} = Definition.parse(persona_path)
-
-    agent_name = "#{persona_name}:#{username}"
-    definition = %{definition | name: agent_name}
 
     {:ok, agent} =
-      SkillKit.start_agent(definition,
+      SkillKit.start_agent(
+        sources: [
+          {SkillKit.Backend.Filesystem, dir: "#{@personas_dir}/#{persona_name}"},
+          {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"}
+        ],
+        name: "#{persona_name}:#{username}",
         scope: scope,
-        sources: [{SkillKit.Backend.Filesystem, dirs: ["skills/memory_kit"]}],
         conversation_store:
           {SkillKit.Conversation.Store.Filesystem, path: "#{@data_dir}/conversations"}
       )
