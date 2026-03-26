@@ -71,7 +71,7 @@ defmodule SkillKit.Kit.Local do
       [load_kit(dir)]
     else
       Logger.warning(
-        "SkillKit: skipping '#{Path.basename(dir)}' — no SKILL.md, skills/, or AGENT.md found"
+        "SkillKit: skipping '#{Path.basename(dir)}' — no AGENT.md, skills/, or agents/ found"
       )
 
       []
