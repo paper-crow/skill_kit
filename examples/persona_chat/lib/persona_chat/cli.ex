@@ -13,7 +13,7 @@ defmodule PersonaChat.CLI do
   alias SkillKit.Types.AssistantMessage
 
   @data_dir "data"
-  @personas_dir "personas"
+  @personas_dir "agents/personas"
   @config_file "data/config.json"
 
   def main(args) do
@@ -43,10 +43,8 @@ defmodule PersonaChat.CLI do
 
     {:ok, agent} =
       SkillKit.start_agent(
-        skills: [
-          {SkillKit.Kit.Local, dir: ".skills"},
-          {SkillKit.Shell, []}
-        ],
+        agent: "agents/lobby",
+        skills: ["skills", SkillKit.Shell],
         scope: scope
       )
 
@@ -71,11 +69,8 @@ defmodule PersonaChat.CLI do
 
     {:ok, agent} =
       SkillKit.start_agent(
-        skills: [
-          {SkillKit.Kit.Local, dir: "#{@personas_dir}/#{persona_name}"},
-          {SkillKit.Kit.Local, dir: ".skills/memory_kit"},
-          {SkillKit.Shell, []}
-        ],
+        agent: "#{@personas_dir}/#{persona_name}",
+        skills: ["skills", SkillKit.Shell],
         name: "#{persona_name}:#{username}",
         scope: scope,
         conversation_store:
