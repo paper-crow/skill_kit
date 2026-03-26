@@ -7,8 +7,8 @@ defmodule SkillKit do
 
   ## Quick Start
 
-      {:ok, agent} = SkillKit.start_agent(definition,
-        skills: [{SkillKit.Kit.Local, dir: "skills"}],
+      {:ok, agent} = SkillKit.start_agent("agents/my-agent",
+        skills: ["skills"],
         caller: self()
       )
 
@@ -49,7 +49,15 @@ defmodule SkillKit do
   @type agent :: AgentRef.t()
 
   @doc """
-  Starts a new agent from the given definition.
+  Starts a new agent.
+
+  The first argument identifies the agent. It accepts:
+  - `%Definition{}` — a pre-built agent definition struct
+  - `"path"` — string path, resolved as `{Kit.Local, dir: "path"}`
+  - `{module, opts}` — a kit provider tuple
+
+  When the agent is loaded from a kit provider (string or tuple), the
+  kit's skills and sub-agents are automatically included in the tool pool.
 
   Returns `{:ok, agent_ref}` where `agent_ref` is an opaque reference
   used with `send_message/2` and `stop_agent/1`.
@@ -57,33 +65,33 @@ defmodule SkillKit do
   ## Options
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
-    * `:skills` — list of `{module, config}` skill sources (default: `[]`)
+    * `:skills` — list of skill sources; accepts `{module, config}`, `"path"`, or bare `Module` (default: `[]`)
     * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
     * `:scope` — granted scopes for authorization (default: `nil`)
+    * `:name` — override the agent name (default: name from definition)
 
   """
-  @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(opts) when is_list(opts) do
-    skills = Keyword.fetch!(opts, :skills)
-    scope = Keyword.get(opts, :scope)
-
-    {:ok, temp_catalog} = SkillKit.Catalog.start_link(providers: skills, scope: scope)
-    root = SkillKit.Catalog.root_agent(temp_catalog)
-    GenServer.stop(temp_catalog)
-
-    case root do
-      nil -> {:error, :no_root_agent}
-      definition -> start_agent(definition, opts)
-    end
+  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}) ::
+          {:ok, agent()} | {:error, term()}
+  def start_agent(agent) do
+    start_agent(agent, [])
   end
 
-  @spec start_agent(Agent.Definition.t()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(%Agent.Definition{} = definition) do
-    start_agent(definition, [])
+  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}, keyword()) ::
+          {:ok, agent()} | {:error, term()}
+  def start_agent(agent, opts) do
+    definition = resolve_agent(agent)
+    skills = normalize_skills(Keyword.get(opts, :skills, []))
+
+    # If agent is a provider (not a plain %Definition{}), add it to skills
+    # so the agent kit's skills/sub-agents are auto-included in the tool pool
+    agent_provider = agent_as_provider(agent)
+    all_skills = merge_agent_provider(agent_provider, skills)
+
+    do_start_agent(definition, Keyword.put(opts, :skills, all_skills))
   end
 
-  @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(%Agent.Definition{} = definition, opts) do
+  defp do_start_agent(%Agent.Definition{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
@@ -112,6 +120,57 @@ defmodule SkillKit do
         {:error, reason}
     end
   end
+
+  # -------------------------------------------------------------------
+  # Agent resolution
+  # -------------------------------------------------------------------
+
+  defp resolve_agent(%Agent.Definition{} = definition), do: definition
+
+  defp resolve_agent(path) when is_binary(path) do
+    resolve_agent({SkillKit.Kit.Local, dir: path})
+  end
+
+  defp resolve_agent(module) when is_atom(module) do
+    resolve_agent({module, []})
+  end
+
+  defp resolve_agent({module, config}) do
+    case module.load_kits(config) do
+      {:ok, kits} ->
+        kits
+        |> Enum.map(& &1.root_agent)
+        |> Enum.find(& &1) ||
+          raise "No root agent (AGENT.md) found in agent: provider #{inspect(module)}"
+
+      {:error, reason} ->
+        raise "Failed to load agent from #{inspect(module)}: #{inspect(reason)}"
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Skills normalization (string/module/tuple sugar)
+  # -------------------------------------------------------------------
+
+  defp normalize_skills(skills) do
+    Enum.map(skills, &normalize_skill_entry/1)
+  end
+
+  defp normalize_skill_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp normalize_skill_entry(module) when is_atom(module), do: {module, []}
+  defp normalize_skill_entry({module, config}), do: {module, config}
+
+  # -------------------------------------------------------------------
+  # Auto-include agent kit's tools
+  # -------------------------------------------------------------------
+
+  defp agent_as_provider(%Agent.Definition{}), do: nil
+  defp agent_as_provider(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp agent_as_provider(module) when is_atom(module), do: {module, []}
+  defp agent_as_provider({module, config}), do: {module, config}
+
+  defp merge_agent_provider(nil, skills), do: skills
+  defp merge_agent_provider(provider, skills), do: [provider | skills]
 
   @doc """
   Sends a user message to the agent referenced by `agent`.

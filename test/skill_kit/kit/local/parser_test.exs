@@ -12,8 +12,8 @@ defmodule SkillKit.Kit.Local.ParserTest do
   # ---------------------------------------------------------------------------
 
   describe "load_file/1 with valid files" do
-    test "returns {:ok, %Skill{}} for summarize.skill.md — full round-trip" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+    test "returns {:ok, %Skill{}} for summarize SKILL.md — full round-trip" do
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert skill.name == "files:summarize"
       assert skill.namespace == "files"
@@ -25,23 +25,23 @@ defmodule SkillKit.Kit.Local.ParserTest do
       assert String.contains?(skill.body, "{{content}}")
     end
 
-    test "returns {:ok, %Skill{}} for multi_arg.skill.md — multiple template vars" do
-      path = Path.join(@fixtures_path, "valid/multi_arg.skill.md")
+    test "returns {:ok, %Skill{}} for multi-arg SKILL.md — multiple template vars" do
+      path = Path.join(@fixtures_path, "valid/skills/multi-arg/SKILL.md")
       assert {:ok, %Skill{} = skill} = Parser.load_file(path)
-      assert skill.name == "tools:greet"
-      assert skill.description == "Generate a greeting"
-      assert String.contains?(skill.body, "{{name}}")
-      assert String.contains?(skill.body, "{{place}}")
+      assert skill.name == "tools:multi-arg"
+      assert skill.description == "Test multiple arguments"
+      assert String.contains?(skill.body, "$0")
+      assert String.contains?(skill.body, "$1")
     end
 
     test "body has leading/trailing whitespace trimmed" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       {:ok, skill} = Parser.load_file(path)
       assert skill.body == String.trim(skill.body)
     end
 
     test "required_scope is a list of strings for summarize fixture" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       {:ok, skill} = Parser.load_file(path)
       assert is_list(skill.required_scope)
       assert Enum.all?(skill.required_scope, &is_binary/1)
@@ -54,12 +54,12 @@ defmodule SkillKit.Kit.Local.ParserTest do
 
   describe "load_file/1 with invalid files" do
     test "returns {:error, {:missing_field, \"name\"}} when name field absent" do
-      path = Path.join(@fixtures_path, "invalid/missing_name.skill.md")
+      path = Path.join(@fixtures_path, "invalid/skills/missing-name/SKILL.md")
       assert {:error, {:missing_field, "name"}} = Parser.load_file(path)
     end
 
     test "returns {:error, %YamlElixir.ParsingError{}} for invalid YAML" do
-      path = Path.join(@fixtures_path, "invalid/bad_yaml.skill.md")
+      path = Path.join(@fixtures_path, "invalid/skills/bad-yaml/SKILL.md")
       assert {:error, %YamlElixir.ParsingError{}} = Parser.load_file(path)
     end
 
@@ -171,7 +171,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
 
   describe "atoms: false YAML parsing" do
     test "skill struct fields are all binary strings (not atoms)" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       {:ok, skill} = Parser.load_file(path)
       # These are struct fields — verify the values loaded from YAML are binaries
       assert is_binary(skill.name)
@@ -181,7 +181,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
     end
 
     test "required_scope list contains binary strings (not atoms)" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["files:read"]
       # Verify they are binaries, not atoms
@@ -273,7 +273,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
     end
 
     test "skills without hooks have empty hooks list" do
-      path = Path.join(@fixtures_path, "valid/summarize.skill.md")
+      path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       assert {:ok, %Skill{hooks: []}} = Parser.load_file(path)
     end
   end
@@ -284,14 +284,13 @@ defmodule SkillKit.Kit.Local.ParserTest do
 
   describe "load_file/1 metadata field" do
     test "parses metadata from frontmatter" do
-      path = Path.join(@valid_path, "metadata.skill.md")
+      path = Path.join(@valid_path, "skills/metadata/SKILL.md")
       assert {:ok, skill} = Parser.load_file(path)
-      assert skill.metadata["author"] == "test-org"
       assert skill.metadata["version"] == "1.0"
     end
 
     test "defaults metadata to empty map when not present" do
-      path = Path.join(@valid_path, "summarize.skill.md")
+      path = Path.join(@valid_path, "skills/summarize/SKILL.md")
       assert {:ok, skill} = Parser.load_file(path)
       assert skill.metadata == %{}
     end

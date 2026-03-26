@@ -114,6 +114,23 @@ defmodule SkillKitTest do
     end
   end
 
+  describe "start_agent/2 with agent as first argument" do
+    test "accepts a %Definition{} struct" do
+      definition = %SkillKit.Agent.Definition{
+        name: "agent-opt-test",
+        description: "Test agent",
+        system_prompt: "You are helpful.",
+        path: "/tmp/test",
+        model: "test-model"
+      }
+
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      assert agent.name == "agent-opt-test"
+      SkillKit.stop_agent(agent)
+    end
+  end
+
   describe "send_message_sync/3" do
     test "blocks and returns {:ok, %AssistantMessage{}} for text response" do
       definition = %SkillKit.Agent.Definition{

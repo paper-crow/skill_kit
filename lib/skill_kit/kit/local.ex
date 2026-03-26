@@ -1,7 +1,16 @@
 defmodule SkillKit.Kit.Local do
   @moduledoc """
   Provider that loads kits from filesystem directories.
-  Each directory becomes a Kit containing skills and agent definitions.
+
+  A kit directory may contain:
+  - `AGENT.md` at root — agent identity (used when loaded via `agent:`)
+  - `skills/` — immediate subdirectories, each with a `SKILL.md`
+  - `agents/` — flat `.md` files defining delegatable sub-agents
+
+  ## Directory modes
+
+  - `dir: "path"` — loads a single kit from the directory
+  - `dir: "path/*"` — loads each immediate child of `path` as a separate kit
   """
 
   @behaviour SkillKit.Kit.Provider
@@ -14,19 +23,17 @@ defmodule SkillKit.Kit.Local do
 
   @impl true
   def load_kits(config) do
-    case Keyword.fetch(config, :dir) do
-      {:ok, dir} -> load_single_dir(dir)
-      :error -> load_multiple_dirs(config)
+    dir = Keyword.fetch!(config, :dir)
+
+    if wildcard?(dir) do
+      load_wildcard(String.trim_trailing(dir, "/*"))
+    else
+      load_single(dir)
     end
   end
 
   @impl true
-  def list_kits(config) do
-    case Keyword.fetch(config, :dir) do
-      {:ok, dir} -> list_from_dir(dir)
-      :error -> list_from_dirs(config)
-    end
-  end
+  def list_kits(config), do: load_kits(config)
 
   @impl true
   def get_kit(config, name) do
@@ -36,77 +43,64 @@ defmodule SkillKit.Kit.Local do
     end
   end
 
-  defp list_from_dir(dir) do
-    if File.dir?(dir) do
-      load_root_and_subdirs(dir)
-    else
-      {:ok, []}
-    end
-  end
+  # -------------------------------------------------------------------
+  # Wildcard expansion
+  # -------------------------------------------------------------------
 
-  defp load_root_and_subdirs(dir) do
-    case File.ls(dir) do
+  defp wildcard?(dir), do: String.ends_with?(dir, "/*")
+
+  defp load_wildcard(parent_dir) do
+    case File.ls(parent_dir) do
       {:ok, entries} ->
-        root_kit = load_kit(dir)
-
-        subdir_kits =
+        kits =
           entries
-          |> Enum.map(&Path.join(dir, &1))
+          |> Enum.reject(&hidden?/1)
+          |> Enum.map(&Path.join(parent_dir, &1))
           |> Enum.filter(&File.dir?/1)
-          |> Enum.map(&load_kit/1)
+          |> Enum.flat_map(&load_wildcard_child/1)
 
-        {:ok, [root_kit | subdir_kits]}
+        {:ok, kits}
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, :enoent} ->
+        {:ok, []}
     end
   end
 
-  defp list_from_dirs(config) do
-    dirs = Keyword.get(config, :dirs, [])
-
-    kits =
-      dirs
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.flat_map(fn dir ->
-        case load_single_dir(dir) do
-          {:ok, [kit]} -> [kit]
-          _ -> []
-        end
-      end)
-
-    {:ok, kits}
-  end
-
-  defp find_kit_by_name(kits, name) do
-    case Enum.find(kits, &(&1.name == name)) do
-      nil -> {:error, :not_found}
-      kit -> {:ok, kit}
-    end
-  end
-
-  defp load_single_dir(dir) do
-    if File.dir?(dir) do
-      {:ok, [load_kit(dir)]}
+  defp load_wildcard_child(dir) do
+    if valid_kit?(dir) do
+      [load_kit(dir)]
     else
-      {:ok, []}
+      Logger.warning(
+        "SkillKit: skipping '#{Path.basename(dir)}' — no AGENT.md, skills/, or agents/ found"
+      )
+
+      []
     end
   end
 
-  defp load_multiple_dirs(config) do
-    dirs = Keyword.fetch!(config, :dirs)
+  defp hidden?(name), do: String.starts_with?(name, ".")
 
-    kits =
-      dirs
-      |> Enum.filter(&File.dir?/1)
-      |> Enum.map(&load_kit/1)
+  # -------------------------------------------------------------------
+  # Single kit loading
+  # -------------------------------------------------------------------
 
-    {:ok, kits}
+  defp load_single(dir) do
+    cond do
+      not File.dir?(dir) -> {:ok, []}
+      valid_kit?(dir) -> {:ok, [load_kit(dir)]}
+      true -> {:error, :invalid_kit}
+    end
+  end
+
+  defp valid_kit?(dir) do
+    File.exists?(Path.join(dir, "AGENT.md")) or
+      File.dir?(Path.join(dir, "skills")) or
+      File.dir?(Path.join(dir, "agents"))
   end
 
   defp load_kit(dir) do
-    {skills, skill_errors} = load_skills_from(dir)
-    {agents, agent_errors} = load_agents_from(dir)
+    {skills, skill_errors} = load_skills(dir)
+    {agents, agent_errors} = load_agents(dir)
     {root_agent, root_errors} = load_root_agent(dir)
     errors = skill_errors ++ agent_errors ++ root_errors
 
@@ -124,56 +118,95 @@ defmodule SkillKit.Kit.Local do
     %Kit{name: Path.basename(dir), skills: skills, agents: agents, root_agent: root_agent}
   end
 
-  defp load_skills_from(dir) do
-    dir
-    |> Path.join("**/*.skill.md")
-    |> Path.wildcard()
-    |> Enum.reduce({[], []}, fn file, {skills, errors} ->
-      case Parser.load_file(file) do
-        {:ok, skill} -> {[skill | skills], errors}
-        {:error, reason} -> {skills, [{Path.basename(file), reason} | errors]}
-      end
-    end)
-  end
+  # -------------------------------------------------------------------
+  # Skills: skills/*/SKILL.md (no recursion)
+  # -------------------------------------------------------------------
 
-  defp load_root_agent(dir) do
-    root_path = Path.join(dir, "AGENT.md")
+  defp load_skills(dir) do
+    skills_dir = Path.join(dir, "skills")
 
-    if File.exists?(root_path) do
-      parse_root_agent(root_path)
+    if File.dir?(skills_dir) do
+      load_skill_dirs(skills_dir)
     else
-      {nil, []}
+      {[], []}
     end
   end
 
-  defp parse_root_agent(path) do
-    case Definition.parse(path) do
-      {:ok, agent} -> {agent, []}
-      {:error, reason} -> {nil, [{"AGENT.md", reason}]}
+  defp load_skill_dirs(skills_dir) do
+    case File.ls(skills_dir) do
+      {:ok, entries} ->
+        entries
+        |> Enum.map(&Path.join(skills_dir, &1))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.reduce({[], []}, &load_skill_dir/2)
+
+      {:error, _} ->
+        {[], []}
     end
   end
 
-  defp load_agents_from(dir) do
-    dir
-    |> discover_agent_files()
-    |> Enum.reduce({[], []}, &load_agent_file/2)
+  defp load_skill_dir(skill_dir, {skills, errors}) do
+    skill_md = Path.join(skill_dir, "SKILL.md")
+
+    if File.exists?(skill_md) do
+      case Parser.load_file(skill_md) do
+        {:ok, skill} -> {[skill | skills], errors}
+        {:error, reason} -> {skills, [{Path.basename(skill_dir), reason} | errors]}
+      end
+    else
+      {skills, errors}
+    end
   end
 
-  defp discover_agent_files(dir) do
-    dir
-    |> Path.join("**/AGENT.md")
-    |> Path.wildcard()
-    |> Enum.reject(&root_agent_path?(dir, &1))
-  end
+  # -------------------------------------------------------------------
+  # Agents: agents/*.md (flat, no recursion)
+  # -------------------------------------------------------------------
 
-  defp root_agent_path?(dir, path) do
-    Path.dirname(path) == dir
+  defp load_agents(dir) do
+    agents_dir = Path.join(dir, "agents")
+
+    if File.dir?(agents_dir) do
+      agents_dir
+      |> Path.join("*.md")
+      |> Path.wildcard()
+      |> Enum.reduce({[], []}, &load_agent_file/2)
+    else
+      {[], []}
+    end
   end
 
   defp load_agent_file(file, {agents, errors}) do
     case Definition.parse(file) do
       {:ok, agent} -> {[agent | agents], errors}
-      {:error, reason} -> {agents, [{Path.basename(Path.dirname(file)), reason} | errors]}
+      {:error, reason} -> {agents, [{Path.basename(file), reason} | errors]}
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Root agent: AGENT.md at kit root
+  # -------------------------------------------------------------------
+
+  defp load_root_agent(dir) do
+    root_path = Path.join(dir, "AGENT.md")
+
+    if File.exists?(root_path) do
+      case Definition.parse(root_path) do
+        {:ok, agent} -> {agent, []}
+        {:error, reason} -> {nil, [{"AGENT.md", reason}]}
+      end
+    else
+      {nil, []}
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Helpers
+  # -------------------------------------------------------------------
+
+  defp find_kit_by_name(kits, name) do
+    case Enum.find(kits, &(&1.name == name)) do
+      nil -> {:error, :not_found}
+      kit -> {:ok, kit}
     end
   end
 end

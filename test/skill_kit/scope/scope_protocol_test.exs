@@ -52,14 +52,4 @@ defmodule SkillKit.Scope.ProtocolTest do
       assert {:ok, "memory_kit:user_memory"} = Scope.resolve(scope, "SKILL_AWARE", context)
     end
   end
-
-  describe "List implementation (backwards compatibility)" do
-    test "permissions returns the list as-is" do
-      assert Scope.permissions(["admin:read", "admin:write"]) == ["admin:read", "admin:write"]
-    end
-
-    test "resolve always returns :error" do
-      assert :error = Scope.resolve(["admin:read"], "USERNAME", %{agent: "a", skill: "s"})
-    end
-  end
 end

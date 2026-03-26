@@ -5,117 +5,123 @@ defmodule SkillKit.Kit.LocalTest do
 
   alias SkillKit.Kit.Local
 
-  @valid_fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "valid"])
-  @invalid_fixtures_path Path.join([
-                           __DIR__,
-                           "..",
-                           "..",
-                           "support",
-                           "fixtures",
-                           "skills",
-                           "invalid"
-                         ])
-  @nested_fixtures_path Path.join([
-                          __DIR__,
-                          "..",
-                          "..",
-                          "support",
-                          "fixtures",
-                          "skills",
-                          "nested"
-                        ])
-  @fixtures_root Path.join([__DIR__, "..", "..", "support", "fixtures", "skills"])
-  @root_agent_fixtures_path Path.join([
-                              __DIR__,
-                              "..",
-                              "..",
-                              "support",
-                              "fixtures",
-                              "skills",
-                              "with_root_agent"
-                            ])
+  @valid_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "valid"])
+  @invalid_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "invalid"])
+  @nested_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "nested"])
+  @root_agent_kit Path.join([
+                    __DIR__,
+                    "..",
+                    "..",
+                    "support",
+                    "fixtures",
+                    "skills",
+                    "with_root_agent"
+                  ])
+  @wildcard_dir Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "wildcard"])
 
-  describe "load_kits/1" do
-    test "loads valid .skill.md files from directories" do
-      assert {:ok, kits} = Local.load_kits(dirs: [@valid_fixtures_path])
-      skills = Enum.flat_map(kits, & &1.skills)
-      skill_names = Enum.map(skills, & &1.name)
+  describe "load_kits/1 with dir: (single kit)" do
+    test "loads skills from skills/*/SKILL.md directories" do
+      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
+      skill_names = Enum.map(kit.skills, & &1.name)
 
       assert "files:summarize" in skill_names
       assert "tools:greet" in skill_names
     end
 
-    test "recursively discovers .skill.md files in subdirectories" do
-      assert {:ok, kits} = Local.load_kits(dirs: [@nested_fixtures_path])
-      skills = Enum.flat_map(kits, & &1.skills)
-      skill_names = Enum.map(skills, & &1.name)
+    test "does not recurse into skill subdirectories" do
+      assert {:ok, [kit]} = Local.load_kits(dir: @nested_kit)
+      skill_names = Enum.map(kit.skills, & &1.name)
 
       assert "admin:delete-user" in skill_names
+      assert length(kit.skills) == 1
     end
 
-    test "skips malformed files with warning and returns valid ones" do
+    test "detects root AGENT.md as root_agent" do
+      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
+      assert kit.root_agent != nil
+      assert kit.root_agent.name == "root-agent"
+    end
+
+    test "loads agents from agents/*.md" do
+      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
+      agent_names = Enum.map(kit.agents, & &1.name)
+
+      assert "helper" in agent_names
+      refute "root-agent" in agent_names
+    end
+
+    test "skips non-skill subdirectories inside skills/ silently" do
+      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
+      assert length(kit.skills) == 3
+    end
+
+    test "skips malformed skill files with warning" do
       log =
         capture_log([level: :warning], fn ->
-          assert {:ok, kits} = Local.load_kits(dirs: [@invalid_fixtures_path])
-          assert is_list(kits)
+          assert {:ok, [kit]} = Local.load_kits(dir: @invalid_kit)
+          assert is_list(kit.skills)
         end)
 
       assert log =~ "SkillKit"
       assert log =~ "skipped"
     end
 
-    test "ignores files without .skill.md extension" do
-      assert {:ok, kits} = Local.load_kits(dirs: [@fixtures_root])
-      skills = Enum.flat_map(kits, & &1.skills)
-      skill_names = Enum.map(skills, & &1.name)
-
-      refute "should:ignore" in skill_names
-    end
-
-    test "returns {:ok, []} for empty dirs list" do
-      assert {:ok, []} = Local.load_kits(dirs: [])
-    end
-
-    test "returns {:ok, []} for nonexistent directory" do
-      assert {:ok, kits} = Local.load_kits(dirs: ["/nonexistent/path"])
-      assert kits == []
-    end
-  end
-
-  describe "load_kits/1 with dir: (singular)" do
-    test "loads skills and agents from a single directory" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_fixtures_path)
-      skill_names = Enum.map(kit.skills, & &1.name)
-      assert Enum.any?(skill_names, &String.contains?(&1, "test"))
-    end
-
-    test "detects root AGENT.md as root_agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_fixtures_path)
-      assert kit.root_agent != nil
-      assert kit.root_agent.name == "root-agent"
-    end
-
-    test "nested agents go into agents list, not root_agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_fixtures_path)
-      agent_names = Enum.map(kit.agents, & &1.name)
-      assert "helper" in agent_names
-      assert "deep-nested" in agent_names
-      refute "root-agent" in agent_names
-    end
-
-    test "skills are loaded alongside root agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_fixtures_path)
-      skill_names = Enum.map(kit.skills, & &1.name)
-      assert Enum.any?(skill_names, &String.contains?(&1, "test"))
-    end
-
     test "kit with no root AGENT.md has nil root_agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @valid_fixtures_path)
+      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
       assert is_nil(kit.root_agent)
     end
 
     test "returns {:ok, []} for nonexistent directory" do
       assert {:ok, []} = Local.load_kits(dir: "/nonexistent/path")
+    end
+
+    test "returns error for explicit dir that is not a valid kit" do
+      empty_dir =
+        Path.join(System.tmp_dir!(), "empty_kit_test_#{:erlang.unique_integer([:positive])}")
+
+      File.mkdir_p!(empty_dir)
+      on_exit(fn -> File.rm_rf!(empty_dir) end)
+
+      assert {:error, :invalid_kit} = Local.load_kits(dir: empty_dir)
+    end
+  end
+
+  describe "load_kits/1 with dir: wildcard" do
+    test "loads each immediate child as a separate kit" do
+      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+      kit_names = Enum.map(kits, & &1.name)
+
+      assert "kit-a" in kit_names
+      assert "kit-b" in kit_names
+    end
+
+    test "skips hidden directories silently" do
+      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+      kit_names = Enum.map(kits, & &1.name)
+
+      refute ".hidden-kit" in kit_names
+    end
+
+    test "warns and skips non-kit directories" do
+      log =
+        capture_log([level: :warning], fn ->
+          assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+          kit_names = Enum.map(kits, & &1.name)
+
+          refute "not-a-kit" in kit_names
+        end)
+
+      assert log =~ "not-a-kit"
+    end
+
+    test "each kit has its own skills" do
+      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+
+      kit_a = Enum.find(kits, &(&1.name == "kit-a"))
+      kit_b = Enum.find(kits, &(&1.name == "kit-b"))
+
+      assert Enum.any?(kit_a.skills, &(&1.name == "kit-a:alpha"))
+      assert Enum.any?(kit_b.skills, &(&1.name == "kit-b:beta"))
     end
   end
 end

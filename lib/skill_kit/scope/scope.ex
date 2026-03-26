@@ -42,10 +42,3 @@ defprotocol SkillKit.Scope do
   @spec resolve(t(), String.t(), resolve_context()) :: {:ok, String.t()} | :error
   def resolve(scope, variable_name, context)
 end
-
-defimpl SkillKit.Scope, for: List do
-  @moduledoc "Lists are treated as a flat list of permission strings (legacy format)."
-
-  def permissions(scope), do: scope
-  def resolve(_scope, _variable, _context), do: :error
-end
