@@ -788,7 +788,7 @@ defmodule SkillKit.CatalogNew do
   require Logger
 
   alias SkillKit.Authorization
-  alias SkillKit.Tool.Definition
+  alias SkillKit.Tool
   alias SkillKit.Scope
 
   defstruct [:providers, :scope, routing_index: %{}]
@@ -1055,7 +1055,7 @@ defmodule SkillKit.CatalogNew do
     skill_names = Enum.map(skills, & &1.name)
     description = build_activate_description(skill_names, skills)
 
-    %ToolDefinition{
+    %Tool{
       name: "activate_skill",
       description: description,
       input_schema: %{
@@ -1101,7 +1101,7 @@ defmodule SkillKit.CatalogNew do
 
   defp build_agent_tools(agents) do
     Enum.map(agents, fn agent ->
-      %ToolDefinition{
+      %Tool{
         name: agent.name,
         description: "Delegate to agent: #{agent.description}",
         input_schema: %{
@@ -1129,7 +1129,7 @@ defmodule SkillKit.CatalogNew do
 
   defp builtin_tools do
     [
-      %ToolDefinition{
+      %Tool{
         name: "report_status",
         description: "Report progress on your delegated task",
         input_schema: %{
@@ -1140,7 +1140,7 @@ defmodule SkillKit.CatalogNew do
           "required" => ["status"]
         }
       },
-      %ToolDefinition{
+      %Tool{
         name: "report_result",
         description: "Report the final result of your delegated task",
         input_schema: %{

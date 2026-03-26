@@ -128,7 +128,7 @@ defmodule MyApp.FilesKit do
   use SkillKit.Kit
 
   @impl SkillKit.Tool
-  def execute(%SkillKit.Pipeline{} = execution) do
+  def execute(%SkillKit.ToolExecution{} = execution) do
     # handle skill execution
   end
 end

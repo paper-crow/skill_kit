@@ -38,7 +38,7 @@ New fields: `:handler`, `:hooks`.
 
 > **CHANGED from v1:** The handler field is only set at runtime registration, never parsed from YAML frontmatter. This preserves the `atoms: false` YAML security policy — no string-to-atom conversion from untrusted skill files. The Loader does not parse `handler` from frontmatter.
 
-> **CHANGED from v1:** `Skill.execute/3` is removed entirely. The orchestrator (`SkillKit.Tool.Runner.run/4`) is the sole public entry point for execution. This prevents bypassing hooks via a convenience wrapper on the struct.
+> **CHANGED from v1:** `Skill.execute/3` is removed entirely. The orchestrator (`SkillKit.ToolExecution.start/4`) is the sole public entry point for execution. This prevents bypassing hooks via a convenience wrapper on the struct.
 
 ### Rendering (preprocessing — separate from execution)
 
@@ -203,7 +203,7 @@ Walks the step list sequentially:
 - **Suspension at any point** — pre-hooks, handler, and post-hooks can all return `{:pending, state}`
 - **Named steps** — like `Ecto.Multi`, each step has a name for lookup and debugging
 
-> **Convenience:** `SkillKit.Tool.Runner.run/4` remains as a shortcut that builds and runs the pipeline in one call, for callers that don't need pipeline inspection or suspension support.
+> **Convenience:** `SkillKit.ToolExecution.start/4` remains as a shortcut that builds and runs the pipeline in one call, for callers that don't need pipeline inspection or suspension support.
 
 ### Hook Struct
 
@@ -364,7 +364,7 @@ Authorization filtering happens at tier 1 — filtered skills are hidden entirel
 - `SkillKit.Tool` — callback contract for handlers (`execute/2`, `resume/3`)
 - `SkillKit.Tools.Shell` — default shell handler via `System.cmd/3`
 - `SkillKit.Execution` — named pipeline struct (steps, results, status, suspension point) inspired by `Ecto.Multi`
-- `SkillKit.Tool.Runner` — builds and runs `%Execution{}` pipelines; convenience `run/4` shortcut
+- `SkillKit.ToolExecution` — builds and runs `%Execution{}` pipelines; convenience `run/4` shortcut
 - `SkillKit.Hook` — hook struct with phase, matcher, and handler
 
 ## Summary of Changes from v1
@@ -386,7 +386,7 @@ Authorization filtering happens at tier 1 — filtered skills are hidden entirel
 | 13 | `Handler.resume/5` on orchestrator | Resumes pending execution through the hook pipeline; post-hooks run after approval completes |
 | 14 | Orchestrator is now `%Execution{}` pipeline (Ecto.Multi pattern) | Named steps, accumulated results, suspend/resume at any point, full audit trail |
 | 15 | Pre-hooks and post-hooks can return `{:pending, state}` | Any step in the pipeline can suspend, not just the handler |
-| 16 | Renamed Pipeline → Execution | It's what it is — an execution with steps, not an abstract pipeline |
+| 16 | Renamed Pipeline → ToolExecution | It's what it is — an execution with steps, not an abstract pipeline |
 | 17 | `SkillKit.Catalog` as public API over Registry | Aligns with Agent Skills terminology; Registry becomes internal storage |
 | 18 | Authorization moves into Catalog | Filtering happens at discovery (tier 1) — filtered skills never appear |
 | 19 | `Catalog.activate/4` introduces activation as a named concept | Maps to Agent Skills tier 2; render/2 lives here |

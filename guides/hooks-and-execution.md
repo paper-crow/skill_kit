@@ -7,13 +7,13 @@ human-in-the-loop approval flows.
 
 ## Overview
 
-When `SkillKit.Tool.Runner.run/3,4` is called, it collects all hooks from every
-registered skill, builds a `Pipeline` with hooks filtered to those
+When `SkillKit.ToolExecution.start/3,4` is called, it collects all hooks from every
+registered skill, builds a `ToolExecution` with hooks filtered to those
 matching the tool (ordered as pre-steps, the execute step, and post-steps),
 and walks it sequentially, recording each step's result by name.
 
-A step that returns `{:pending, state}` suspends the pipeline. The caller
-holds the execution struct and resumes it later with `Tool.Runner.resume/2`.
+A step that returns `{:pending, state}` suspends the execution. The caller
+holds the execution struct and resumes it later with `ToolExecution.resume/2`.
 
 ## Hook Struct
 
@@ -42,13 +42,13 @@ A pre-hook may return:
 
 ### Construction
 
-`SkillKit.Tool.Runner.run/3,4` builds the pipeline struct directly. It collects
+`SkillKit.ToolExecution.start/3,4` builds the execution struct directly. It collects
 hooks from the registry, filters them by tool name, builds the step list,
-and constructs a `%Pipeline{}`:
+and constructs a `%ToolExecution{}`:
 
 ```elixir
-# Tool.Runner.run/4 does this internally:
-%Pipeline{
+# ToolExecution.start/4 does this internally:
+%ToolExecution{
   skill: skill,
   input: input,
   context: context,
@@ -79,7 +79,7 @@ Results accumulate in `execution.results`, a map keyed by step name.
 ### Running
 
 ```elixir
-case Pipeline.run(execution) do
+case ToolExecution.execute(execution) do
   {:ok, exec}      -> exec.results["execute"]   # success
   {:error, exec}   -> exec.results             # inspect failures
   {:pending, exec} -> exec                      # hold for resumption
@@ -92,20 +92,20 @@ Every tool and hook ultimately returns one of three tagged tuples:
 
 - `{:ok, result}` — the step completed; execution continues.
 - `{:error, reason}` — the step failed; the pipeline halts with `:failed`.
-- `{:pending, state}` — the step needs a decision; the pipeline suspends
+- `{:pending, state}` — the step needs a decision; the execution suspends
   with `:suspended`, recording `state` in `execution.suspended_state`.
 
 ## Suspension and Resumption
 
-When a step returns `{:pending, state}`, `Pipeline.run/1` returns
-`{:pending, execution}` immediately. The pipeline does not advance further.
+When a step returns `{:pending, state}`, `ToolExecution.execute/1` returns
+`{:pending, execution}` immediately. The execution does not advance further.
 
-To continue, call `Tool.Runner.resume/2` (or `Pipeline.resume/2` directly):
+To continue, call `ToolExecution.resume/2`:
 
 ```elixir
-{:pending, exec} = Tool.Runner.run(catalog, skill, input, context)
+{:pending, exec} = ToolExecution.start(catalog, skill, input, context)
 
-case Tool.Runner.resume(exec, :approved) do
+case ToolExecution.resume(exec, :approved) do
   {:ok, exec}      -> :done
   {:error, exec}   -> :denied_or_failed
   {:pending, exec} -> :another_approval_needed
@@ -121,14 +121,14 @@ for execute steps, or re-invoking the hook function for hook steps. The
 Custom tools implement `SkillKit.Tool`:
 
 ```elixir
-@callback execute(execution :: SkillKit.Pipeline.t()) ::
+@callback execute(execution :: SkillKit.ToolExecution.t()) ::
             {:ok, any()} | {:error, any()} | {:pending, any()}
 
-@callback resume(execution :: SkillKit.Pipeline.t(), state :: any(),
+@callback resume(execution :: SkillKit.ToolExecution.t(), state :: any(),
                  decision :: :approved | {:denied, any()}) ::
             {:ok, any()} | {:error, any()} | {:pending, any()}
 
-@callback definition() :: SkillKit.Tool.Definition.t()
+@callback definition() :: SkillKit.Tool.t()
 ```
 
 `execute/1` receives the full execution struct. `resume/3` receives the same
@@ -141,10 +141,10 @@ struct, the `state` saved at suspension, and the caller's decision.
 defmodule MyApp.Tools.Sandbox do
   @behaviour SkillKit.Tool
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
   @impl true
-  def execute(%Pipeline{input: %{"command" => command}} = exec) do
+  def execute(%ToolExecution{input: %{"command" => command}} = exec) do
     case MyApp.Sandbox.check_policy(command) do
       :allow   -> {:ok, MyApp.Sandbox.run(command)}
       :needs_approval -> {:pending, %{command: command}}
@@ -153,7 +153,7 @@ defmodule MyApp.Tools.Sandbox do
   end
 
   @impl true
-  def resume(%Pipeline{} = exec, %{command: command}, :approved) do
+  def resume(%ToolExecution{} = exec, %{command: command}, :approved) do
     {:ok, MyApp.Sandbox.run(command)}
   end
 
@@ -163,7 +163,7 @@ defmodule MyApp.Tools.Sandbox do
 
   @impl true
   def definition do
-    %SkillKit.Tool.Definition{
+    %SkillKit.Tool{
       name: "sandbox",
       description: "Run a command in the sandbox environment.",
       input_schema: %{
@@ -210,10 +210,10 @@ falling back to `SkillKit.Tools.Shell` if none is found.
 
 ## How Hooks Are Collected
 
-Hooks are defined on skills and gathered at run time. `SkillKit.Tool.Runner.run/4`
+Hooks are defined on skills and gathered at run time. `SkillKit.ToolExecution.start/4`
 calls `SkillKit.Catalog.hooks/1`, which flat-maps every skill's `:hooks` list
 across all loaded kits, then filters by tool name and builds the step list
-for the `%SkillKit.Pipeline{}` struct.
+for the `%SkillKit.ToolExecution{}` struct.
 
 The matcher regex is tested against only the last segment of the tool module
 name. A hook with `~r/Shell/` matches `SkillKit.Tools.Shell` but not

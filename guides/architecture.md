@@ -73,7 +73,7 @@ Providers implement two callbacks:
 - `get_kit/2` — return a single kit by name
 
 The Catalog unpacks kits into skills, agents, and hooks; filters skills by
-authorization scope; builds `ToolDefinition` structs for the LLM; and classifies
+authorization scope; builds `Tool` structs for the LLM; and classifies
 each incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,
 `:subagent`, or `{:module_skill, skill}`.
 
@@ -119,7 +119,7 @@ Server receives {:mailbox_flush, messages}
         └─ if tool calls present:
                │
                ├─ classify each call via Catalog.classify/3
-               ├─ execute local tools via Tool.Runner (authorized by Scope)
+               ├─ execute local tools via ToolExecution (authorized by Scope)
                ├─ collect results as %ToolResult{} structs
                └─ append results to message history, loop ↑
 ```

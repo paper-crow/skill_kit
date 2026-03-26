@@ -4,7 +4,7 @@
 
 **Goal:** Register `SkillKit.Tools.Shell` through the `skills:` mechanism like any other Backend/Kit, removing hardcoded Shell defaults from ToolBuilder and Handler.
 
-**Architecture:** `SkillKit.Tools.Shell` implements `Backend` (returning a kit with the bash tool and handler config in metadata). ToolBuilder discovers handler tools from kits instead of a hardcoded list. `Tool.Runner.run/3` receives the handler module explicitly instead of reading app config. Shell's cwd/env config flows through kit metadata to the pipeline context.
+**Architecture:** `SkillKit.Tools.Shell` implements `Backend` (returning a kit with the bash tool and handler config in metadata). ToolBuilder discovers handler tools from kits instead of a hardcoded list. `ToolExecution.start/3` receives the handler module explicitly instead of reading app config. Shell's cwd/env config flows through kit metadata to the pipeline context.
 
 **Tech Stack:** Elixir, SkillKit
 
@@ -17,7 +17,7 @@
 | Modify | `lib/skill_kit/shell.ex` | Add `@behaviour SkillKit.Backend`, implement `load_kits/1` |
 | Modify | `lib/skill_kit/agent/tool_builder.ex` | Remove hardcoded `:handlers` default, discover from kits |
 | Modify | `lib/skill_kit/handler/handler.ex` | `run/3` accepts handler module as parameter |
-| Modify | `lib/skill_kit/agent/server.ex` | Pass handler from kits to Tool.Runner.run, merge handler config into context |
+| Modify | `lib/skill_kit/agent/server.ex` | Pass handler from kits to ToolExecution.start, merge handler config into context |
 | Modify | `lib/skill_kit/agent/agent.ex` | Remove handler config default |
 | Modify | `lib/mix/tasks/skill_kit.chat.ex` | Add `{SkillKit.Tools.Shell, []}` to skills |
 | Modify | `lib/mix/tasks/skill_kit.demo.ex` | Add `{SkillKit.Tools.Shell, []}` to skills |
@@ -92,7 +92,7 @@ defmodule SkillKit.Tools.Shell do
 
   use SkillKit.Kit, name: "shell"
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
   # Override load_kits to merge caller config into kit metadata
   @impl SkillKit.Backend
@@ -103,7 +103,7 @@ defmodule SkillKit.Tools.Shell do
   end
 
   @impl SkillKit.Tool
-  def execute(%Pipeline{input: %{"command" => command}, context: context}) do
+  def execute(%ToolExecution{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =
@@ -117,7 +117,7 @@ defmodule SkillKit.Tools.Shell do
 
   @impl SkillKit.Tool
   def definition do
-    %SkillKit.Tool.Definition{
+    %SkillKit.Tool{
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
@@ -137,7 +137,7 @@ defmodule SkillKit.Tools.Shell do
   end
 
   @impl SkillKit.Tool
-  def resume(%Pipeline{} = exec, _state, :approved), do: execute(exec)
+  def resume(%ToolExecution{} = exec, _state, :approved), do: execute(exec)
   def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
   # --- Private ---
@@ -309,7 +309,7 @@ defp handler_modules_from_kits(kits) do
 end
 ```
 
-Also update the `classifier/2` — currently it checks if a tool name is NOT activate_skill, subagent, or builtin, and defaults to `:handler`. This still works since the handler routing in server.ex just calls `Tool.Runner.run`. No change needed to classifier.
+Also update the `classifier/2` — currently it checks if a tool name is NOT activate_skill, subagent, or builtin, and defaults to `:handler`. This still works since the handler routing in server.ex just calls `ToolExecution.start`. No change needed to classifier.
 
 - [ ] **Step 4: Update existing tests**
 
@@ -337,30 +337,30 @@ git commit -m "refactor(tool-builder): discover handler tools from kits instead 
 
 ---
 
-### Task 3: Tool.Runner.run receives handler explicitly
+### Task 3: ToolExecution.start receives handler explicitly
 
-`Tool.Runner.run/3` currently reads the handler from app config. Change it to accept the handler module as a parameter. The server is the one that knows which handler to use.
+`ToolExecution.start/3` currently reads the handler from app config. Change it to accept the handler module as a parameter. The server is the one that knows which handler to use.
 
 **Files:**
 - Modify: `lib/skill_kit/handler/handler.ex`
 - Modify: `lib/skill_kit/agent/server.ex`
 - Modify: `test/skill_kit/handler_test.exs`
 
-- [ ] **Step 1: Update Tool.Runner.run/3 to accept handler**
+- [ ] **Step 1: Update ToolExecution.start/3 to accept handler**
 
-Change `Tool.Runner.run/3` signature from `run(registry, input, context)` to `run(handler, registry, input, context)`:
+Change `ToolExecution.start/3` signature from `run(registry, input, context)` to `run(handler, registry, input, context)`:
 
 ```elixir
 def run(handler, registry, input, context) do
   hooks = collect_and_filter_hooks(registry, handler)
 
-  %Pipeline{
+  %ToolExecution{
     skill: nil,
     input: wrap_input(input),
     context: context,
     steps: build_steps(hooks, handler)
   }
-  |> Pipeline.run()
+  |> ToolExecution.execute()
 end
 ```
 
@@ -370,7 +370,7 @@ Keep `run/4` (skill-based) unchanged — it already gets the handler from `skill
 
 - [ ] **Step 2: Update server.ex to pass handler**
 
-In `lib/skill_kit/agent/server.ex`, the `execute_command/2` function calls `Tool.Runner.run(skill_registry, input, context)`. It needs to find the handler module from kits and pass it:
+In `lib/skill_kit/agent/server.ex`, the `execute_command/2` function calls `ToolExecution.start(skill_registry, input, context)`. It needs to find the handler module from kits and pass it:
 
 ```elixir
 defp execute_command(%ToolCall{id: id, input: input}, state) do
@@ -378,7 +378,7 @@ defp execute_command(%ToolCall{id: id, input: input}, state) do
   context = build_handler_context(state)
   skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-  case SkillKit.Tool.Runner.run(handler, skill_registry, input, context) do
+  case SkillKit.ToolExecution.start(handler, skill_registry, input, context) do
     # ... unchanged
   end
 end
@@ -412,7 +412,7 @@ Also update `execute_module_skill` which builds its own context — remove `cwd:
 
 - [ ] **Step 3: Update handler tests**
 
-Tests for `Tool.Runner.run` that don't pass a handler will break. Update them to pass `SkillKit.Tools.Shell` as the first arg.
+Tests for `ToolExecution.start` that don't pass a handler will break. Update them to pass `SkillKit.Tools.Shell` as the first arg.
 
 - [ ] **Step 4: Run tests**
 

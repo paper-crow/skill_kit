@@ -27,8 +27,8 @@ The tool reads optional `:cwd` and `:env` keys from the context map:
 - **`:env`** — list of `{name, value}` string tuples. Merged with `System.get_env()` (caller-supplied vars override existing ones) and passed to Port as `{:env, charlist_pairs}`. When absent, the process inherits the BEAM's environment.
 
 ```elixir
-Tool.Runner.run("run-tests | grep FAILED")
-Tool.Runner.run("timeout 30 build")
+ToolExecution.start("run-tests | grep FAILED")
+ToolExecution.start("timeout 30 build")
 ```
 
 ---
@@ -99,7 +99,7 @@ Uses `{:spawn_executable, path}` with explicit `args` rather than `{:spawn, comm
 ### LLM tool result
 
 ```elixir
-case Tool.Runner.run("run-tests") do
+case ToolExecution.start("run-tests") do
   {:ok, output}            -> send_tool_result(llm, output)
   {:error, {output, code}} -> send_tool_error(llm, code, output)
 end
@@ -114,7 +114,7 @@ defmodule Subagent.Skill do
   use GenServer
 
   def handle_info(:run, state) do
-    result = Tool.Runner.run(state.cmd)
+    result = ToolExecution.start(state.cmd)
     send(state.parent, {:subagent_result, self(), result})
     {:stop, :normal, state}
   end
@@ -142,11 +142,11 @@ This spec describes the innermost execution layer — the Port wrapper. In the S
 
 | Layer | Module | Role |
 |---|---|---|
-| **Pipeline** | `SkillKit.Execution` | Named step pipeline (pre-hooks → execute → post-hooks), suspension/resumption |
-| **Orchestrator** | `SkillKit.Tool.Runner` | Builds pipelines, collects hooks from registry, convenience `run/4` |
+| **ToolExecution** | `SkillKit.ToolExecution` | Named step execution (pre-hooks → execute → post-hooks), suspension/resumption |
+| **Orchestrator** | `SkillKit.ToolExecution` | Builds executions, collects hooks from registry, convenience `start/4` |
 | **Shell** | `SkillKit.Tools.Shell` | This spec — Port wrapper, cwd/env, output collection |
 
-`Tools.Shell` implements the `SkillKit.Tool` contract (`execute/1`, `resume/3`). It is never called directly by consumers — `SkillKit.Tool.Runner.run/4` is the public entry point.
+`Tools.Shell` implements the `SkillKit.Tool` contract (`execute/1`, `resume/3`). It is never called directly by consumers — `SkillKit.ToolExecution.start/4` is the public entry point.
 
 ---
 

@@ -224,7 +224,7 @@ command = Map.get(input, "command", "")
 context = %{cwd: state.definition.workspace, scope: state.scope}
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-case SkillKit.Tool.Runner.run(skill_registry, command, context) do
+case SkillKit.ToolExecution.start(skill_registry, command, context) do
 ```
 
 To:
@@ -234,7 +234,7 @@ To:
 context = %{cwd: state.definition.workspace, scope: state.scope}
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-case SkillKit.Tool.Runner.run(skill_registry, input, context) do
+case SkillKit.ToolExecution.start(skill_registry, input, context) do
 ```
 
 - [ ] **Step 2: Run the full test suite**
@@ -356,7 +356,7 @@ defmacro __using__(opts) do
 
     @impl SkillKit.Tool
     def definition do
-      %SkillKit.Tool.Definition{
+      %SkillKit.Tool{
         name: "kit",
         description: "Module-backed kit handler",
         input_schema: %{"type" => "object"}
@@ -480,7 +480,7 @@ Add `skill_to_tool/1` and `skill_short_name/1`:
 
 ```elixir
 defp skill_to_tool(skill) do
-  %ToolDefinition{
+  %Tool{
     name: skill_short_name(skill.name),
     description: skill.description,
     input_schema: %{"type" => "object"}

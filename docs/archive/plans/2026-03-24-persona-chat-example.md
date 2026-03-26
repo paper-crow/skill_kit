@@ -493,7 +493,7 @@ defp activate_skill_tool(skills) do
   skill_names = Enum.map(skills, & &1.name)
   skill_descriptions = Enum.map_join(skills, "\n", &"- #{&1.name}: #{&1.description}")
 
-  %ToolDefinition{
+  %Tool{
     name: "activate_skill",
     description:
       "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
@@ -622,7 +622,7 @@ test "executes command with environment variables from context" do
     env: [{"MY_VAR", "hello"}]
   }
 
-  pipeline = %Pipeline{
+  pipeline = %ToolExecution{
     input: %{"command" => "echo $MY_VAR"},
     context: context
   }

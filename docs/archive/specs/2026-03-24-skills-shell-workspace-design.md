@@ -81,7 +81,7 @@ The Shell handler gets cwd from the kit metadata that was set during `load_kits`
 
 ### How Shell handler receives cwd at execution time
 
-Looking at the current flow: when a bash command executes, `server.ex` calls `SkillKit.Tool.Runner.run(skill_registry, input, context)`. The handler module is looked up and `execute/1` is called with a Pipeline struct containing `context`.
+Looking at the current flow: when a bash command executes, `server.ex` calls `SkillKit.ToolExecution.start(skill_registry, input, context)`. The handler module is looked up and `execute/1` is called with a ToolExecution struct containing `context`.
 
 With the new design:
 1. `SkillKit.Tools.Shell.load_kits(cwd: ".", env: [...])` stores cwd/env in the Kit's metadata

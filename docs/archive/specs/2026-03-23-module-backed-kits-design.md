@@ -185,7 +185,7 @@ def build_tools(kits, opts \\ []) do
 end
 
 defp skill_to_tool(skill) do
-  %ToolDefinition{
+  %Tool{
     name: skill_short_name(skill.name),
     description: skill.description,
     input_schema: %{"type" => "object"}

@@ -172,6 +172,6 @@ SkillKit does not ship Ecto backends, schemas, or migrations. The host applicati
 | `SkillKit.Registry` | **Modified** — `skill_dirs` → `backends`, boot loading delegates to backends |
 | `SkillKit.Supervisor` | **Modified** — `skill_dirs` → `backends` passthrough |
 | `SkillKit.Catalog` | **Unchanged** |
-| `SkillKit.Tool.Runner` | **Unchanged** |
+| `SkillKit.ToolExecution` | **Unchanged** |
 | `SkillKit.Execution` | **Unchanged** |
 | Tests | **Modified** — update to use `backends:` config, test fixtures use Filesystem backend |

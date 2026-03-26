@@ -50,7 +50,7 @@ Shell.execute(command, context)
 To:
 ```elixir
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
-SkillKit.Tool.Runner.run(skill_registry, command, context)
+SkillKit.ToolExecution.start(skill_registry, command, context)
 ```
 
 The result mapping stays the same — `{:ok, output}` → ToolResult, `{:error, {output, code}}` → error ToolResult. The `{:pending, _}` case from the Execution pipeline is handled as an error for now (pending/approval flow is out of scope).

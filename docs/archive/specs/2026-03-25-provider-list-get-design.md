@@ -153,7 +153,7 @@ Catalog.hooks(catalog)
 
 # LLM integration (replaces ToolBuilder)
 Catalog.tool_definitions(catalog)
-# → [Tool.Definition.t()] — ready to send to the LLM
+# → [Tool.t()] — ready to send to the LLM
 
 Catalog.classify(catalog, tool_name)
 # → :skill | :handler | :agent | :builtin
