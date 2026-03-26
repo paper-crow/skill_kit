@@ -6,13 +6,10 @@ defmodule SkillKit.StartAgentTest do
 
   @fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "with_root_agent"])
 
-  describe "start_agent/1 with agent: option" do
-    test "starts agent from kit path" do
+  describe "start_agent/2 with kit provider" do
+    test "starts agent from kit provider tuple" do
       assert {:ok, agent} =
-               SkillKit.start_agent(
-                 agent: {Local, dir: @fixtures_path},
-                 caller: self()
-               )
+               SkillKit.start_agent({Local, dir: @fixtures_path}, caller: self())
 
       assert agent.name == "root-agent"
       SkillKit.stop_agent(agent)
@@ -21,7 +18,7 @@ defmodule SkillKit.StartAgentTest do
     test "accepts :name override" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 agent: {Local, dir: @fixtures_path},
+                 {Local, dir: @fixtures_path},
                  name: "custom-name",
                  caller: self()
                )
@@ -33,22 +30,8 @@ defmodule SkillKit.StartAgentTest do
     test "auto-includes agent kit's skills in tool pool" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 agent: {Local, dir: @fixtures_path},
+                 {Local, dir: @fixtures_path},
                  skills: [{Local, dir: @fixtures_path}],
-                 caller: self()
-               )
-
-      assert agent.name == "root-agent"
-      SkillKit.stop_agent(agent)
-    end
-
-    test "accepts a %Definition{} struct as agent:" do
-      {:ok, definition} =
-        Definition.parse(Path.join(@fixtures_path, "AGENT.md"))
-
-      assert {:ok, agent} =
-               SkillKit.start_agent(
-                 agent: definition,
                  caller: self()
                )
 
@@ -57,7 +40,17 @@ defmodule SkillKit.StartAgentTest do
     end
   end
 
-  describe "start_agent/2 with :name option" do
+  describe "start_agent/2 with %Definition{}" do
+    test "accepts a %Definition{} struct" do
+      {:ok, definition} =
+        Definition.parse(Path.join(@fixtures_path, "AGENT.md"))
+
+      assert {:ok, agent} = SkillKit.start_agent(definition, caller: self())
+
+      assert agent.name == "root-agent"
+      SkillKit.stop_agent(agent)
+    end
+
     test "overrides agent name" do
       {:ok, definition} =
         Definition.parse(Path.join(@fixtures_path, "AGENT.md"))

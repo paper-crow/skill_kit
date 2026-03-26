@@ -114,8 +114,8 @@ defmodule SkillKitTest do
     end
   end
 
-  describe "start_agent/1 with agent: option" do
-    test "accepts a %Definition{} struct as agent:" do
+  describe "start_agent/2 with agent as first argument" do
+    test "accepts a %Definition{} struct" do
       definition = %SkillKit.Agent.Definition{
         name: "agent-opt-test",
         description: "Test agent",
@@ -124,21 +124,10 @@ defmodule SkillKitTest do
         model: "test-model"
       }
 
-      {:ok, agent} =
-        SkillKit.start_agent(
-          agent: definition,
-          skills: [],
-          caller: self()
-        )
+      {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
       assert agent.name == "agent-opt-test"
       SkillKit.stop_agent(agent)
-    end
-
-    test "returns error when agent: is missing" do
-      assert_raise KeyError, ~r/key :agent not found/, fn ->
-        SkillKit.start_agent(skills: [])
-      end
     end
   end
 

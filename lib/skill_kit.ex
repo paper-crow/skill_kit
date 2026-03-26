@@ -7,8 +7,8 @@ defmodule SkillKit do
 
   ## Quick Start
 
-      {:ok, agent} = SkillKit.start_agent(definition,
-        skills: [{SkillKit.Kit.Local, dir: "skills"}],
+      {:ok, agent} = SkillKit.start_agent("agents/my-agent",
+        skills: ["skills"],
         caller: self()
       )
 
@@ -49,7 +49,15 @@ defmodule SkillKit do
   @type agent :: AgentRef.t()
 
   @doc """
-  Starts a new agent from the given definition.
+  Starts a new agent.
+
+  The first argument identifies the agent. It accepts:
+  - `%Definition{}` — a pre-built agent definition struct
+  - `"path"` — string path, resolved as `{Kit.Local, dir: "path"}`
+  - `{module, opts}` — a kit provider tuple
+
+  When the agent is loaded from a kit provider (string or tuple), the
+  kit's skills and sub-agents are automatically included in the tool pool.
 
   Returns `{:ok, agent_ref}` where `agent_ref` is an opaque reference
   used with `send_message/2` and `stop_agent/1`.
@@ -57,31 +65,33 @@ defmodule SkillKit do
   ## Options
 
     * `:caller` — the pid to receive streamed events (default: `self()`)
-    * `:skills` — list of `{module, config}` skill sources (default: `[]`)
+    * `:skills` — list of skill sources; accepts `{module, config}`, `"path"`, or bare `Module` (default: `[]`)
     * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
     * `:scope` — granted scopes for authorization (default: `nil`)
+    * `:name` — override the agent name (default: name from definition)
 
   """
-  @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(opts) when is_list(opts) do
-    definition = resolve_agent(Keyword.fetch!(opts, :agent))
+  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}) ::
+          {:ok, agent()} | {:error, term()}
+  def start_agent(agent) do
+    start_agent(agent, [])
+  end
+
+  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}, keyword()) ::
+          {:ok, agent()} | {:error, term()}
+  def start_agent(agent, opts) do
+    definition = resolve_agent(agent)
     skills = normalize_skills(Keyword.get(opts, :skills, []))
 
-    # If agent: is a provider (not a plain %Definition{}), add it to skills
+    # If agent is a provider (not a plain %Definition{}), add it to skills
     # so the agent kit's skills/sub-agents are auto-included in the tool pool
-    agent_provider = agent_as_provider(Keyword.fetch!(opts, :agent))
+    agent_provider = agent_as_provider(agent)
     all_skills = merge_agent_provider(agent_provider, skills)
 
-    start_agent(definition, Keyword.merge(opts, skills: all_skills))
+    do_start_agent(definition, Keyword.put(opts, :skills, all_skills))
   end
 
-  @spec start_agent(Agent.Definition.t()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(%Agent.Definition{} = definition) do
-    start_agent(definition, [])
-  end
-
-  @spec start_agent(Agent.Definition.t(), keyword()) :: {:ok, agent()} | {:error, term()}
-  def start_agent(%Agent.Definition{} = definition, opts) do
+  defp do_start_agent(%Agent.Definition{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
