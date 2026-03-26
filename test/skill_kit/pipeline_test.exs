@@ -11,7 +11,7 @@ defmodule SkillKit.PipelineTest do
       namespace: "test",
       description: "Test skill",
       body: "Do something",
-      handler: Keyword.get(opts, :handler, SkillKit.Shell),
+      tool: Keyword.get(opts, :tool, SkillKit.Tools.Shell),
       hooks: Keyword.get(opts, :hooks, [])
     }
   end
@@ -21,15 +21,15 @@ defmodule SkillKit.PipelineTest do
       skill: skill,
       input: input,
       context: %{},
-      steps: build_steps(hooks, skill.handler)
+      steps: build_steps(hooks, skill.tool)
     }
   end
 
-  defp build_steps(hooks, handler) do
+  defp build_steps(hooks, tool) do
     pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
     post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
 
-    pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+    pre_steps ++ [{:execute, "execute", tool}] ++ post_steps
   end
 
   defp index_steps(hooks, type, prefix) do
@@ -115,10 +115,10 @@ defmodule SkillKit.PipelineTest do
       assert {:error, %Pipeline{status: :failed}} = Pipeline.run(pipeline)
     end
 
-    test "handler {:pending, state} suspends execution" do
+    test "tool {:pending, state} suspends execution" do
       pipeline =
         build_pipeline(
-          skill(handler: SkillKit.PipelineTest.PendingHandler),
+          skill(tool: SkillKit.PipelineTest.PendingTool),
           %{"command" => "needs approval"}
         )
 
@@ -174,10 +174,10 @@ defmodule SkillKit.PipelineTest do
   end
 
   describe "resume/2" do
-    test "resumes suspended handler and completes" do
+    test "resumes suspended tool and completes" do
       pipeline =
         build_pipeline(
-          skill(handler: SkillKit.PipelineTest.PendingHandler),
+          skill(tool: SkillKit.PipelineTest.PendingTool),
           %{"command" => "needs approval"}
         )
 
@@ -189,10 +189,10 @@ defmodule SkillKit.PipelineTest do
       assert result.results["execute"] == {:ok, "approved result"}
     end
 
-    test "resumes denied handler and fails" do
+    test "resumes denied tool and fails" do
       pipeline =
         build_pipeline(
-          skill(handler: SkillKit.PipelineTest.PendingHandler),
+          skill(tool: SkillKit.PipelineTest.PendingTool),
           %{"command" => "needs approval"}
         )
 
@@ -205,8 +205,8 @@ defmodule SkillKit.PipelineTest do
 
   # Test helper modules
 
-  defmodule PendingHandler do
-    @behaviour SkillKit.Handler.Behaviour
+  defmodule PendingTool do
+    @behaviour SkillKit.Tool
 
     @impl true
     def execute(%SkillKit.Pipeline{}), do: {:pending, %{awaiting: :approval}}
@@ -216,8 +216,8 @@ defmodule SkillKit.PipelineTest do
     def resume(%SkillKit.Pipeline{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
     @impl true
-    def tool_definition do
-      %SkillKit.Handler.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
+    def definition do
+      %SkillKit.Tool.Definition{name: "pending", description: "test", input_schema: %{}}
     end
   end
 

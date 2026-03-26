@@ -1,7 +1,7 @@
-defmodule SkillKit.HandlerTest do
+defmodule SkillKit.Tool.RunnerTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Handler
+  alias SkillKit.Tool.Runner
   alias SkillKit.Hook
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
@@ -23,7 +23,7 @@ defmodule SkillKit.HandlerTest do
 
   describe "run/4" do
     test "executes a command and returns {:ok, %Pipeline{}}", %{catalog: catalog} do
-      assert {:ok, result} = Handler.run(catalog, skill(), "echo hello", %{})
+      assert {:ok, result} = Runner.run(catalog, skill(), "echo hello", %{})
       assert result.status == :complete
       assert result.results["execute"] == {:ok, "hello\n"}
     end
@@ -45,33 +45,33 @@ defmodule SkillKit.HandlerTest do
 
       Memory.put(provider, hook_skill)
 
-      assert {:error, result} = Handler.run(catalog, skill(), "echo hello", %{})
+      assert {:error, result} = Runner.run(catalog, skill(), "echo hello", %{})
       assert result.status == :failed
     end
 
     test "works with no hooks registered", %{catalog: catalog} do
-      assert {:ok, result} = Handler.run(catalog, skill(), "echo clean", %{})
+      assert {:ok, result} = Runner.run(catalog, skill(), "echo clean", %{})
       assert result.status == :complete
     end
 
     test "accepts a pre-formed input map", %{catalog: catalog} do
-      assert {:ok, result} = Handler.run(catalog, skill(), %{"command" => "echo hello"}, %{})
+      assert {:ok, result} = Runner.run(catalog, skill(), %{"command" => "echo hello"}, %{})
       assert result.results["execute"] == {:ok, "hello\n"}
     end
 
-    test "passes context with cwd through to Shell handler", %{catalog: catalog} do
+    test "passes context with cwd through to Shell tool", %{catalog: catalog} do
       tmp = System.tmp_dir!()
       # Resolve symlinks for macOS
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
       context = %{cwd: tmp}
-      assert {:ok, result} = Handler.run(catalog, skill(), "pwd", context)
+      assert {:ok, result} = Runner.run(catalog, skill(), "pwd", context)
       assert result.results["execute"] == {:ok, resolved_tmp <> "\n"}
     end
 
-    test "passes context with env through to Shell handler", %{catalog: catalog} do
+    test "passes context with env through to Shell tool", %{catalog: catalog} do
       context = %{env: [{"SKILL_KIT_INT_TEST", "integration"}]}
-      assert {:ok, result} = Handler.run(catalog, skill(), "echo $SKILL_KIT_INT_TEST", context)
+      assert {:ok, result} = Runner.run(catalog, skill(), "echo $SKILL_KIT_INT_TEST", context)
       assert result.results["execute"] == {:ok, "integration\n"}
     end
   end
@@ -83,17 +83,17 @@ defmodule SkillKit.HandlerTest do
         namespace: "test",
         description: "Pending skill",
         body: "Need approval",
-        handler: SkillKit.HandlerTest.PendingHandler
+        tool: SkillKit.Tool.RunnerTest.PendingTool
       }
 
-      {:pending, suspended} = Handler.run(catalog, pending_skill, "do thing", %{})
-      assert {:ok, result} = Handler.resume(suspended, :approved)
+      {:pending, suspended} = Runner.run(catalog, pending_skill, "do thing", %{})
+      assert {:ok, result} = Runner.resume(suspended, :approved)
       assert result.status == :complete
     end
   end
 
-  defmodule PendingHandler do
-    @behaviour SkillKit.Handler.Behaviour
+  defmodule PendingTool do
+    @behaviour SkillKit.Tool
     @impl true
     def execute(%SkillKit.Pipeline{}), do: {:pending, %{awaiting: :approval}}
     @impl true
@@ -101,8 +101,8 @@ defmodule SkillKit.HandlerTest do
     def resume(%SkillKit.Pipeline{}, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
     @impl true
-    def tool_definition do
-      %SkillKit.Handler.ToolDefinition{name: "pending", description: "test", input_schema: %{}}
+    def definition do
+      %SkillKit.Tool.Definition{name: "pending", description: "test", input_schema: %{}}
     end
   end
 end

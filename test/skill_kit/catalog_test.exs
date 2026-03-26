@@ -45,7 +45,7 @@ defmodule SkillKit.CatalogTest do
       name: name,
       description: Keyword.get(opts, :description, "#{name} skill"),
       body: Keyword.get(opts, :body, "do the thing"),
-      handler: Keyword.get(opts, :handler, SkillKit.Shell),
+      tool: Keyword.get(opts, :tool, SkillKit.Tools.Shell),
       required_scope: Keyword.get(opts, :required_scope, []),
       hooks: Keyword.get(opts, :hooks, []),
       metadata: Keyword.get(opts, :metadata, %{})
@@ -270,13 +270,13 @@ defmodule SkillKit.CatalogTest do
       assert agent_tool.input_schema["required"] == ["task"]
     end
 
-    test "includes handler tools from kit metadata" do
+    test "includes tool definitions from kit metadata" do
       {:ok, provider} = Memory.start_link([])
 
       kit = %Kit{
         name: "shell_kit",
         skills: [],
-        metadata: %{handler: SkillKit.Shell}
+        metadata: %{tool: SkillKit.Tools.Shell}
       }
 
       Memory.put_kit(provider, kit)
@@ -284,15 +284,15 @@ defmodule SkillKit.CatalogTest do
       catalog = start_catalog(provider)
       tools = Catalog.tool_definitions(catalog, [])
 
-      handler_tool = Enum.find(tools, &(&1.name == SkillKit.Shell.tool_definition().name))
-      assert handler_tool != nil
+      tool_def = Enum.find(tools, &(&1.name == SkillKit.Tools.Shell.definition().name))
+      assert tool_def != nil
     end
 
     test "includes activated skill tools" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
 
-      activated = [make_skill("ns:schedule", handler: SkillKit.Shell)]
+      activated = [make_skill("ns:schedule", tool: SkillKit.Tools.Shell)]
       tools = Catalog.tool_definitions(catalog, activated_skills: activated)
 
       skill_tool = Enum.find(tools, &(&1.name == "schedule"))
@@ -336,10 +336,10 @@ defmodule SkillKit.CatalogTest do
       assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
     end
 
-    test "classifies handler as default" do
+    test "classifies tool as default" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
-      assert Catalog.classify(catalog, "bash") == :handler
+      assert Catalog.classify(catalog, "bash") == :tool
     end
   end
 
