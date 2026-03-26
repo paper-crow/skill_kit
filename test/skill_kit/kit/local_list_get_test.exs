@@ -6,9 +6,12 @@ defmodule SkillKit.Kit.Local.ListGetTest do
   @fixtures_dir Path.expand("../../fixtures/local_list_get", __DIR__)
 
   setup do
-    File.mkdir_p!("#{@fixtures_dir}/my_kit")
+    # Create a kit with the new directory structure
+    kit_dir = Path.join(@fixtures_dir, "my_kit")
+    skill_dir = Path.join([kit_dir, "skills", "hello"])
+    File.mkdir_p!(skill_dir)
 
-    File.write!("#{@fixtures_dir}/my_kit/hello.skill.md", ~S"""
+    File.write!(Path.join(skill_dir, "SKILL.md"), """
     ---
     name: "my_kit:hello"
     description: "Hello skill"
@@ -17,16 +20,13 @@ defmodule SkillKit.Kit.Local.ListGetTest do
     """)
 
     on_exit(fn -> File.rm_rf!(@fixtures_dir) end)
-    %{dir: @fixtures_dir}
+    %{dir: @fixtures_dir, kit_dir: kit_dir}
   end
 
   describe "list_kits/1" do
-    test "returns kits from directory", %{dir: dir} do
-      assert {:ok, kits} = Local.list_kits(dir: dir)
-      assert kits != []
-
-      kit = Enum.find(kits, &(&1.name == "my_kit"))
-      assert kit != nil
+    test "returns kit from explicit directory", %{kit_dir: kit_dir} do
+      assert {:ok, [kit]} = Local.list_kits(dir: kit_dir)
+      assert kit.name == "my_kit"
       assert kit.skills != []
     end
 
@@ -36,8 +36,8 @@ defmodule SkillKit.Kit.Local.ListGetTest do
   end
 
   describe "get_kit/2" do
-    test "returns kit by name", %{dir: dir} do
-      assert {:ok, kit} = Local.get_kit([dir: dir], "my_kit")
+    test "returns kit by name", %{kit_dir: kit_dir} do
+      assert {:ok, kit} = Local.get_kit([dir: kit_dir], "my_kit")
       assert kit.name == "my_kit"
       assert kit.skills != []
     end
