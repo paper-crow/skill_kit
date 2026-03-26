@@ -35,9 +35,11 @@ defmodule SkillKit do
 
   ## Configuration
 
-      # Default LLM provider
       config :skill_kit, SkillKit.LLM,
-        {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
+        providers: [
+          anthropic: SkillKit.LLM.Anthropic
+        ],
+        default_provider: :anthropic
   """
 
   alias SkillKit.Agent
