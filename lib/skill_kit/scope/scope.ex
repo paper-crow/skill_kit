@@ -22,8 +22,10 @@ defprotocol SkillKit.Scope do
 
   Pass the scope at agent start:
 
-      SkillKit.start_agent(definition, scope: %MyApp.Scope{user: "alice"})
+      SkillKit.start_agent("agents/my-agent", scope: %MyApp.Scope{user: "alice"})
   """
+
+  @fallback_to_any true
 
   @type resolve_context :: %{agent: String.t(), skill: String.t()}
 
@@ -41,4 +43,22 @@ defprotocol SkillKit.Scope do
   """
   @spec resolve(t(), String.t(), resolve_context()) :: {:ok, String.t()} | :error
   def resolve(scope, variable_name, context)
+end
+
+defimpl SkillKit.Scope, for: Any do
+  @moduledoc false
+
+  def permissions(scope) do
+    raise Protocol.UndefinedError,
+      protocol: SkillKit.Scope,
+      value: scope,
+      description: "implement SkillKit.Scope for your scope struct"
+  end
+
+  def resolve(scope, _variable_name, _context) do
+    raise Protocol.UndefinedError,
+      protocol: SkillKit.Scope,
+      value: scope,
+      description: "implement SkillKit.Scope for your scope struct"
+  end
 end
