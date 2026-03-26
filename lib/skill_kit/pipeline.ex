@@ -4,7 +4,7 @@ defmodule SkillKit.Pipeline do
 
   A pipeline is a data structure holding a list of steps (pre-hooks, an execute
   step, and post-hooks), input, context, and accumulated results. It is built
-  by `SkillKit.Handler` and executed by `run/1`.
+  by `SkillKit.Tool.Runner` and executed by `run/1`.
 
   Steps are walked sequentially; results are recorded in a map keyed by step
   name. The pipeline can suspend at any step via `{:pending, state}` and be
@@ -20,7 +20,7 @@ defmodule SkillKit.Pipeline do
 
   ## Step naming
 
-  Steps are named by `SkillKit.Handler` during construction:
+  Steps are named by `SkillKit.Tool.Runner` during construction:
 
   - Pre-hooks: `"pre:0"`, `"pre:1"`, ...
   - Execute:   `"execute"`
@@ -161,13 +161,13 @@ defmodule SkillKit.Pipeline do
   end
 
   defp build_pre_context(%{skill: nil, steps: steps} = exec) do
-    {:execute, _, handler} = Enum.find(steps, &match?({:execute, _, _}, &1))
+    {:execute, _, tool} = Enum.find(steps, &match?({:execute, _, _}, &1))
 
     %{
       skill: nil,
       scope: Map.get(exec.context, :scope),
       input: exec.input,
-      handler: handler
+      tool: tool
     }
   end
 
@@ -176,7 +176,7 @@ defmodule SkillKit.Pipeline do
       skill: exec.skill,
       scope: Map.get(exec.context, :scope),
       input: exec.input,
-      handler: exec.skill.handler
+      tool: exec.skill.tool
     }
   end
 

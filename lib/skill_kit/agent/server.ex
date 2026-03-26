@@ -256,7 +256,7 @@ defmodule SkillKit.Agent.Server do
 
       {result, acc} =
         case SkillKit.Catalog.classify(catalog(acc), tc.name, acc.activated_skills) do
-          :handler -> {execute_command(tc, acc), acc}
+          :tool -> {execute_command(tc, acc), acc}
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
           :subagent -> spawn_subagent(tc, acc)
@@ -270,10 +270,10 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%ToolCall{id: id, input: input}, state) do
-    handler = find_handler(state)
-    context = build_handler_context(state)
+    tool = find_tool(state)
+    context = build_tool_context(state)
 
-    case SkillKit.Handler.run(handler, catalog(state), input, context) do
+    case SkillKit.Tool.Runner.run(tool, catalog(state), input, context) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,
@@ -292,23 +292,23 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp find_handler(state) do
-    case SkillKit.Catalog.handler_config(catalog(state)) do
-      nil -> SkillKit.Shell
-      {handler, _metadata} -> handler
+  defp find_tool(state) do
+    case SkillKit.Catalog.tool_config(catalog(state)) do
+      nil -> SkillKit.Tools.Shell
+      {tool, _metadata} -> tool
     end
   end
 
-  defp build_handler_context(state) do
+  defp build_tool_context(state) do
     base_context = %{scope: state.scope}
 
-    case SkillKit.Catalog.handler_config(catalog(state)) do
+    case SkillKit.Catalog.tool_config(catalog(state)) do
       nil -> base_context
-      {_handler, metadata} -> merge_handler_config(base_context, metadata)
+      {_tool, metadata} -> merge_tool_config(base_context, metadata)
     end
   end
 
-  defp merge_handler_config(context, metadata) do
+  defp merge_tool_config(context, metadata) do
     context
     |> maybe_put_cwd(metadata)
     |> maybe_put_env(metadata)
@@ -374,7 +374,7 @@ defmodule SkillKit.Agent.Server do
     already_activated = Enum.any?(state.activated_skills, &(&1.name == skill.name))
 
     state =
-      if skill.handler != SkillKit.Shell and not already_activated do
+      if skill.tool != SkillKit.Tools.Shell and not already_activated do
         %{state | activated_skills: [skill | state.activated_skills]}
       else
         state
@@ -392,7 +392,7 @@ defmodule SkillKit.Agent.Server do
 
     execution = %Pipeline{skill: skill, input: input, context: context}
 
-    case skill.handler.execute(execution) do
+    case skill.tool.execute(execution) do
       {:ok, result} ->
         %ToolResult{tool_call_id: id, content: to_string(result)}
 

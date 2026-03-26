@@ -28,7 +28,7 @@ defmodule SkillKit.Shell do
     {:ok, [%{kit | metadata: metadata}]}
   end
 
-  @impl SkillKit.Handler.Behaviour
+  @impl SkillKit.Tool
   def execute(%Pipeline{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
@@ -41,9 +41,9 @@ defmodule SkillKit.Shell do
     collect(port, [])
   end
 
-  @impl SkillKit.Handler.Behaviour
-  def tool_definition do
-    %SkillKit.Handler.ToolDefinition{
+  @impl SkillKit.Tool
+  def definition do
+    %SkillKit.Tool.Definition{
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
@@ -62,12 +62,12 @@ defmodule SkillKit.Shell do
     }
   end
 
-  @impl SkillKit.Handler.Behaviour
+  @impl SkillKit.Tool
   def resume(%Pipeline{} = exec, _state, :approved), do: execute(exec)
   def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
   defp config_to_metadata(config) do
-    %{handler: __MODULE__}
+    %{tool: __MODULE__}
     |> maybe_put(:cwd, Keyword.get(config, :cwd))
     |> maybe_put(:env, Keyword.get(config, :env))
   end

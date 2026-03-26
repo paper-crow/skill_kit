@@ -10,7 +10,7 @@ defmodule SkillKit.Kit do
 
   When a module does `use SkillKit.Kit`, it becomes both a
   `SkillKit.Kit.Provider` (can load skills from `skills/*/SKILL.md`) and a
-  `SkillKit.Handler.Behaviour` (can execute them).
+  `SkillKit.Tool` (can execute them).
 
   The kit name is inferred from the module's last segment, downcased and
   underscored. Override with `name: "custom_name"`.
@@ -21,7 +21,7 @@ defmodule SkillKit.Kit do
       Defaults to `skills/` relative to the module's source file.
     * `:name` — override the inferred kit name.
 
-  The macro generates default implementations for `tool_definition/0` and
+  The macro generates default implementations for `definition/0` and
   `resume/3` but does NOT generate `execute/1` — the using module must
   define that callback itself.
   """
@@ -52,7 +52,7 @@ defmodule SkillKit.Kit do
 
     quote do
       @behaviour SkillKit.Kit.Provider
-      @behaviour SkillKit.Handler.Behaviour
+      @behaviour SkillKit.Tool
 
       @kit_name unquote(kit_name)
       @skills_dir unquote(skills_dir)
@@ -82,27 +82,27 @@ defmodule SkillKit.Kit do
         end
       end
 
-      @impl SkillKit.Handler.Behaviour
+      @impl SkillKit.Tool
       def resume(_execution, _state, _decision) do
         {:error, :not_resumable}
       end
 
-      @impl SkillKit.Handler.Behaviour
-      def tool_definition do
-        %SkillKit.Handler.ToolDefinition{
+      @impl SkillKit.Tool
+      def definition do
+        %SkillKit.Tool.Definition{
           name: @kit_name,
-          description: "Kit handler for #{@kit_name}",
+          description: "Kit tool for #{@kit_name}",
           input_schema: %{}
         }
       end
 
-      defoverridable resume: 3, tool_definition: 0, load_kits: 1, list_kits: 1, get_kit: 2
+      defoverridable resume: 3, definition: 0, load_kits: 1, list_kits: 1, get_kit: 2
     end
   end
 
   @doc false
-  def do_load_kits(kit_name, skills_dir, handler_module, config) do
-    case load_skill_files(skills_dir, kit_name, handler_module, config) do
+  def do_load_kits(kit_name, skills_dir, tool_module, config) do
+    case load_skill_files(skills_dir, kit_name, tool_module, config) do
       {:ok, skills} ->
         kit = %__MODULE__{name: kit_name, skills: skills}
         {:ok, [kit]}
@@ -129,14 +129,14 @@ defmodule SkillKit.Kit do
     |> Macro.underscore()
   end
 
-  defp load_skill_files(dir, kit_name, handler_module, config) do
+  defp load_skill_files(dir, kit_name, tool_module, config) do
     case File.ls(dir) do
-      {:ok, entries} -> parse_skill_dirs(entries, dir, kit_name, handler_module, config)
+      {:ok, entries} -> parse_skill_dirs(entries, dir, kit_name, tool_module, config)
       {:error, :enoent} -> {:ok, []}
     end
   end
 
-  defp parse_skill_dirs(entries, dir, kit_name, handler_module, config) do
+  defp parse_skill_dirs(entries, dir, kit_name, tool_module, config) do
     entries
     |> Enum.sort()
     |> Enum.map(&Path.join(dir, &1))
@@ -144,7 +144,7 @@ defmodule SkillKit.Kit do
     |> Enum.reduce_while({:ok, []}, fn skill_dir, {:ok, acc} ->
       path = Path.join(skill_dir, "SKILL.md")
 
-      case parse_skill_file(path, kit_name, handler_module, config) do
+      case parse_skill_file(path, kit_name, tool_module, config) do
         {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -155,11 +155,11 @@ defmodule SkillKit.Kit do
     File.dir?(path) and File.exists?(Path.join(path, "SKILL.md"))
   end
 
-  defp parse_skill_file(path, kit_name, handler_module, config) do
+  defp parse_skill_file(path, kit_name, tool_module, config) do
     with {:ok, content} <- File.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
          {:ok, yaml_map} <- parse_yaml(frontmatter) do
-      build_kit_skill(yaml_map, body, path, kit_name, handler_module, config)
+      build_kit_skill(yaml_map, body, path, kit_name, tool_module, config)
     end
   end
 
@@ -184,7 +184,7 @@ defmodule SkillKit.Kit do
     YamlElixir.read_from_string(yaml_str, atoms: false)
   end
 
-  defp build_kit_skill(yaml_map, body, source_path, kit_name, handler_module, config) do
+  defp build_kit_skill(yaml_map, body, source_path, kit_name, tool_module, config) do
     with {:ok, bare_name} <- fetch_required_string(yaml_map, "name"),
          {:ok, description} <- fetch_required_string(yaml_map, "description") do
       qualified_name = "#{kit_name}:#{bare_name}"
@@ -198,7 +198,7 @@ defmodule SkillKit.Kit do
          description: description,
          body: body,
          location: source_path,
-         handler: handler_module,
+         tool: tool_module,
          metadata: merged_metadata
        }}
     end

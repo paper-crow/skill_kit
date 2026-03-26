@@ -29,13 +29,13 @@ defmodule SkillKit.Handler do
   collect lifecycle hooks for the pipeline.
   """
   def run(catalog, %Skill{} = skill, input, context) do
-    hooks = collect_and_filter_hooks(catalog, skill.handler)
+    hooks = collect_and_filter_hooks(catalog, skill.tool)
 
     %Pipeline{
       skill: skill,
       input: wrap_input(input),
       context: context,
-      steps: build_steps(hooks, skill.handler)
+      steps: build_steps(hooks, skill.tool)
     }
     |> Pipeline.run()
   end
