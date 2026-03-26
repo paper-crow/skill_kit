@@ -135,17 +135,6 @@ Scope-based access control restricts which skills a caller may discover and
 activate. Skills declare `required_scope` in their frontmatter; callers
 provide granted scopes via a struct implementing `SkillKit.Scope`.
 
-## Examples
-
-See the [Examples guide](guides/examples.md) for walkthroughs, directory
-structures, and `start_agent` usage patterns. Highlights:
-
-- **[Persona Chat](examples/persona_chat/README.md)** — full app exercising
-  agents, skills, subagents, scope-based auth, conversation persistence, and
-  dynamic context injection. Only two `.ex` files — everything else is markdown.
-- **Sample agents and skills** — ready-to-run agents (`neve`, `researcher`,
-  `fixer`) and reusable skills (`bash`, `memory`, `code_review`, `elixir_style`).
-
 ## Loading Kits
 
 `start_agent/2` takes an agent source as its first argument and a `skills:`
