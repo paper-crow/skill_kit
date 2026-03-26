@@ -176,11 +176,37 @@ defmodule MyApp.Handler.Sandbox do
 end
 ```
 
-Configure SkillKit to use it:
+To use a custom handler, create a kit module that `use SkillKit.Kit` and
+implements the handler callbacks. Skills loaded by that kit will automatically
+use it as their handler. Alternatively, register the handler via kit metadata:
 
 ```elixir
-config :skill_kit, handler: MyApp.Handler.Sandbox
+defmodule MyApp.SandboxKit do
+  use SkillKit.Kit, name: "sandbox"
+
+  @impl SkillKit.Handler.Behaviour
+  def execute(execution), do: MyApp.Handler.Sandbox.execute(execution)
+
+  @impl SkillKit.Handler.Behaviour
+  def resume(execution, state, decision), do: MyApp.Handler.Sandbox.resume(execution, state, decision)
+
+  @impl SkillKit.Handler.Behaviour
+  def tool_definition, do: MyApp.Handler.Sandbox.tool_definition()
+end
 ```
+
+Then include it in your agent's skills:
+
+```elixir
+SkillKit.start_agent("agents/my-agent",
+  skills: [MyApp.SandboxKit, "skills"]
+)
+```
+
+The Catalog discovers handlers by checking `kit.metadata.handler` — any kit
+with a `:handler` key in its metadata registers itself as a handler. The
+agent's Server uses `Catalog.handler_config/1` to find the active handler,
+falling back to `SkillKit.Shell` if none is found.
 
 ## How Hooks Are Collected
 
