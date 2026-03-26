@@ -60,19 +60,18 @@ becomes one kit; the kit name is the directory's basename.
 ### Directory structure
 
 ```
-skills/
-  files/                     ← becomes kit "files"
-    read.skill.md
-    write.skill.md
-    summarize/
-      AGENT.md               ← agent definition (optional)
-  tools/                     ← becomes kit "tools"
-    web_search.skill.md
+my_kit/                        ← becomes kit "my_kit"
+  AGENT.md                     ← root agent (optional)
+  skills/
+    read/SKILL.md              ← skill "read"
+    write/SKILL.md             ← skill "write"
+  agents/
+    summarize.md               ← sub-agent definition (optional)
 ```
 
 ### Skill file format
 
-Each `*.skill.md` file uses YAML frontmatter followed by the skill body:
+Each `SKILL.md` file uses YAML frontmatter followed by the skill body:
 
 ```markdown
 ---

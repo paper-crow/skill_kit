@@ -6,11 +6,12 @@ and template tokens available when writing skill files.
 
 For how skills are loaded and registered, see the [Providers](providers.md) guide.
 
-## The `.skill.md` file
+## The `SKILL.md` file
 
-Each skill is defined in a single `.skill.md` file (or a `SKILL.md` inside a
-skill directory, per the Agent Skills spec). The file combines YAML frontmatter
-with a markdown prompt body:
+Each skill is defined in a `SKILL.md` file inside a named directory, following
+the [Agent Skills](https://agentskills.io/specification) and
+[Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins)
+conventions. The file combines YAML frontmatter with a markdown prompt body:
 
 ```markdown
 ---
@@ -154,12 +155,9 @@ for the full model.
 
 ## Relationship to the Agent Skills standard
 
-SkillKit's `.skill.md` format is compatible with the
+SkillKit's skill format is compatible with the
 [Agent Skills specification](https://agentskills.io/specification). Key
 differences:
-
-- **Naming**: Agent Skills uses `SKILL.md` in a named directory. SkillKit also
-  supports `<name>.skill.md` flat files for simpler layouts.
 - **Authorization**: Agent Skills uses `allowed-tools`. SkillKit uses
   `required_scope` for scope-based access control.
 - **Template tokens**: `$ARGUMENTS`, `$N`, `$SKILL_DIR`, and `$SESSION_ID`

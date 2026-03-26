@@ -9,7 +9,7 @@ defmodule SkillKit.Kit do
   ## `use SkillKit.Kit`
 
   When a module does `use SkillKit.Kit`, it becomes both a
-  `SkillKit.Kit.Provider` (can load skills from `*.skill.md` files) and a
+  `SkillKit.Kit.Provider` (can load skills from `skills/*/SKILL.md`) and a
   `SkillKit.Handler.Behaviour` (can execute them).
 
   The kit name is inferred from the module's last segment, downcased and
@@ -17,7 +17,7 @@ defmodule SkillKit.Kit do
 
   Options:
 
-    * `:skills_dir` — directory containing `*.skill.md` files.
+    * `:skills_dir` — directory containing skill subdirectories (each with a `SKILL.md`).
       Defaults to `skills/` relative to the module's source file.
     * `:name` — override the inferred kit name.
 
@@ -130,17 +130,25 @@ defmodule SkillKit.Kit do
   end
 
   defp load_skill_files(dir, kit_name, handler_module, config) do
-    pattern = Path.join(dir, "*.skill.md")
+    case File.ls(dir) do
+      {:ok, entries} ->
+        entries
+        |> Enum.sort()
+        |> Enum.map(&Path.join(dir, &1))
+        |> Enum.filter(&File.dir?/1)
+        |> Enum.filter(&File.exists?(Path.join(&1, "SKILL.md")))
+        |> Enum.reduce_while({:ok, []}, fn skill_dir, {:ok, acc} ->
+          path = Path.join(skill_dir, "SKILL.md")
 
-    pattern
-    |> Path.wildcard()
-    |> Enum.sort()
-    |> Enum.reduce_while({:ok, []}, fn path, {:ok, acc} ->
-      case parse_skill_file(path, kit_name, handler_module, config) do
-        {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
+          case parse_skill_file(path, kit_name, handler_module, config) do
+            {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
+            {:error, _} = error -> {:halt, error}
+          end
+        end)
+
+      {:error, :enoent} ->
+        {:ok, []}
+    end
   end
 
   defp parse_skill_file(path, kit_name, handler_module, config) do

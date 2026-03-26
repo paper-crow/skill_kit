@@ -64,7 +64,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
     end
 
     test "returns {:error, :enoent} for nonexistent file" do
-      assert {:error, :enoent} = Parser.load_file("nonexistent/path.skill.md")
+      assert {:error, :enoent} = Parser.load_file("nonexistent/path.md")
     end
   end
 
@@ -82,7 +82,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body text.
       """
 
-      path = write_tmp_fixture("bare_name.skill.md", content)
+      path = write_tmp_fixture("bare_name.md", content)
       assert {:ok, %SkillKit.Skill{name: "bash", namespace: "bash"}} = Parser.load_file(path)
     end
 
@@ -95,7 +95,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body.
       """
 
-      path = write_tmp_fixture("empty_ns.skill.md", content)
+      path = write_tmp_fixture("empty_ns.md", content)
       assert {:error, :invalid_name_format} = Parser.load_file(path)
     end
 
@@ -108,7 +108,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body.
       """
 
-      path = write_tmp_fixture("empty_skill.skill.md", content)
+      path = write_tmp_fixture("empty_skill.md", content)
       assert {:error, :invalid_name_format} = Parser.load_file(path)
     end
   end
@@ -127,7 +127,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body without scope.
       """
 
-      path = write_tmp_fixture("no_scope.skill.md", content)
+      path = write_tmp_fixture("no_scope.md", content)
       assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == []
     end
@@ -144,7 +144,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body.
       """
 
-      path = write_tmp_fixture("multi_scope.skill.md", content)
+      path = write_tmp_fixture("multi_scope.md", content)
       assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["tools:read", "tools:write"]
     end
@@ -159,7 +159,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body.
       """
 
-      path = write_tmp_fixture("single_scope.skill.md", content)
+      path = write_tmp_fixture("single_scope.md", content)
       assert {:ok, skill} = Parser.load_file(path)
       assert skill.required_scope == ["single:scope"]
     end
@@ -202,7 +202,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body without description.
       """
 
-      path = write_tmp_fixture("missing_desc.skill.md", content)
+      path = write_tmp_fixture("missing_desc.md", content)
       assert {:error, {:missing_field, "description"}} = Parser.load_file(path)
     end
 
@@ -215,7 +215,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Body.
       """
 
-      path = write_tmp_fixture("empty_name.skill.md", content)
+      path = write_tmp_fixture("empty_name.md", content)
       assert {:error, {:missing_field, "name"}} = Parser.load_file(path)
     end
   end
@@ -240,7 +240,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Check things.
       """
 
-      path = write_tmp_fixture("with_hooks.skill.md", content)
+      path = write_tmp_fixture("with_hooks.md", content)
       assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert length(skill.hooks) == 1
 
@@ -264,7 +264,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
       Log everything.
       """
 
-      path = write_tmp_fixture("post_hooks.skill.md", content)
+      path = write_tmp_fixture("post_hooks.md", content)
       assert {:ok, %Skill{} = skill} = Parser.load_file(path)
       assert length(skill.hooks) == 1
 

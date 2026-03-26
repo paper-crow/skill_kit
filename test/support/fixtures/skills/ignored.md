@@ -2,4 +2,4 @@
 name: "should:ignore"
 description: "Not a skill file"
 ---
-This file does not have the .skill.md extension.
+This file is not inside a skill directory (no SKILL.md convention).
