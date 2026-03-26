@@ -3,10 +3,10 @@ defmodule SkillKit.Test.EchoKit do
     name: "test_kit",
     skills_dir: Path.join([__DIR__, "../../support/fixtures/test_kit/skills"])
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
   @impl SkillKit.Tool
-  def execute(%Pipeline{skill: %{name: "test_kit:greet"}, input: input}) do
+  def execute(%ToolExecution{skill: %{name: "test_kit:greet"}, input: input}) do
     {:ok, "Hello, #{input["name"]}!"}
   end
 end
@@ -15,9 +15,9 @@ defmodule SkillKit.Kit.ModuleBackedTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Kit.Memory
-  alias SkillKit.Pipeline
   alias SkillKit.Skill
   alias SkillKit.Test.EchoKit
+  alias SkillKit.ToolExecution
 
   describe "module-backed skill lifecycle" do
     setup do
@@ -63,7 +63,7 @@ defmodule SkillKit.Kit.ModuleBackedTest do
     end
 
     test "execute dispatches through Kit module", %{skill: skill} do
-      execution = %Pipeline{
+      execution = %ToolExecution{
         skill: skill,
         input: %{"name" => "World"},
         context: %{}

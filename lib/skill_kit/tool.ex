@@ -1,10 +1,21 @@
 defmodule SkillKit.Tool do
   @moduledoc """
-  Callback contract for tool modules.
+  Describes a tool the LLM can call and defines the callback contract
+  for tool implementations.
 
-  Tools handle actual command execution. The default tool
-  (`SkillKit.Tools.Shell`) shells out via `Port`. Custom
-  tools can run commands in sandboxes, containers, or as Elixir code.
+  ## Struct
+
+  The `%Tool{}` struct describes a tool for the LLM's tool-use schema:
+
+      %SkillKit.Tool{name: "bash", description: "Execute a shell command", input_schema: %{...}}
+
+  ## Behaviour
+
+  Tool implementations must implement three callbacks:
+
+  - `execute/1` — run the tool, receiving a `%SkillKit.ToolExecution{}`
+  - `resume/3` — resume after suspension
+  - `definition/0` — return a `%SkillKit.Tool{}` describing the tool
 
   ## Three-value return
 
@@ -13,15 +24,24 @@ defmodule SkillKit.Tool do
   - `{:pending, state}` — needs approval; caller manages the lifecycle
   """
 
-  @callback execute(execution :: SkillKit.Pipeline.t()) ::
+  @type t :: %__MODULE__{
+          name: String.t(),
+          description: String.t(),
+          input_schema: map()
+        }
+
+  @enforce_keys [:name, :description, :input_schema]
+  defstruct [:name, :description, :input_schema]
+
+  @callback execute(execution :: SkillKit.ToolExecution.t()) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
   @callback resume(
-              execution :: SkillKit.Pipeline.t(),
+              execution :: SkillKit.ToolExecution.t(),
               state :: any(),
               decision :: :approved | {:denied, any()}
             ) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 
-  @callback definition() :: SkillKit.Tool.Definition.t()
+  @callback definition() :: t()
 end

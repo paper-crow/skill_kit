@@ -2,10 +2,10 @@ defmodule SkillKit.KitTest.TestKit do
   use SkillKit.Kit,
     skills_dir: Path.join(__DIR__, "../support/fixtures/test_kit/skills")
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
   @impl SkillKit.Tool
-  def execute(%Pipeline{skill: %{name: "test_kit:greet"}, input: input}) do
+  def execute(%ToolExecution{skill: %{name: "test_kit:greet"}, input: input}) do
     {:ok, "Hello, #{input["name"]}!"}
   end
 end
@@ -16,8 +16,8 @@ defmodule SkillKit.KitTest do
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
-  alias SkillKit.Pipeline
   alias SkillKit.Skill
+  alias SkillKit.ToolExecution
 
   describe "use SkillKit.Kit" do
     test "load_kits/1 returns kit with skills from skills/ directory" do
@@ -42,7 +42,7 @@ defmodule SkillKit.KitTest do
       {:ok, [kit]} = TestKit.load_kits([])
       [skill] = kit.skills
 
-      execution = %Pipeline{
+      execution = %ToolExecution{
         skill: skill,
         input: %{"name" => "World"},
         context: %{}

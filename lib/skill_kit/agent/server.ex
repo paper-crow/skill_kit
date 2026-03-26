@@ -16,10 +16,9 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
-  alias SkillKit.Pipeline
   alias SkillKit.Skill
   alias SkillKit.Telemetry
-  alias SkillKit.Tool.Runner
+  alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
@@ -274,7 +273,7 @@ defmodule SkillKit.Agent.Server do
     tool = find_tool(state)
     context = build_tool_context(state)
 
-    case Runner.run(tool, catalog(state), input, context) do
+    case ToolExecution.start(tool, catalog(state), input, context) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,
@@ -391,7 +390,7 @@ defmodule SkillKit.Agent.Server do
       %{scope: state.scope, agent_name: state.agent_name}
       |> Map.merge(Map.new(source_config))
 
-    execution = %Pipeline{skill: skill, input: input, context: context}
+    execution = %ToolExecution{skill: skill, input: input, context: context}
 
     case skill.tool.execute(execution) do
       {:ok, result} ->

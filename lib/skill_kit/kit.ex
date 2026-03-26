@@ -89,7 +89,7 @@ defmodule SkillKit.Kit do
 
       @impl SkillKit.Tool
       def definition do
-        %SkillKit.Tool.Definition{
+        %SkillKit.Tool{
           name: @kit_name,
           description: "Kit tool for #{@kit_name}",
           input_schema: %{}

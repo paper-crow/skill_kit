@@ -19,7 +19,7 @@ defmodule SkillKit.Tools.Shell do
 
   use SkillKit.Kit, name: "shell"
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
   @impl SkillKit.Kit.Provider
   def load_kits(config) do
@@ -29,7 +29,7 @@ defmodule SkillKit.Tools.Shell do
   end
 
   @impl SkillKit.Tool
-  def execute(%Pipeline{input: %{"command" => command}, context: context}) do
+  def execute(%ToolExecution{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
     port =
@@ -43,7 +43,7 @@ defmodule SkillKit.Tools.Shell do
 
   @impl SkillKit.Tool
   def definition do
-    %SkillKit.Tool.Definition{
+    %SkillKit.Tool{
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
@@ -63,7 +63,7 @@ defmodule SkillKit.Tools.Shell do
   end
 
   @impl SkillKit.Tool
-  def resume(%Pipeline{} = exec, _state, :approved), do: execute(exec)
+  def resume(%ToolExecution{} = exec, _state, :approved), do: execute(exec)
   def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
   defp config_to_metadata(config) do

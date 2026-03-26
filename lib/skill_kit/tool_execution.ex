@@ -1,14 +1,15 @@
-defmodule SkillKit.Pipeline do
+defmodule SkillKit.ToolExecution do
   @moduledoc """
-  A named, resumable pipeline for executing skill input through lifecycle hooks.
+  The execution pipeline for tool calls.
 
-  A pipeline is a data structure holding a list of steps (pre-hooks, an execute
-  step, and post-hooks), input, context, and accumulated results. It is built
-  by `SkillKit.Tool.Runner` and executed by `run/1`.
+  A `%ToolExecution{}` is a named, resumable pipeline that runs skill input
+  through lifecycle hooks. It holds a list of steps (pre-hooks, an execute
+  step, and post-hooks), input, context, and accumulated results.
 
-  Steps are walked sequentially; results are recorded in a map keyed by step
-  name. The pipeline can suspend at any step via `{:pending, state}` and be
-  resumed from that exact point with `resume/2`.
+  ## Entry points
+
+  - `start/3,4` — build and run a pipeline (was `Tool.Runner.run`)
+  - `resume/2` — resume a suspended pipeline
 
   ## Status transitions
 
@@ -20,7 +21,7 @@ defmodule SkillKit.Pipeline do
 
   ## Step naming
 
-  Steps are named by `SkillKit.Tool.Runner` during construction:
+  Steps are named during construction:
 
   - Pre-hooks: `"pre:0"`, `"pre:1"`, ...
   - Execute:   `"execute"`
@@ -28,6 +29,7 @@ defmodule SkillKit.Pipeline do
   """
 
   alias SkillKit.Hook
+  alias SkillKit.Skill
 
   @type step ::
           {:pre_hook, String.t(), Hook.t()}
@@ -37,7 +39,7 @@ defmodule SkillKit.Pipeline do
   @type status :: :pending | :running | :suspended | :complete | :failed
 
   @type t :: %__MODULE__{
-          skill: SkillKit.Skill.t(),
+          skill: Skill.t() | nil,
           input: map(),
           context: map(),
           steps: [step()],
@@ -58,22 +60,50 @@ defmodule SkillKit.Pipeline do
     status: :pending
   ]
 
-  @doc """
-  Walks all pipeline steps sequentially, recording results by step name.
+  # -------------------------------------------------------------------
+  # Public API
+  # -------------------------------------------------------------------
 
-  Returns:
-  - `{:ok, pipeline}` — all steps completed successfully
-  - `{:error, pipeline}` — a step failed or was denied
-  - `{:pending, pipeline}` — a step suspended, waiting for a decision
+  @doc """
+  Builds and runs an execution pipeline.
+
+  Two forms:
+
+    * `start(catalog, %Skill{}, input, context)` — uses the tool from the skill struct.
+    * `start(tool_module, catalog, input, context)` — explicit tool module
+      (must be an atom). Used by the agent server for bare commands.
+
+  The catalog (or any process implementing hooks retrieval) is used to
+  collect lifecycle hooks for the pipeline.
   """
-  @spec run(t()) :: {:ok, t()} | {:error, t()} | {:pending, t()}
-  def run(%__MODULE__{} = exec) do
-    exec = %{exec | status: :running}
-    walk_steps(exec.steps, exec)
+  def start(catalog, skill_or_input, input, context \\ %{})
+
+  def start(catalog, %Skill{} = skill, input, context) do
+    hooks = collect_and_filter_hooks(catalog, skill.tool)
+
+    %__MODULE__{
+      skill: skill,
+      input: wrap_input(input),
+      context: context,
+      steps: build_steps(hooks, skill.tool)
+    }
+    |> execute()
+  end
+
+  def start(tool, catalog, input, context) when is_atom(tool) do
+    hooks = collect_and_filter_hooks(catalog, tool)
+
+    %__MODULE__{
+      skill: nil,
+      input: wrap_input(input),
+      context: context,
+      steps: build_steps(hooks, tool)
+    }
+    |> execute()
   end
 
   @doc """
-  Resumes a suspended `Pipeline` from the step it was suspended at.
+  Resumes a suspended execution with an approval decision.
 
   `decision` is passed directly to the suspended handler's `resume/3` callback,
   or used to re-invoke a suspended hook.
@@ -97,6 +127,28 @@ defmodule SkillKit.Pipeline do
         {:error, %{exec | status: :failed}}
     end
   end
+
+  # -------------------------------------------------------------------
+  # Internal execution
+  # -------------------------------------------------------------------
+
+  @doc """
+  Walks all pipeline steps sequentially, recording results by step name.
+
+  Returns:
+  - `{:ok, execution}` — all steps completed successfully
+  - `{:error, execution}` — a step failed or was denied
+  - `{:pending, execution}` — a step suspended, waiting for a decision
+  """
+  @spec execute(t()) :: {:ok, t()} | {:error, t()} | {:pending, t()}
+  def execute(%__MODULE__{} = exec) do
+    exec = %{exec | status: :running}
+    walk_steps(exec.steps, exec)
+  end
+
+  # -------------------------------------------------------------------
+  # Private helpers — step walking
+  # -------------------------------------------------------------------
 
   # Applies a step result and continues walking. Used by both walk_steps and resume
   # to avoid duplicating the result-handling logic.
@@ -123,8 +175,6 @@ defmodule SkillKit.Pipeline do
     end
   end
 
-  # --- Private helpers ---
-
   defp walk_steps([], exec) do
     {:ok, %{exec | status: :complete}}
   end
@@ -143,6 +193,40 @@ defmodule SkillKit.Pipeline do
     context = build_post_context(exec, execute_result)
     apply_step_result(steps, exec, invoke_handler(hook.handler, context))
   end
+
+  # -------------------------------------------------------------------
+  # Private helpers — hook collection and step building
+  # -------------------------------------------------------------------
+
+  defp collect_and_filter_hooks(catalog, tool) do
+    tool_name = tool |> Module.split() |> List.last()
+
+    catalog
+    |> SkillKit.Catalog.hooks()
+    |> Enum.filter(&Regex.match?(&1.matcher, tool_name))
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
+  end
+
+  defp build_steps(hooks, tool) do
+    pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
+    post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
+
+    pre_steps ++ [{:execute, "execute", tool}] ++ post_steps
+  end
+
+  defp index_steps(hooks, type, prefix) do
+    Enum.with_index(hooks, fn %Hook{} = hook, i -> {type, "#{prefix}:#{i}", hook} end)
+  end
+
+  # -------------------------------------------------------------------
+  # Private helpers — input and context
+  # -------------------------------------------------------------------
+
+  defp wrap_input(input) when is_map(input), do: input
+  defp wrap_input(command) when is_binary(command), do: %{"command" => command}
 
   defp invoke_handler(fun, context) when is_function(fun, 1) do
     fun.(context)

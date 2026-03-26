@@ -1,32 +1,35 @@
 defmodule SkillKit.Tools.ShellTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
   alias SkillKit.Tools.Shell
 
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do
       assert {:ok, "hello\n"} =
-               Shell.execute(%Pipeline{input: %{"command" => "echo hello"}, context: %{}})
+               Shell.execute(%ToolExecution{input: %{"command" => "echo hello"}, context: %{}})
     end
 
     test "returns {:error, {output, exit_code}} for failing command" do
       assert {:error, {_output, exit_code}} =
-               Shell.execute(%Pipeline{input: %{"command" => "exit 1"}, context: %{}})
+               Shell.execute(%ToolExecution{input: %{"command" => "exit 1"}, context: %{}})
 
       assert exit_code != 0
     end
 
     test "returns {:ok, output} for multi-word command" do
       assert {:ok, output} =
-               Shell.execute(%Pipeline{input: %{"command" => "echo hello world"}, context: %{}})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo hello world"},
+                 context: %{}
+               })
 
       assert String.trim(output) == "hello world"
     end
 
     test "merges stderr into stdout" do
       assert {:ok, output} =
-               Shell.execute(%Pipeline{
+               Shell.execute(%ToolExecution{
                  input: %{"command" => "echo out && echo err >&2"},
                  context: %{}
                })
@@ -44,13 +47,15 @@ defmodule SkillKit.Tools.ShellTest do
       resolved_tmp = String.trim(resolved_tmp)
 
       assert {:ok, output} =
-               Shell.execute(%Pipeline{input: %{"command" => "pwd"}, context: %{cwd: tmp}})
+               Shell.execute(%ToolExecution{input: %{"command" => "pwd"}, context: %{cwd: tmp}})
 
       assert String.trim(output) == resolved_tmp
     end
 
     test "inherits BEAM cwd when :cwd not in context" do
-      assert {:ok, output} = Shell.execute(%Pipeline{input: %{"command" => "pwd"}, context: %{}})
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{input: %{"command" => "pwd"}, context: %{}})
+
       # Should succeed — just proves it doesn't crash without :cwd
       assert is_binary(output)
     end
@@ -59,7 +64,7 @@ defmodule SkillKit.Tools.ShellTest do
       context = %{env: [{"SKILL_KIT_TEST_VAR", "hello_from_skill"}]}
 
       assert {:ok, output} =
-               Shell.execute(%Pipeline{
+               Shell.execute(%ToolExecution{
                  input: %{"command" => "echo $SKILL_KIT_TEST_VAR"},
                  context: context
                })
@@ -71,7 +76,10 @@ defmodule SkillKit.Tools.ShellTest do
       context = %{env: [{"SKILL_KIT_EXTRA", "extra"}]}
 
       assert {:ok, output} =
-               Shell.execute(%Pipeline{input: %{"command" => "echo $HOME"}, context: context})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo $HOME"},
+                 context: context
+               })
 
       # HOME should still be set — env merges, not replaces
       assert String.trim(output) == System.get_env("HOME")
@@ -89,7 +97,7 @@ defmodule SkillKit.Tools.ShellTest do
       }
 
       assert {:ok, output} =
-               Shell.execute(%Pipeline{
+               Shell.execute(%ToolExecution{
                  input: %{"command" => "echo $SKILL_KIT_COMBO from $(pwd)"},
                  context: context
                })
@@ -117,12 +125,12 @@ defmodule SkillKit.Tools.ShellTest do
 
   describe "resume/3" do
     test "delegates to execute/1 on approval" do
-      exec = %Pipeline{input: %{"command" => "echo resumed"}, context: %{}}
+      exec = %ToolExecution{input: %{"command" => "echo resumed"}, context: %{}}
       assert {:ok, "resumed\n"} = Shell.resume(exec, %{}, :approved)
     end
 
     test "returns denial error on {:denied, reason}" do
-      exec = %Pipeline{input: %{"command" => "echo nope"}, context: %{}}
+      exec = %ToolExecution{input: %{"command" => "echo nope"}, context: %{}}
 
       assert {:error, {:denied, "not allowed"}} =
                Shell.resume(exec, %{}, {:denied, "not allowed"})
@@ -133,7 +141,7 @@ defmodule SkillKit.Tools.ShellTest do
       # Resolve symlinks for macOS
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
-      exec = %Pipeline{input: %{"command" => "pwd"}, context: %{cwd: tmp}}
+      exec = %ToolExecution{input: %{"command" => "pwd"}, context: %{cwd: tmp}}
       assert {:ok, output} = Shell.resume(exec, %{}, :approved)
       assert String.trim(output) == resolved_tmp
     end

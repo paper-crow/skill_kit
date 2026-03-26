@@ -22,7 +22,7 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
     |> Enum.map(&encode_chunk/1)
   end
 
-  @doc "Encodes ToolDefinition structs into Anthropic tool format."
+  @doc "Encodes Tool structs into Anthropic tool format."
   def encode_tools(tools) do
     Enum.map(tools, &encode_tool_definition/1)
   end

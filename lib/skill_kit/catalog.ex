@@ -17,7 +17,7 @@ defmodule SkillKit.Catalog do
   alias SkillKit.Agent.Definition
   alias SkillKit.Authorization
   alias SkillKit.Skill
-  alias SkillKit.Tool.Definition, as: ToolDefinition
+  alias SkillKit.Tool
 
   @subagent_builtins MapSet.new(["report_status", "report_result"])
 
@@ -68,7 +68,7 @@ defmodule SkillKit.Catalog do
     GenServer.call(catalog, :hooks)
   end
 
-  @spec tool_definitions(GenServer.server(), keyword()) :: [ToolDefinition.t()]
+  @spec tool_definitions(GenServer.server(), keyword()) :: [Tool.t()]
   def tool_definitions(catalog, opts \\ []) do
     GenServer.call(catalog, {:tool_definitions, opts})
   end
@@ -301,7 +301,7 @@ defmodule SkillKit.Catalog do
     skill_descriptions = Enum.map_join(skills, "\n", &"- #{&1.name}: #{&1.description}")
 
     [
-      %ToolDefinition{
+      %Tool{
         name: "activate_skill",
         description:
           "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
@@ -327,7 +327,7 @@ defmodule SkillKit.Catalog do
   end
 
   defp skill_to_tool(skill) do
-    %ToolDefinition{
+    %Tool{
       name: skill_short_name(skill.name),
       description: skill.description,
       input_schema: %{"type" => "object"}
@@ -335,7 +335,7 @@ defmodule SkillKit.Catalog do
   end
 
   defp agent_to_tool(%Definition{name: name, description: description}) do
-    %ToolDefinition{
+    %Tool{
       name: name,
       description: description,
       input_schema: %{
@@ -353,7 +353,7 @@ defmodule SkillKit.Catalog do
 
   defp builtin_tools do
     [
-      %ToolDefinition{
+      %Tool{
         name: "report_status",
         description:
           "Send a progress update to the parent agent. Use to report intermediate results.",
@@ -365,7 +365,7 @@ defmodule SkillKit.Catalog do
           "required" => ["status"]
         }
       },
-      %ToolDefinition{
+      %Tool{
         name: "report_result",
         description:
           "Report the final result and complete this task. The agent stops after this.",
