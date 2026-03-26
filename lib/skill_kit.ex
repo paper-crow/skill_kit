@@ -64,17 +64,15 @@ defmodule SkillKit do
   """
   @spec start_agent(keyword()) :: {:ok, agent()} | {:error, term()}
   def start_agent(opts) when is_list(opts) do
-    skills = Keyword.fetch!(opts, :skills)
-    scope = Keyword.get(opts, :scope)
+    definition = resolve_agent(Keyword.fetch!(opts, :agent))
+    skills = normalize_skills(Keyword.get(opts, :skills, []))
 
-    {:ok, temp_catalog} = SkillKit.Catalog.start_link(providers: skills, scope: scope)
-    root = SkillKit.Catalog.root_agent(temp_catalog)
-    GenServer.stop(temp_catalog)
+    # If agent: is a provider (not a plain %Definition{}), add it to skills
+    # so the agent kit's skills/sub-agents are auto-included in the tool pool
+    agent_provider = agent_as_provider(Keyword.fetch!(opts, :agent))
+    all_skills = merge_agent_provider(agent_provider, skills)
 
-    case root do
-      nil -> {:error, :no_root_agent}
-      definition -> start_agent(definition, opts)
-    end
+    start_agent(definition, Keyword.merge(opts, skills: all_skills))
   end
 
   @spec start_agent(Agent.Definition.t()) :: {:ok, agent()} | {:error, term()}
@@ -112,6 +110,57 @@ defmodule SkillKit do
         {:error, reason}
     end
   end
+
+  # -------------------------------------------------------------------
+  # Agent resolution
+  # -------------------------------------------------------------------
+
+  defp resolve_agent(%Agent.Definition{} = definition), do: definition
+
+  defp resolve_agent(path) when is_binary(path) do
+    resolve_agent({SkillKit.Kit.Local, dir: path})
+  end
+
+  defp resolve_agent(module) when is_atom(module) do
+    resolve_agent({module, []})
+  end
+
+  defp resolve_agent({module, config}) do
+    case module.load_kits(config) do
+      {:ok, kits} ->
+        kits
+        |> Enum.map(& &1.root_agent)
+        |> Enum.find(& &1) ||
+          raise "No root agent (AGENT.md) found in agent: provider #{inspect(module)}"
+
+      {:error, reason} ->
+        raise "Failed to load agent from #{inspect(module)}: #{inspect(reason)}"
+    end
+  end
+
+  # -------------------------------------------------------------------
+  # Skills normalization (string/module/tuple sugar)
+  # -------------------------------------------------------------------
+
+  defp normalize_skills(skills) do
+    Enum.map(skills, &normalize_skill_entry/1)
+  end
+
+  defp normalize_skill_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp normalize_skill_entry(module) when is_atom(module), do: {module, []}
+  defp normalize_skill_entry({module, config}), do: {module, config}
+
+  # -------------------------------------------------------------------
+  # Auto-include agent kit's tools
+  # -------------------------------------------------------------------
+
+  defp agent_as_provider(%Agent.Definition{}), do: nil
+  defp agent_as_provider(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp agent_as_provider(module) when is_atom(module), do: {module, []}
+  defp agent_as_provider({module, config}), do: {module, config}
+
+  defp merge_agent_provider(nil, skills), do: skills
+  defp merge_agent_provider(provider, skills), do: [provider | skills]
 
   @doc """
   Sends a user message to the agent referenced by `agent`.

@@ -5,13 +5,12 @@ defmodule SkillKit.StartAgentTest do
   alias SkillKit.Kit.Local
 
   @fixtures_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "with_root_agent"])
-  @no_agent_path Path.join([__DIR__, "..", "support", "fixtures", "skills", "valid"])
 
-  describe "start_agent/1 skill-driven" do
-    test "discovers and starts root agent from skills" do
+  describe "start_agent/1 with agent: option" do
+    test "starts agent from kit path" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 skills: [{Local, dir: @fixtures_path}],
+                 agent: {Local, dir: @fixtures_path},
                  caller: self()
                )
 
@@ -22,7 +21,7 @@ defmodule SkillKit.StartAgentTest do
     test "accepts :name override" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 skills: [{Local, dir: @fixtures_path}],
+                 agent: {Local, dir: @fixtures_path},
                  name: "custom-name",
                  caller: self()
                )
@@ -31,21 +30,25 @@ defmodule SkillKit.StartAgentTest do
       SkillKit.stop_agent(agent)
     end
 
-    test "returns error when no root agent found" do
-      assert {:error, :no_root_agent} =
-               SkillKit.start_agent(
-                 skills: [{Local, dir: @no_agent_path}],
-                 caller: self()
-               )
-    end
-
-    test "uses first root agent when multiple providers have root agents" do
+    test "auto-includes agent kit's skills in tool pool" do
       assert {:ok, agent} =
                SkillKit.start_agent(
-                 skills: [
-                   {Local, dir: @fixtures_path},
-                   {Local, dir: @fixtures_path}
-                 ],
+                 agent: {Local, dir: @fixtures_path},
+                 skills: [{Local, dir: @fixtures_path}],
+                 caller: self()
+               )
+
+      assert agent.name == "root-agent"
+      SkillKit.stop_agent(agent)
+    end
+
+    test "accepts a %Definition{} struct as agent:" do
+      {:ok, definition} =
+        Definition.parse(Path.join(@fixtures_path, "AGENT.md"))
+
+      assert {:ok, agent} =
+               SkillKit.start_agent(
+                 agent: definition,
                  caller: self()
                )
 
