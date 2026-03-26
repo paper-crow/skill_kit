@@ -59,7 +59,7 @@ end
 Run: `mix test test/skill_kit/handler/shell_test.exs --seed 0 -v` (or wherever the shell tests live)
 Expected: FAIL — `execute/1` doesn't exist yet
 
-- [ ] **Step 3: Update Handler.Behaviour callbacks**
+- [ ] **Step 3: Update Tool callbacks**
 
 In `lib/skill_kit/handler/behaviour.ex`, change the callbacks:
 
@@ -94,7 +94,7 @@ def resume(_exec, _state, {:denied, reason}) do
 end
 ```
 
-Update `tool_definition/0` — no changes needed (it's independent).
+Update `definition/0` — no changes needed (it's independent).
 
 - [ ] **Step 4b: Update PendingHandler test helpers**
 
@@ -224,7 +224,7 @@ command = Map.get(input, "command", "")
 context = %{cwd: state.definition.workspace, scope: state.scope}
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-case SkillKit.Handler.run(skill_registry, command, context) do
+case SkillKit.Tool.Runner.run(skill_registry, command, context) do
 ```
 
 To:
@@ -234,7 +234,7 @@ To:
 context = %{cwd: state.definition.workspace, scope: state.scope}
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-case SkillKit.Handler.run(skill_registry, input, context) do
+case SkillKit.Tool.Runner.run(skill_registry, input, context) do
 ```
 
 - [ ] **Step 2: Run the full test suite**
@@ -320,7 +320,7 @@ In `lib/skill_kit/kit.ex`, add a `__using__/1` macro:
 defmacro __using__(opts) do
   quote do
     @behaviour SkillKit.Backend
-    @behaviour SkillKit.Handler.Behaviour
+    @behaviour SkillKit.Tool
 
     @kit_opts unquote(opts)
 
@@ -354,20 +354,20 @@ defmacro __using__(opts) do
       {:ok, [%SkillKit.Kit{name: kit_name, skills: skills}]}
     end
 
-    @impl SkillKit.Handler.Behaviour
-    def tool_definition do
-      %SkillKit.Handler.ToolDefinition{
+    @impl SkillKit.Tool
+    def definition do
+      %SkillKit.Tool.Definition{
         name: "kit",
         description: "Module-backed kit handler",
         input_schema: %{"type" => "object"}
       }
     end
 
-    @impl SkillKit.Handler.Behaviour
+    @impl SkillKit.Tool
     def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
     def resume(_exec, _state, _decision), do: {:error, :not_resumable}
 
-    defoverridable [resume: 3, tool_definition: 0]
+    defoverridable [resume: 3, definition: 0]
   end
 end
 ```
@@ -448,14 +448,14 @@ In `lib/skill_kit/agent/tool_builder.ex`, update `build_tools/2`:
 
 ```elixir
 def build_tools(kits, opts \\ []) do
-  handlers = Keyword.get(opts, :handlers, [SkillKit.Handler.Shell])
+  handlers = Keyword.get(opts, :handlers, [SkillKit.Tools.Shell])
   subagent = Keyword.get(opts, :subagent, false)
   activated_skills = Keyword.get(opts, :activated_skills, [])
 
   all_skills = Enum.flat_map(kits, & &1.skills)
   all_agents = Enum.flat_map(kits, & &1.agents)
 
-  handler_tools = Enum.map(handlers, & &1.tool_definition())
+  handler_tools = Enum.map(handlers, & &1.definition())
 
   activated_tools =
     activated_skills
@@ -465,7 +465,7 @@ def build_tools(kits, opts \\ []) do
   # Filter unloadable module-backed skills from activate_skill enum too
   visible_skills =
     Enum.filter(all_skills, fn skill ->
-      skill.handler == SkillKit.Handler.Shell or Code.ensure_loaded?(skill.handler)
+      skill.handler == SkillKit.Tools.Shell or Code.ensure_loaded?(skill.handler)
     end)
 
   skill_tool = if visible_skills != [], do: [activate_skill_tool(visible_skills)], else: []
@@ -663,7 +663,7 @@ defp activate_skill(%Message.ToolCall{id: id, input: input}, state) do
       already_activated = Enum.any?(state.activated_skills, &(&1.name == skill_name))
 
       state =
-        if skill && skill.handler != SkillKit.Handler.Shell && !already_activated do
+        if skill && skill.handler != SkillKit.Tools.Shell && !already_activated do
           %{state | activated_skills: [skill | state.activated_skills]}
         else
           state

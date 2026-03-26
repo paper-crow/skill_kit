@@ -10,7 +10,7 @@ Users create AI personas through conversation, then chat with them. Each user ge
 |---|---|
 | **Agent identity** | `start_agent("agents/lobby", ...)` loads AGENT.md from the directory — agent identity is the first argument |
 | **Skills** | 7 skills across 2 kits drive all behavior (brainstorming, voice development, memory, etc.) |
-| **SkillKit.Shell as Kit** | Shell handler registered through `skills:` like any other kit |
+| **SkillKit.Tools.Shell as Kit** | Shell tool registered through `skills:` like any other kit |
 | **Kit.Local** | Skills and agents loaded from directories via string paths (resolved to `Kit.Local`) |
 | **Root agent convention** | AGENT.md at root of source dir is the top-level agent; nested agents are subagents |
 | **Subagent delegation** | Lobby delegates file writing to a `persona_writer` subagent |
@@ -117,13 +117,13 @@ The CLI passes the agent directory as the first argument to `start_agent`, and a
 ```elixir
 # Lobby — agents/lobby/ contains AGENT.md at root + all skills
 SkillKit.start_agent("agents/lobby",
-  skills: ["skills", SkillKit.Shell],
+  skills: ["skills", SkillKit.Tools.Shell],
   scope: scope
 )
 
 # Persona — persona dir has AGENT.md, skills dir has shared skills
 SkillKit.start_agent("agents/personas/valentina_restrepo",
-  skills: ["skills", SkillKit.Shell],
+  skills: ["skills", SkillKit.Tools.Shell],
   name: "valentina_restrepo:alice",
   scope: scope,
   conversation_store: {SkillKit.Conversation.Store.Filesystem, path: "data/conversations"}

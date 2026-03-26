@@ -5,12 +5,12 @@
 Three related changes that align SkillKit's naming with its mental model and remove filesystem concepts from the library core:
 
 1. Rename `sources:` to `skills:` — everything providing capabilities is a skill
-2. Rename `SkillKit.Handler.Shell` to `SkillKit.Shell` — registered through `skills:` like everything else
+2. Rename `SkillKit.Tools.Shell` to `SkillKit.Tools.Shell` — registered through `skills:` like everything else
 3. Remove `workspace` from `Definition` — the library has no filesystem concept; the Shell handler owns cwd
 
 ## Principle
 
-The library core should have no concept of files or filesystem paths. Filesystem awareness belongs to backends (`Backend.Filesystem`) and handlers (`SkillKit.Shell`) — both registered through the uniform `skills:` interface.
+The library core should have no concept of files or filesystem paths. Filesystem awareness belongs to backends (`Backend.Filesystem`) and handlers (`SkillKit.Tools.Shell`) — both registered through the uniform `skills:` interface.
 
 ## Design
 
@@ -23,12 +23,12 @@ Rename the option key on `start_agent`, `start_subagent`, and anywhere else `:so
 SkillKit.start_agent(definition, sources: [{Backend.Filesystem, dirs: ["skills"]}])
 
 # After
-SkillKit.start_agent(skills: [{Backend.Filesystem, dir: ".skills"}, {SkillKit.Shell, cwd: "."}])
+SkillKit.start_agent(skills: [{Backend.Filesystem, dir: ".skills"}, {SkillKit.Tools.Shell, cwd: "."}])
 ```
 
-### 2. `SkillKit.Handler.Shell` → `SkillKit.Shell`
+### 2. `SkillKit.Tools.Shell` → `SkillKit.Tools.Shell`
 
-`SkillKit.Shell` implements both `Backend` and `Handler.Behaviour` (same pattern as `use SkillKit.Kit`):
+`SkillKit.Tools.Shell` implements both `Backend` and `Tool` (same pattern as `use SkillKit.Kit`):
 
 - **As a Backend:** `load_kits/1` returns a Kit containing the bash tool definition. No skills, no agents — just the handler registration.
 - **As a Handler:** `execute/1` runs shell commands via Port, using the `cwd` from its own config.
@@ -39,7 +39,7 @@ Config:
 
 ```elixir
 # Registration
-{SkillKit.Shell, cwd: File.cwd!(), env: [{"API_KEY", "..."}]}
+{SkillKit.Tools.Shell, cwd: File.cwd!(), env: [{"API_KEY", "..."}]}
 
 # What load_kits returns
 %Kit{
@@ -47,11 +47,11 @@ Config:
   skills: [],
   agents: [],
   root_agent: nil,
-  metadata: %{handler: SkillKit.Shell, cwd: cwd, env: env}
+  metadata: %{tool: SkillKit.Tools.Shell, cwd: cwd, env: env}
 }
 ```
 
-The Shell handler is no longer a default — agents only have bash if `SkillKit.Shell` is in their `skills:` list. This makes capabilities explicit.
+The Shell handler is no longer a default — agents only have bash if `SkillKit.Tools.Shell` is in their `skills:` list. This makes capabilities explicit.
 
 ### 3. Remove `workspace` from Definition
 
@@ -81,13 +81,13 @@ The Shell handler gets cwd from the kit metadata that was set during `load_kits`
 
 ### How Shell handler receives cwd at execution time
 
-Looking at the current flow: when a bash command executes, `server.ex` calls `SkillKit.Handler.run(skill_registry, input, context)`. The handler module is looked up and `execute/1` is called with a Pipeline struct containing `context`.
+Looking at the current flow: when a bash command executes, `server.ex` calls `SkillKit.Tool.Runner.run(skill_registry, input, context)`. The handler module is looked up and `execute/1` is called with a Pipeline struct containing `context`.
 
 With the new design:
-1. `SkillKit.Shell.load_kits(cwd: ".", env: [...])` stores cwd/env in the Kit's metadata
+1. `SkillKit.Tools.Shell.load_kits(cwd: ".", env: [...])` stores cwd/env in the Kit's metadata
 2. The kit is registered. The metadata is available on the kit in the server's `state.kits`
 3. When executing a bash command, the server finds the Shell handler's kit and includes its metadata in the pipeline context
-4. `SkillKit.Shell.execute/1` reads `cwd` and `env` from `pipeline.context`
+4. `SkillKit.Tools.Shell.execute/1` reads `cwd` and `env` from `pipeline.context`
 
 This means `context` still carries `cwd` and `env` — but the server doesn't set them from `definition.workspace`. Instead, they come from the handler's kit metadata. The server's job is just to look up the handler's config and pass it through.
 
@@ -98,7 +98,7 @@ Actually, this is simpler than it sounds. The current `execute_command/2` in ser
 context = %{cwd: state.definition.workspace, scope: state.scope}
 
 # After — find Shell handler's config from kits
-shell_config = find_handler_config(state.kits, SkillKit.Shell)
+shell_config = find_handler_config(state.kits, SkillKit.Tools.Shell)
 context = %{scope: state.scope} |> Map.merge(shell_config)
 ```
 
@@ -109,14 +109,14 @@ Where `find_handler_config` extracts `%{cwd: ..., env: ...}` from the Shell kit'
 | Component | Change |
 |-----------|--------|
 | `SkillKit` | `:sources` → `:skills` in `start_agent/1`, `start_agent/2`, `start_subagent/3` |
-| `SkillKit.Handler.Shell` | Rename to `SkillKit.Shell`, implement `Backend`, accept `cwd:`/`env:` config |
+| `SkillKit.Tools.Shell` | Rename to `SkillKit.Tools.Shell`, implement `Backend`, accept `cwd:`/`env:` config |
 | `SkillKit.Agent.Definition` | Remove `:workspace` field entirely |
 | `SkillKit.Agent.Server` | Stop setting `context.cwd` from definition; get handler config from kits |
 | `SkillKit.Agent.Agent` | `:sources` → `:skills` in opts |
 | `SkillKit.Agent.Infrastructure` | `:sources` → `:skills` |
 | `SkillKit.Supervisor` | `:sources` → `:skills` |
 | `SkillKit.Registry` | `:sources` → `:skills` |
-| Mix tasks (chat, demo) | Use `skills:` with explicit `SkillKit.Shell` |
+| Mix tasks (chat, demo) | Use `skills:` with explicit `SkillKit.Tools.Shell` |
 | Example app CLI | Update `start_agent` calls, remove workspace metadata from AGENT.md |
 | Tests | Update all references to sources/workspace |
 
@@ -125,7 +125,7 @@ Where `find_handler_config` extracts `%{cwd: ..., env: ...}` from the Shell kit'
 | Component | Reason |
 |-----------|--------|
 | `Backend` behaviour | Same callback |
-| `Handler.Behaviour` | Same callbacks |
+| `Tool` | Same callbacks |
 | `use SkillKit.Kit` | Same pattern (already Backend + Handler) |
 | `Scope` protocol | Unaffected |
 | `Skill.render` | Unaffected |

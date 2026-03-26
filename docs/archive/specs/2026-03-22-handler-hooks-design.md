@@ -11,10 +11,10 @@ The Server calls `Shell.execute(command, context)` directly for bash tool calls,
 The handler module is an application-level config:
 
 ```elixir
-config :skill_kit, :handler, SkillKit.Handler.Shell
+config :skill_kit, :handler, SkillKit.Tools.Shell
 ```
 
-Read via `Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)`. Same pattern as the LLM default provider.
+Read via `Application.get_env(:skill_kit, :handler, SkillKit.Tools.Shell)`. Same pattern as the LLM default provider.
 
 ### Handler.run/3
 
@@ -22,7 +22,7 @@ New 3-arity function that doesn't require a skill:
 
 ```elixir
 def run(registry, command, context) do
-  handler = Application.get_env(:skill_kit, :handler, SkillKit.Handler.Shell)
+  handler = Application.get_env(:skill_kit, :handler, SkillKit.Tools.Shell)
   all_hooks = collect_hooks(registry)
   execution = Execution.new(nil, command, context, all_hooks: all_hooks, handler: handler)
   Execution.run(execution)
@@ -50,7 +50,7 @@ Shell.execute(command, context)
 To:
 ```elixir
 skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
-SkillKit.Handler.run(skill_registry, command, context)
+SkillKit.Tool.Runner.run(skill_registry, command, context)
 ```
 
 The result mapping stays the same — `{:ok, output}` → ToolResult, `{:error, {output, code}}` → error ToolResult. The `{:pending, _}` case from the Execution pipeline is handled as an error for now (pending/approval flow is out of scope).

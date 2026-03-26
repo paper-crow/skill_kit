@@ -468,7 +468,7 @@ Add to `test/skill_kit/agent/tool_builder_test.exs`:
 
 ```elixir
 test "activate_skill tool includes arguments property" do
-  kit = %Kit{name: "test", skills: [%Skill{name: "test:foo", description: "A skill", handler: SkillKit.Handler.Shell}]}
+  kit = %Kit{name: "test", skills: [%Skill{name: "test:foo", description: "A skill", handler: SkillKit.Tools.Shell}]}
   tools = ToolBuilder.build_tools([kit])
   activate = Enum.find(tools, &(&1.name == "activate_skill"))
 

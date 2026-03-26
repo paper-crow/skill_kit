@@ -1,19 +1,19 @@
 # Hooks and Execution
 
-Every skill input runs through a structured pipeline: pre-hooks, the handler,
+Every skill input runs through a structured pipeline: pre-hooks, the tool,
 then post-hooks. This page explains how that pipeline is built and run, how
 hooks are defined and matched, and how to suspend and resume execution for
 human-in-the-loop approval flows.
 
 ## Overview
 
-When `SkillKit.Handler.run/3,4` is called, it collects all hooks from every
+When `SkillKit.Tool.Runner.run/3,4` is called, it collects all hooks from every
 registered skill, builds a `Pipeline` with hooks filtered to those
-matching the handler (ordered as pre-steps, the execute step, and post-steps),
+matching the tool (ordered as pre-steps, the execute step, and post-steps),
 and walks it sequentially, recording each step's result by name.
 
 A step that returns `{:pending, state}` suspends the pipeline. The caller
-holds the execution struct and resumes it later with `Handler.resume/2`.
+holds the execution struct and resumes it later with `Tool.Runner.resume/2`.
 
 ## Hook Struct
 
@@ -22,14 +22,14 @@ holds the execution struct and resumes it later with `Handler.resume/2`.
 | Field      | Type                       | Description                                      |
 |------------|----------------------------|--------------------------------------------------|
 | `:phase`   | `:pre \| :post`             | When the hook fires relative to the execute step |
-| `:matcher` | `Regex.t()`                | Matched against the last segment of the handler module name |
+| `:matcher` | `Regex.t()`                | Matched against the last segment of the tool module name |
 | `:handler` | `(map() -> any()) \| {m, f, a}` | The function to invoke                      |
 
 Hooks are defined on a skill and scoped to its lifetime — when the skill is
 unregistered, its hooks are removed from all future pipelines.
 
 Pre-hook functions receive a context map with `:skill`, `:scope`, `:input`,
-and `:handler`. Post-hook functions receive the same map plus `:result`, which
+and `:tool`. Post-hook functions receive the same map plus `:result`, which
 holds the execute step's return value.
 
 A pre-hook may return:
@@ -42,17 +42,17 @@ A pre-hook may return:
 
 ### Construction
 
-`SkillKit.Handler.run/3,4` builds the pipeline struct directly. It collects
-hooks from the registry, filters them by handler name, builds the step list,
+`SkillKit.Tool.Runner.run/3,4` builds the pipeline struct directly. It collects
+hooks from the registry, filters them by tool name, builds the step list,
 and constructs a `%Pipeline{}`:
 
 ```elixir
-# Handler.run/4 does this internally:
+# Tool.Runner.run/4 does this internally:
 %Pipeline{
   skill: skill,
   input: input,
   context: context,
-  steps: pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+  steps: pre_steps ++ [{:execute, "execute", tool}] ++ post_steps
 }
 ```
 
@@ -88,7 +88,7 @@ end
 
 ## The Three-Value Return
 
-Every handler and hook ultimately returns one of three tagged tuples:
+Every tool and hook ultimately returns one of three tagged tuples:
 
 - `{:ok, result}` — the step completed; execution continues.
 - `{:error, reason}` — the step failed; the pipeline halts with `:failed`.
@@ -100,25 +100,25 @@ Every handler and hook ultimately returns one of three tagged tuples:
 When a step returns `{:pending, state}`, `Pipeline.run/1` returns
 `{:pending, execution}` immediately. The pipeline does not advance further.
 
-To continue, call `Handler.resume/2` (or `Pipeline.resume/2` directly):
+To continue, call `Tool.Runner.resume/2` (or `Pipeline.resume/2` directly):
 
 ```elixir
-{:pending, exec} = Handler.run(catalog, skill, input, context)
+{:pending, exec} = Tool.Runner.run(catalog, skill, input, context)
 
-case Handler.resume(exec, :approved) do
+case Tool.Runner.resume(exec, :approved) do
   {:ok, exec}      -> :done
   {:error, exec}   -> :denied_or_failed
   {:pending, exec} -> :another_approval_needed
 end
 ```
 
-`resume/2` replays from the suspended step — calling `resume/3` on the handler
+`resume/2` replays from the suspended step — calling `resume/3` on the tool
 for execute steps, or re-invoking the hook function for hook steps. The
 `decision` value is passed straight through to `resume/3`.
 
-## Handler Behaviour
+## Tool Behaviour
 
-Custom handlers implement `SkillKit.Handler.Behaviour`:
+Custom tools implement `SkillKit.Tool`:
 
 ```elixir
 @callback execute(execution :: SkillKit.Pipeline.t()) ::
@@ -128,18 +128,18 @@ Custom handlers implement `SkillKit.Handler.Behaviour`:
                  decision :: :approved | {:denied, any()}) ::
             {:ok, any()} | {:error, any()} | {:pending, any()}
 
-@callback tool_definition() :: SkillKit.Handler.ToolDefinition.t()
+@callback definition() :: SkillKit.Tool.Definition.t()
 ```
 
 `execute/1` receives the full execution struct. `resume/3` receives the same
 struct, the `state` saved at suspension, and the caller's decision.
-`tool_definition/0` describes the tool for LLM tool-use schemas.
+`definition/0` describes the tool for LLM tool-use schemas.
 
-## Writing a Custom Handler
+## Writing a Custom Tool
 
 ```elixir
-defmodule MyApp.Handler.Sandbox do
-  @behaviour SkillKit.Handler.Behaviour
+defmodule MyApp.Tools.Sandbox do
+  @behaviour SkillKit.Tool
 
   alias SkillKit.Pipeline
 
@@ -162,8 +162,8 @@ defmodule MyApp.Handler.Sandbox do
   end
 
   @impl true
-  def tool_definition do
-    %SkillKit.Handler.ToolDefinition{
+  def definition do
+    %SkillKit.Tool.Definition{
       name: "sandbox",
       description: "Run a command in the sandbox environment.",
       input_schema: %{
@@ -176,22 +176,22 @@ defmodule MyApp.Handler.Sandbox do
 end
 ```
 
-To use a custom handler, create a kit module that `use SkillKit.Kit` and
-implements the handler callbacks. Skills loaded by that kit will automatically
-use it as their handler. Alternatively, register the handler via kit metadata:
+To use a custom tool, create a kit module that `use SkillKit.Kit` and
+implements the tool callbacks. Skills loaded by that kit will automatically
+use it as their tool. Alternatively, register the tool via kit metadata:
 
 ```elixir
 defmodule MyApp.SandboxKit do
   use SkillKit.Kit, name: "sandbox"
 
-  @impl SkillKit.Handler.Behaviour
-  def execute(execution), do: MyApp.Handler.Sandbox.execute(execution)
+  @impl SkillKit.Tool
+  def execute(execution), do: MyApp.Tools.Sandbox.execute(execution)
 
-  @impl SkillKit.Handler.Behaviour
-  def resume(execution, state, decision), do: MyApp.Handler.Sandbox.resume(execution, state, decision)
+  @impl SkillKit.Tool
+  def resume(execution, state, decision), do: MyApp.Tools.Sandbox.resume(execution, state, decision)
 
-  @impl SkillKit.Handler.Behaviour
-  def tool_definition, do: MyApp.Handler.Sandbox.tool_definition()
+  @impl SkillKit.Tool
+  def definition, do: MyApp.Tools.Sandbox.definition()
 end
 ```
 
@@ -203,21 +203,21 @@ SkillKit.start_agent("agents/my-agent",
 )
 ```
 
-The Catalog discovers handlers by checking `kit.metadata.handler` — any kit
-with a `:handler` key in its metadata registers itself as a handler. The
-agent's Server uses `Catalog.handler_config/1` to find the active handler,
-falling back to `SkillKit.Shell` if none is found.
+The Catalog discovers tools by checking `kit.metadata.tool` — any kit
+with a `:tool` key in its metadata registers itself as a tool. The
+agent's Server uses `Catalog.tool_config/1` to find the active tool,
+falling back to `SkillKit.Tools.Shell` if none is found.
 
 ## How Hooks Are Collected
 
-Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/4`
+Hooks are defined on skills and gathered at run time. `SkillKit.Tool.Runner.run/4`
 calls `SkillKit.Catalog.hooks/1`, which flat-maps every skill's `:hooks` list
-across all loaded kits, then filters by handler name and builds the step list
+across all loaded kits, then filters by tool name and builds the step list
 for the `%SkillKit.Pipeline{}` struct.
 
-The matcher regex is tested against only the last segment of the handler module
-name. A hook with `~r/Shell/` matches `SkillKit.Shell` but not
-`MyApp.Handler.Sandbox`. A catch-all hook can use `~r/.*/`.
+The matcher regex is tested against only the last segment of the tool module
+name. A hook with `~r/Shell/` matches `SkillKit.Tools.Shell` but not
+`MyApp.Tools.Sandbox`. A catch-all hook can use `~r/.*/`.
 
 Because hooks are lifetime-scoped to their defining skill, unregistering a
 skill implicitly deactivates all of its hooks for every subsequent pipeline run.

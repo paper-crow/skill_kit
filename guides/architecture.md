@@ -60,7 +60,7 @@ which avoids start-order coupling within the `:rest_for_one` chain.
 
 `SkillKit.Catalog` is a GenServer that aggregates kits from one or more
 providers and exposes everything the Server needs: tool definitions, tool call
-classification, skill lookup, agent lookup, hooks, and handler config.
+classification, skill lookup, agent lookup, hooks, and tool config.
 
 **Always fresh.** Every call to the Catalog invokes `list_kits/1` on each
 provider — there is no internal caching. This ensures the catalog always
@@ -74,7 +74,7 @@ Providers implement two callbacks:
 
 The Catalog unpacks kits into skills, agents, and hooks; filters skills by
 authorization scope; builds `ToolDefinition` structs for the LLM; and classifies
-each incoming tool call as one of: `:handler`, `:activate_skill`, `:builtin`,
+each incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,
 `:subagent`, or `{:module_skill, skill}`.
 
 ## Message Flow
@@ -119,13 +119,13 @@ Server receives {:mailbox_flush, messages}
         └─ if tool calls present:
                │
                ├─ classify each call via Catalog.classify/3
-               ├─ execute local tools via Handler (authorized by Scope)
+               ├─ execute local tools via Tool.Runner (authorized by Scope)
                ├─ collect results as %ToolResult{} structs
                └─ append results to message history, loop ↑
 ```
 
-The Server calls `Catalog.classify/3` before each tool execution. Local handler
-tools are dispatched to the configured Handler module. The loop continues until
+The Server calls `Catalog.classify/3` before each tool execution. Local tools
+are dispatched to the configured Tool module. The loop continues until
 the LLM responds with no tool calls or a halt condition is reached.
 
 ## Subagents
@@ -150,7 +150,7 @@ direct caller process — they communicate only through the parent Registry.
 | Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | In-memory kit provider | `SkillKit.Kit.Memory` |
 | Tool aggregation + classification | `SkillKit.Catalog` |
-| Tool execution + hooks | `SkillKit.Handler` behaviour |
+| Tool execution + hooks | `SkillKit.Tool` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |
 

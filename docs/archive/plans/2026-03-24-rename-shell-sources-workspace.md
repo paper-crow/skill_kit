@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename `SkillKit.Handler.Shell` → `SkillKit.Shell`, rename `:sources` → `:skills` throughout, and remove `:workspace` from Definition.
+**Goal:** Rename `SkillKit.Tools.Shell` → `SkillKit.Tools.Shell`, rename `:sources` → `:skills` throughout, and remove `:workspace` from Definition.
 
 **Architecture:** Mechanical rename across the codebase. Shell handler moves from `lib/skill_kit/handler/shell.ex` to `lib/skill_kit/shell.ex`. All `:sources` references become `:skills`. Definition loses `:workspace` — the Shell handler defaults to `File.cwd!()` when no cwd is in context.
 
@@ -14,13 +14,13 @@
 
 | Action | File | Change |
 |--------|------|--------|
-| Move | `lib/skill_kit/handler/shell.ex` → `lib/skill_kit/shell.ex` | Rename module to `SkillKit.Shell` |
+| Move | `lib/skill_kit/handler/shell.ex` → `lib/skill_kit/shell.ex` | Rename module to `SkillKit.Tools.Shell` |
 | Move | `test/skill_kit/handler/shell_test.exs` → `test/skill_kit/shell_test.exs` | Rename module |
-| Modify | `lib/skill_kit/handler/handler.ex` | Default handler → `SkillKit.Shell` |
+| Modify | `lib/skill_kit/handler/handler.ex` | Default handler → `SkillKit.Tools.Shell` |
 | Modify | `lib/skill_kit/handler/behaviour.ex` | Doc reference |
-| Modify | `lib/skill_kit/skill.ex` | Default handler → `SkillKit.Shell` |
-| Modify | `lib/skill_kit/agent/tool_builder.ex` | All `Handler.Shell` refs → `SkillKit.Shell` |
-| Modify | `lib/skill_kit/agent/server.ex` | `Handler.Shell` ref → `SkillKit.Shell`, remove `cwd` from context |
+| Modify | `lib/skill_kit/skill.ex` | Default handler → `SkillKit.Tools.Shell` |
+| Modify | `lib/skill_kit/agent/tool_builder.ex` | All `Tools.Shell` refs → `SkillKit.Tools.Shell` |
+| Modify | `lib/skill_kit/agent/server.ex` | `Tools.Shell` ref → `SkillKit.Tools.Shell`, remove `cwd` from context |
 | Modify | `lib/skill_kit.ex` | `:sources` → `:skills`, docs, moduledoc |
 | Modify | `lib/skill_kit/agent/agent.ex` | `:sources` → `:skills` |
 | Modify | `lib/skill_kit/agent/infrastructure.ex` | `:sources` → `:skills` |
@@ -35,13 +35,13 @@
 
 ---
 
-### Task 1: Rename `SkillKit.Handler.Shell` → `SkillKit.Shell`
+### Task 1: Rename `SkillKit.Tools.Shell` → `SkillKit.Tools.Shell`
 
 Move the file, rename the module, update all references across the codebase. This is a mechanical find-replace.
 
 **Files to modify:**
 
-Source files with `Handler.Shell` references (from grep):
+Source files with `Tools.Shell` references (from grep):
 - `lib/skill_kit/handler/shell.ex` → move to `lib/skill_kit/shell.ex`
 - `lib/skill_kit.ex` (moduledoc)
 - `lib/skill_kit/skill.ex` (default handler, docs)
@@ -68,19 +68,19 @@ git mv test/skill_kit/handler/shell_test.exs test/skill_kit/shell_test.exs
 
 - [ ] **Step 2: Rename module in the moved files**
 
-In `lib/skill_kit/shell.ex`: Change `defmodule SkillKit.Handler.Shell do` to `defmodule SkillKit.Shell do`
+In `lib/skill_kit/shell.ex`: Change `defmodule SkillKit.Tools.Shell do` to `defmodule SkillKit.Tools.Shell do`
 
 In `test/skill_kit/shell_test.exs`: Change module name and alias.
 
-- [ ] **Step 3: Replace all `SkillKit.Handler.Shell` references in source files**
+- [ ] **Step 3: Replace all `SkillKit.Tools.Shell` references in source files**
 
-In each file listed above, replace `SkillKit.Handler.Shell` with `SkillKit.Shell`. Also replace `Handler.Shell` with `Shell` where it appears after an alias (check each file for its alias pattern).
+In each file listed above, replace `SkillKit.Tools.Shell` with `SkillKit.Tools.Shell`. Also replace `Tools.Shell` with `Shell` where it appears after an alias (check each file for its alias pattern).
 
 Key changes:
-- `lib/skill_kit/skill.ex` line 54: `handler: SkillKit.Handler.Shell` → `handler: SkillKit.Shell`
-- `lib/skill_kit/handler/handler.ex` line 26: default → `SkillKit.Shell`
-- `lib/skill_kit/agent/tool_builder.ex` line 30: default handlers → `[SkillKit.Shell]`
-- `lib/skill_kit/agent/tool_builder.ex` line 46: `skill.handler == SkillKit.Handler.Shell` → `skill.handler == SkillKit.Shell`
+- `lib/skill_kit/skill.ex` line 54: `handler: SkillKit.Tools.Shell` → `handler: SkillKit.Tools.Shell`
+- `lib/skill_kit/handler/handler.ex` line 26: default → `SkillKit.Tools.Shell`
+- `lib/skill_kit/agent/tool_builder.ex` line 30: default handlers → `[SkillKit.Tools.Shell]`
+- `lib/skill_kit/agent/tool_builder.ex` line 46: `skill.handler == SkillKit.Tools.Shell` → `skill.handler == SkillKit.Tools.Shell`
 - `lib/skill_kit/agent/server.ex` line 341: same pattern
 
 - [ ] **Step 4: Replace all references in test files**
@@ -96,7 +96,7 @@ Expected: All 391 tests pass.
 
 ```bash
 git add -A  # safe here — only renames and content changes
-git commit -m "refactor: rename SkillKit.Handler.Shell to SkillKit.Shell"
+git commit -m "refactor: rename SkillKit.Tools.Shell to SkillKit.Tools.Shell"
 ```
 
 ---

@@ -43,7 +43,7 @@ defmodule PersonaChat.CLI do
 
     {:ok, agent} =
       SkillKit.start_agent("agents/lobby",
-        skills: ["skills", SkillKit.Shell],
+        skills: ["skills", SkillKit.Tools.Shell],
         scope: scope
       )
 
@@ -68,7 +68,7 @@ defmodule PersonaChat.CLI do
 
     {:ok, agent} =
       SkillKit.start_agent("#{@personas_dir}/#{persona_name}",
-        skills: ["skills", SkillKit.Shell],
+        skills: ["skills", SkillKit.Tools.Shell],
         name: "#{persona_name}:#{username}",
         scope: scope,
         conversation_store:

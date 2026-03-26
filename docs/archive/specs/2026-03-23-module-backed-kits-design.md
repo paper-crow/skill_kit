@@ -48,10 +48,10 @@ The `use SkillKit.Kit` macro:
 - Implements `SkillKit.Backend` on behalf of the module.
 - At compile time, reads `*.skill.md` files from a `skills/` directory relative to the module's source file. Uses `@external_resource` so the module recompiles when skill files change.
 - Infers the kit name from the module's last segment, downcased and underscored (e.g., `SkillKit.Scheduler` → `"scheduler"`). Override with `name:` option.
-- Sets the Kit module as the handler for all loaded skills (replaces `SkillKit.Handler.Shell`).
+- Sets the Kit module as the handler for all loaded skills (replaces `SkillKit.Tools.Shell`).
 - `load_kits/1` returns `{:ok, [%Kit{}]}` containing the parsed skills.
 - Stores the source config (the keyword list from the `{Module, config}` tuple in `:sources`) on each `%Skill{}` via `metadata["source_config"]`. This config is merged into the execution context so the Kit can access it (e.g., `oban: MyApp.Oban`).
-- Implements `SkillKit.Handler.Behaviour` on behalf of the module — generates `tool_definition/0` and a default `resume/3` that returns `{:error, :not_resumable}`. The module implements `execute/1` taking an `%Execution{}` struct.
+- Implements `SkillKit.Tool` on behalf of the module — generates `definition/0` and a default `resume/3` that returns `{:error, :not_resumable}`. The module implements `execute/1` taking an `%Execution{}` struct.
 
 Skills remain standard `.skill.md` files — no frontmatter extensions. The Kit module automatically becomes the handler. The skill body teaches the LLM what input to provide. Tool definitions are built from skill `name` + `description` with an open `{type: object}` input schema.
 
@@ -86,8 +86,8 @@ The full `Execution` struct is passed. Handlers destructure what they need — `
 
 | Module | Change |
 |--------|--------|
-| `Handler.Behaviour` | `execute/2` → `execute/1`, `resume/3` → `resume/3`, takes `Execution` |
-| `Handler.Shell` | Destructures `%Execution{input: %{"command" => command}, context: ctx}` |
+| `Tool` | `execute/2` → `execute/1`, `resume/3` → `resume/3`, takes `Execution` |
+| `Tools.Shell` | Destructures `%Execution{input: %{"command" => command}, context: ctx}` |
 | `Execution` | `command:` field → `input:`, type `String.t()` → `map()` |
 | `Execution` | `update_command/2` → `update_input/2` |
 | `Execution` | `build_pre_context` — `:command` key → `:input` |
@@ -153,7 +153,7 @@ defp activate_skill(%Message.ToolCall{} = tc, state) do
 
   # Track activation for module-backed skills
   state =
-    if skill.handler != SkillKit.Handler.Shell do
+    if skill.handler != SkillKit.Tools.Shell do
       %{state | activated_skills: [skill | state.activated_skills]}
     else
       state
@@ -169,11 +169,11 @@ end
 
 ```elixir
 def build_tools(kits, opts \\ []) do
-  handlers = Keyword.get(opts, :handlers, [SkillKit.Handler.Shell])
+  handlers = Keyword.get(opts, :handlers, [SkillKit.Tools.Shell])
   activated_skills = Keyword.get(opts, :activated_skills, [])
   all_skills = Enum.flat_map(kits, & &1.skills)
 
-  handler_tools = Enum.map(handlers, & &1.tool_definition())
+  handler_tools = Enum.map(handlers, & &1.definition())
 
   # Activated module-backed skills get their own tools
   activated_tools = Enum.map(activated_skills, &skill_to_tool/1)

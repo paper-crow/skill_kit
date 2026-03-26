@@ -76,7 +76,7 @@ test/skill_kit/agent/tool_builder_test.exs  # Tests migrate to catalog_test.exs
 - Modify: `examples/**/AGENT.md` (remove capabilities lines)
 - Modify: `test/` (update any tests referencing capabilities)
 
-The `capabilities` field is unnecessary — what tools the agent has access to is determined by its configured providers and the kits they contain. `activate_skill` is available if the agent has skills. `bash` is available if `SkillKit.Shell` is a provider. No need to redeclare.
+The `capabilities` field is unnecessary — what tools the agent has access to is determined by its configured providers and the kits they contain. `activate_skill` is available if the agent has skills. `bash` is available if `SkillKit.Tools.Shell` is a provider. No need to redeclare.
 
 `resolve_capabilities` (which injected skill bodies into the system prompt) is deleted — skills enter context only through progressive disclosure.
 
@@ -647,9 +647,9 @@ defmodule SkillKit.CatalogNewTest do
     end
   end
 
-  describe "tool_definitions/1" do
+  describe "definitions/1" do
     test "returns tool definitions for the LLM", %{catalog: catalog} do
-      tools = Catalog.tool_definitions(catalog)
+      tools = Catalog.definitions(catalog)
 
       assert is_list(tools)
       # Should include activate_skill at minimum
@@ -681,7 +681,7 @@ defmodule SkillKit.CatalogNewTest do
       activated = %Skill{name: "custom:tool", handler: SomeHandler, description: "Custom"}
       result = Catalog.classify(catalog, "custom_tool_name", [activated])
 
-      # Will return {:module_skill, skill} if the handler's tool_definition name matches
+      # Will return {:module_skill, skill} if the handler's definition name matches
       # Exact assertion depends on handler mock — test verifies the code path exists
       assert result in [:handler, {:module_skill, activated}]
     end
@@ -788,7 +788,7 @@ defmodule SkillKit.CatalogNew do
   require Logger
 
   alias SkillKit.Authorization
-  alias SkillKit.Handler.ToolDefinition
+  alias SkillKit.Tool.Definition
   alias SkillKit.Scope
 
   defstruct [:providers, :scope, routing_index: %{}]
@@ -831,8 +831,8 @@ defmodule SkillKit.CatalogNew do
   end
 
   @doc "Returns tool definitions ready for the LLM."
-  def tool_definitions(catalog, opts \\ []) do
-    GenServer.call(catalog, {:tool_definitions, opts})
+  def definitions(catalog, opts \\ []) do
+    GenServer.call(catalog, {:definitions, opts})
   end
 
   @doc "Classifies a tool name by type."
@@ -904,7 +904,7 @@ defmodule SkillKit.CatalogNew do
   end
 
   @impl true
-  def handle_call({:tool_definitions, opts}, _from, state) do
+  def handle_call({:definitions, opts}, _from, state) do
     {skills, state} = load_all_skills(state)
     permissions = resolve_permissions(state.scope)
     authorized = filter_authorized(skills, permissions)
@@ -914,7 +914,7 @@ defmodule SkillKit.CatalogNew do
     is_subagent = Keyword.get(opts, :subagent, false)
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
-    tools = build_tool_definitions(authorized, agents, kits, is_subagent, activated_skills)
+    tools = build_definitions(authorized, agents, kits, is_subagent, activated_skills)
     {:reply, tools, state}
   end
 
@@ -1041,7 +1041,7 @@ defmodule SkillKit.CatalogNew do
     Enum.flat_map(kit.skills, fn skill -> skill.hooks || [] end)
   end
 
-  defp build_tool_definitions(skills, agents, kits, is_subagent, activated_skills) do
+  defp build_definitions(skills, agents, kits, is_subagent, activated_skills) do
     skill_tool = activate_skill_tool(skills)
     handler_tools = discover_handler_tools(kits)
     agent_tools = build_agent_tools(agents)
@@ -1090,7 +1090,7 @@ defmodule SkillKit.CatalogNew do
     |> Enum.filter(&handler_module?/1)
     |> Enum.map(fn kit ->
       module = kit.metadata[:handler] || kit.metadata["handler"]
-      module.tool_definition()
+      module.definition()
     end)
   end
 
@@ -1119,12 +1119,12 @@ defmodule SkillKit.CatalogNew do
     Enum.filter(activated_skills, &module_backed?/1)
     |> Enum.map(fn skill ->
       module = skill.handler
-      module.tool_definition()
+      module.definition()
     end)
   end
 
   defp module_backed?(skill) do
-    skill.handler != nil and skill.handler != SkillKit.Shell
+    skill.handler != nil and skill.handler != SkillKit.Tools.Shell
   end
 
   defp builtin_tools do
@@ -1164,7 +1164,7 @@ defmodule SkillKit.CatalogNew do
 
     activated_module_skill =
       Enum.find(activated_skills, fn skill ->
-        module_backed?(skill) and skill.handler.tool_definition().name == tool_name
+        module_backed?(skill) and skill.handler.definition().name == tool_name
       end)
 
     cond do
@@ -1230,7 +1230,7 @@ end
 Update the `defoverridable` line to include the new functions:
 
 ```elixir
-defoverridable resume: 3, tool_definition: 0, load_kits: 1, list_kits: 1, get_kit: 2
+defoverridable resume: 3, definition: 0, load_kits: 1, list_kits: 1, get_kit: 2
 ```
 
 - [ ] **Step 2: Verify all tests pass**
@@ -1305,7 +1305,7 @@ Replace the `ToolBuilder.build_tools` call (lines 207-211):
 tools = ToolBuilder.build_tools(state.kits, subagent: state.depth > 0, activated_skills: state.activated_skills)
 
 # NEW:
-tools = SkillKit.CatalogNew.tool_definitions(catalog(state),
+tools = SkillKit.CatalogNew.definitions(catalog(state),
   subagent: state.depth > 0,
   activated_skills: state.activated_skills)
 ```

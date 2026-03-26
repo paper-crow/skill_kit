@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Register `SkillKit.Shell` through the `skills:` mechanism like any other Backend/Kit, removing hardcoded Shell defaults from ToolBuilder and Handler.
+**Goal:** Register `SkillKit.Tools.Shell` through the `skills:` mechanism like any other Backend/Kit, removing hardcoded Shell defaults from ToolBuilder and Handler.
 
-**Architecture:** `SkillKit.Shell` implements `Backend` (returning a kit with the bash tool and handler config in metadata). ToolBuilder discovers handler tools from kits instead of a hardcoded list. `Handler.run/3` receives the handler module explicitly instead of reading app config. Shell's cwd/env config flows through kit metadata to the pipeline context.
+**Architecture:** `SkillKit.Tools.Shell` implements `Backend` (returning a kit with the bash tool and handler config in metadata). ToolBuilder discovers handler tools from kits instead of a hardcoded list. `Tool.Runner.run/3` receives the handler module explicitly instead of reading app config. Shell's cwd/env config flows through kit metadata to the pipeline context.
 
 **Tech Stack:** Elixir, SkillKit
 
@@ -17,20 +17,20 @@
 | Modify | `lib/skill_kit/shell.ex` | Add `@behaviour SkillKit.Backend`, implement `load_kits/1` |
 | Modify | `lib/skill_kit/agent/tool_builder.ex` | Remove hardcoded `:handlers` default, discover from kits |
 | Modify | `lib/skill_kit/handler/handler.ex` | `run/3` accepts handler module as parameter |
-| Modify | `lib/skill_kit/agent/server.ex` | Pass handler from kits to Handler.run, merge handler config into context |
+| Modify | `lib/skill_kit/agent/server.ex` | Pass handler from kits to Tool.Runner.run, merge handler config into context |
 | Modify | `lib/skill_kit/agent/agent.ex` | Remove handler config default |
-| Modify | `lib/mix/tasks/skill_kit.chat.ex` | Add `{SkillKit.Shell, []}` to skills |
-| Modify | `lib/mix/tasks/skill_kit.demo.ex` | Add `{SkillKit.Shell, []}` to skills |
-| Modify | `examples/persona_chat/lib/persona_chat/cli.ex` | Add `{SkillKit.Shell, []}` to skills |
+| Modify | `lib/mix/tasks/skill_kit.chat.ex` | Add `{SkillKit.Tools.Shell, []}` to skills |
+| Modify | `lib/mix/tasks/skill_kit.demo.ex` | Add `{SkillKit.Tools.Shell, []}` to skills |
+| Modify | `examples/persona_chat/lib/persona_chat/cli.ex` | Add `{SkillKit.Tools.Shell, []}` to skills |
 | Modify | Various test files | Add Shell to skills where agents need bash |
 
 ---
 
-### Task 1: Make SkillKit.Shell a Kit
+### Task 1: Make SkillKit.Tools.Shell a Kit
 
-`SkillKit.Shell` currently implements `Handler.Behaviour` manually. Convert it to `use SkillKit.Kit` which gives it both `Backend` and `Handler.Behaviour` — the same pattern as any module-backed kit. The default `skills_dir` will point to a nonexistent `skills/` folder next to `shell.ex`, which is fine — `Path.wildcard` returns `[]` for missing directories, so the kit loads with zero file-based skills.
+`SkillKit.Tools.Shell` currently implements `Tool` manually. Convert it to `use SkillKit.Kit` which gives it both `Backend` and `Tool` — the same pattern as any module-backed kit. The default `skills_dir` will point to a nonexistent `skills/` folder next to `shell.ex`, which is fine — `Path.wildcard` returns `[]` for missing directories, so the kit loads with zero file-based skills.
 
-Shell overrides `execute/1`, `tool_definition/0`, and `resume/3` (all already implemented). The macro generates `load_kits/1` automatically.
+Shell overrides `execute/1`, `definition/0`, and `resume/3` (all already implemented). The macro generates `load_kits/1` automatically.
 
 However, Shell needs to pass its config (cwd, env) through the kit. The macro's generated `load_kits/1` calls `Kit.do_load_kits` which doesn't carry config metadata. We need to **override `load_kits/1`** to merge the caller's config into the kit's metadata.
 
@@ -45,17 +45,17 @@ Add to `test/skill_kit/shell_test.exs`:
 ```elixir
 describe "load_kits/1 (Backend)" do
   test "returns a kit named shell" do
-    assert {:ok, [kit]} = SkillKit.Shell.load_kits([])
+    assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits([])
     assert kit.name == "shell"
   end
 
   test "stores cwd in metadata when provided" do
-    assert {:ok, [kit]} = SkillKit.Shell.load_kits(cwd: "/tmp")
+    assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits(cwd: "/tmp")
     assert kit.metadata.cwd == "/tmp"
   end
 
   test "stores env in metadata when provided" do
-    assert {:ok, [kit]} = SkillKit.Shell.load_kits(env: [{"FOO", "bar"}])
+    assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits(env: [{"FOO", "bar"}])
     assert kit.metadata.env == [{"FOO", "bar"}]
   end
 end
@@ -71,7 +71,7 @@ Expected: Fail — `load_kits/1` doesn't exist yet.
 Rewrite `lib/skill_kit/shell.ex`:
 
 ```elixir
-defmodule SkillKit.Shell do
+defmodule SkillKit.Tools.Shell do
   @moduledoc """
   Shell handler kit — provides bash command execution.
 
@@ -79,7 +79,7 @@ defmodule SkillKit.Shell do
 
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Shell, cwd: File.cwd!()},
+          {SkillKit.Tools.Shell, cwd: File.cwd!()},
           {SkillKit.Backend.Filesystem, dir: ".skills"}
         ]
       )
@@ -102,7 +102,7 @@ defmodule SkillKit.Shell do
     {:ok, [%{kit | metadata: metadata}]}
   end
 
-  @impl SkillKit.Handler.Behaviour
+  @impl SkillKit.Tool
   def execute(%Pipeline{input: %{"command" => command}, context: context}) do
     opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
 
@@ -115,9 +115,9 @@ defmodule SkillKit.Shell do
     collect(port, [])
   end
 
-  @impl SkillKit.Handler.Behaviour
-  def tool_definition do
-    %SkillKit.Handler.ToolDefinition{
+  @impl SkillKit.Tool
+  def definition do
+    %SkillKit.Tool.Definition{
       name: "bash",
       description:
         "Execute a shell command. Use for running scripts, reading/writing files, " <>
@@ -136,7 +136,7 @@ defmodule SkillKit.Shell do
     }
   end
 
-  @impl SkillKit.Handler.Behaviour
+  @impl SkillKit.Tool
   def resume(%Pipeline{} = exec, _state, :approved), do: execute(exec)
   def resume(_exec, _state, {:denied, reason}), do: {:error, {:denied, reason}}
 
@@ -183,11 +183,11 @@ end
 
 Note: `super(config)` calls the macro-generated `load_kits/1` which loads from the (nonexistent) skills dir and returns `{:ok, [%Kit{name: "shell", skills: []}]}`. We merge our config metadata on top.
 
-IMPORTANT: The `use SkillKit.Kit` macro generates `load_kits/1` as `defoverridable` — wait, actually it only marks `resume: 3, tool_definition: 0` as overridable, NOT `load_kits/1`. Check the macro — if `load_kits/1` is not overridable, we need to add it to the `defoverridable` list in the Kit macro first.
+IMPORTANT: The `use SkillKit.Kit` macro generates `load_kits/1` as `defoverridable` — wait, actually it only marks `resume: 3, definition: 0` as overridable, NOT `load_kits/1`. Check the macro — if `load_kits/1` is not overridable, we need to add it to the `defoverridable` list in the Kit macro first.
 
 Read `lib/skill_kit/kit.ex` line 79 to confirm. If `load_kits` is not overridable, add it:
 ```elixir
-defoverridable resume: 3, tool_definition: 0, load_kits: 1
+defoverridable resume: 3, definition: 0, load_kits: 1
 ```
 
 - [ ] **Step 4: Run tests**
@@ -206,8 +206,8 @@ Expected: All pass — Shell still implements the same callbacks.
 git add lib/skill_kit/shell.ex lib/skill_kit/kit.ex test/skill_kit/shell_test.exs
 git commit -m "refactor(shell): convert to use SkillKit.Kit for uniform registration"
 ```
-- `tool_definition/0` → `@impl SkillKit.Handler.Behaviour`
-- `resume/3` → `@impl SkillKit.Handler.Behaviour`
+- `definition/0` → `@impl SkillKit.Tool`
+- `resume/3` → `@impl SkillKit.Tool`
 
 - [ ] **Step 4: Run tests**
 
@@ -225,7 +225,7 @@ git commit -m "feat(shell): implement Backend behaviour for kit-based registrati
 
 ### Task 2: ToolBuilder discovers handlers from kits
 
-Currently `build_tools` has `handlers: [SkillKit.Shell]` as a default. Change it to discover handler kits from the kit list — any kit with `metadata.handler` provides a handler tool.
+Currently `build_tools` has `handlers: [SkillKit.Tools.Shell]` as a default. Change it to discover handler kits from the kit list — any kit with `metadata.handler` provides a handler tool.
 
 **Files:**
 - Modify: `lib/skill_kit/agent/tool_builder.ex`
@@ -237,8 +237,8 @@ Add to `test/skill_kit/agent/tool_builder_test.exs`:
 
 ```elixir
 test "discovers handler tools from kits with metadata.handler" do
-  shell_kit = %Kit{name: "shell", metadata: %{handler: SkillKit.Shell}}
-  skill_kit = %Kit{name: "my_kit", skills: [%Skill{name: "my_kit:test", description: "test", handler: SkillKit.Shell}]}
+  shell_kit = %Kit{name: "shell", metadata: %{handler: SkillKit.Tools.Shell}}
+  skill_kit = %Kit{name: "my_kit", skills: [%Skill{name: "my_kit:test", description: "test", handler: SkillKit.Tools.Shell}]}
   tools = ToolBuilder.build_tools([shell_kit, skill_kit])
 
   tool_names = Enum.map(tools, & &1.name)
@@ -246,7 +246,7 @@ test "discovers handler tools from kits with metadata.handler" do
 end
 
 test "no bash tool when Shell kit not in kits list" do
-  skill_kit = %Kit{name: "my_kit", skills: [%Skill{name: "my_kit:test", description: "test", handler: SkillKit.Shell}]}
+  skill_kit = %Kit{name: "my_kit", skills: [%Skill{name: "my_kit:test", description: "test", handler: SkillKit.Tools.Shell}]}
   tools = ToolBuilder.build_tools([skill_kit])
 
   tool_names = Enum.map(tools, & &1.name)
@@ -299,7 +299,7 @@ end
 defp discover_handler_tools(kits) do
   kits
   |> Enum.filter(&Map.has_key?(&1.metadata, :handler))
-  |> Enum.map(fn kit -> kit.metadata.handler.tool_definition() end)
+  |> Enum.map(fn kit -> kit.metadata.handler.definition() end)
 end
 
 defp handler_modules_from_kits(kits) do
@@ -309,14 +309,14 @@ defp handler_modules_from_kits(kits) do
 end
 ```
 
-Also update the `classifier/2` — currently it checks if a tool name is NOT activate_skill, subagent, or builtin, and defaults to `:handler`. This still works since the handler routing in server.ex just calls `Handler.run`. No change needed to classifier.
+Also update the `classifier/2` — currently it checks if a tool name is NOT activate_skill, subagent, or builtin, and defaults to `:handler`. This still works since the handler routing in server.ex just calls `Tool.Runner.run`. No change needed to classifier.
 
 - [ ] **Step 4: Update existing tests**
 
 Many existing ToolBuilder tests construct kits without a Shell handler kit. They'll lose the bash tool. Update tests that expect bash to include a Shell kit:
 
 ```elixir
-@shell_kit %Kit{name: "shell", metadata: %{handler: SkillKit.Shell}}
+@shell_kit %Kit{name: "shell", metadata: %{handler: SkillKit.Tools.Shell}}
 ```
 
 Add this kit to the kit lists in tests that expect bash tool to be present.
@@ -337,18 +337,18 @@ git commit -m "refactor(tool-builder): discover handler tools from kits instead 
 
 ---
 
-### Task 3: Handler.run receives handler explicitly
+### Task 3: Tool.Runner.run receives handler explicitly
 
-`Handler.run/3` currently reads the handler from app config. Change it to accept the handler module as a parameter. The server is the one that knows which handler to use.
+`Tool.Runner.run/3` currently reads the handler from app config. Change it to accept the handler module as a parameter. The server is the one that knows which handler to use.
 
 **Files:**
 - Modify: `lib/skill_kit/handler/handler.ex`
 - Modify: `lib/skill_kit/agent/server.ex`
 - Modify: `test/skill_kit/handler_test.exs`
 
-- [ ] **Step 1: Update Handler.run/3 to accept handler**
+- [ ] **Step 1: Update Tool.Runner.run/3 to accept handler**
 
-Change `Handler.run/3` signature from `run(registry, input, context)` to `run(handler, registry, input, context)`:
+Change `Tool.Runner.run/3` signature from `run(registry, input, context)` to `run(handler, registry, input, context)`:
 
 ```elixir
 def run(handler, registry, input, context) do
@@ -364,13 +364,13 @@ def run(handler, registry, input, context) do
 end
 ```
 
-Remove the `Application.get_env(:skill_kit, :handler, SkillKit.Shell)` line.
+Remove the `Application.get_env(:skill_kit, :handler, SkillKit.Tools.Shell)` line.
 
 Keep `run/4` (skill-based) unchanged — it already gets the handler from `skill.handler`.
 
 - [ ] **Step 2: Update server.ex to pass handler**
 
-In `lib/skill_kit/agent/server.ex`, the `execute_command/2` function calls `Handler.run(skill_registry, input, context)`. It needs to find the handler module from kits and pass it:
+In `lib/skill_kit/agent/server.ex`, the `execute_command/2` function calls `Tool.Runner.run(skill_registry, input, context)`. It needs to find the handler module from kits and pass it:
 
 ```elixir
 defp execute_command(%ToolCall{id: id, input: input}, state) do
@@ -378,14 +378,14 @@ defp execute_command(%ToolCall{id: id, input: input}, state) do
   context = build_handler_context(state)
   skill_registry = {:via, Registry, {state.registry, {state.agent_name, :skill_registry}}}
 
-  case SkillKit.Handler.run(handler, skill_registry, input, context) do
+  case SkillKit.Tool.Runner.run(handler, skill_registry, input, context) do
     # ... unchanged
   end
 end
 
 defp find_handler(kits) do
   kit = Enum.find(kits, &Map.has_key?(&1.metadata, :handler))
-  if kit, do: kit.metadata.handler, else: raise("No handler registered — add {SkillKit.Shell, []} to skills")
+  if kit, do: kit.metadata.handler, else: raise("No handler registered — add {SkillKit.Tools.Shell, []} to skills")
 end
 
 defp build_handler_context(state) do
@@ -412,7 +412,7 @@ Also update `execute_module_skill` which builds its own context — remove `cwd:
 
 - [ ] **Step 3: Update handler tests**
 
-Tests for `Handler.run` that don't pass a handler will break. Update them to pass `SkillKit.Shell` as the first arg.
+Tests for `Tool.Runner.run` that don't pass a handler will break. Update them to pass `SkillKit.Tools.Shell` as the first arg.
 
 - [ ] **Step 4: Run tests**
 
@@ -430,7 +430,7 @@ git commit -m "refactor(handler): receive handler module explicitly, remove app 
 
 ### Task 4: Add Shell to skills in callers
 
-Now that Shell isn't hardcoded, every agent that needs bash must include `{SkillKit.Shell, []}` in its skills. Update all callers.
+Now that Shell isn't hardcoded, every agent that needs bash must include `{SkillKit.Tools.Shell, []}` in its skills. Update all callers.
 
 **Files:**
 - Modify: `lib/mix/tasks/skill_kit.chat.ex`
@@ -443,7 +443,7 @@ Now that Shell isn't hardcoded, every agent that needs bash must include `{Skill
 
 In `lib/mix/tasks/skill_kit.chat.ex`, add Shell to skills:
 
-Find the `start_agent` call and add `{SkillKit.Shell, []}` to the skills list.
+Find the `start_agent` call and add `{SkillKit.Tools.Shell, []}` to the skills list.
 
 Same for `lib/mix/tasks/skill_kit.demo.ex`.
 
@@ -456,7 +456,7 @@ In `examples/persona_chat/lib/persona_chat/cli.ex`, both `start_agent` calls nee
 SkillKit.start_agent(
   skills: [
     {SkillKit.Backend.Filesystem, dir: ".skills"},
-    {SkillKit.Shell, []}
+    {SkillKit.Tools.Shell, []}
   ],
   scope: scope
 )
@@ -466,7 +466,7 @@ SkillKit.start_agent(
   skills: [
     {SkillKit.Backend.Filesystem, dir: persona_dir},
     {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"},
-    {SkillKit.Shell, []}
+    {SkillKit.Tools.Shell, []}
   ],
   ...
 )
@@ -474,7 +474,7 @@ SkillKit.start_agent(
 
 - [ ] **Step 3: Update test helper**
 
-In `lib/skill_kit/test.ex`, if there's a default skills list for test agents, add `{SkillKit.Shell, []}`.
+In `lib/skill_kit/test.ex`, if there's a default skills list for test agents, add `{SkillKit.Tools.Shell, []}`.
 
 - [ ] **Step 4: Update integration tests**
 
@@ -511,7 +511,7 @@ In `lib/skill_kit.ex` moduledoc, remove the handler config example:
 ```elixir
 # Remove this:
     # Default handler
-    config :skill_kit, :handler, SkillKit.Shell
+    config :skill_kit, :handler, SkillKit.Tools.Shell
 ```
 
 In `lib/skill_kit/handler/handler.ex`, update docs to remove config reference.

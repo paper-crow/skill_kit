@@ -121,10 +121,10 @@ defmodule SkillKit.MixProject do
           SkillKit.Frontmatter
         ],
         "Execution & Hooks": [
-          SkillKit.Handler,
-          SkillKit.Handler.Behaviour,
-          SkillKit.Shell,
-          SkillKit.Handler.ToolDefinition,
+          SkillKit.Tool.Runner,
+          SkillKit.Tool,
+          SkillKit.Tools.Shell,
+          SkillKit.Tool.Definition,
           SkillKit.Pipeline,
           SkillKit.Hook
         ],

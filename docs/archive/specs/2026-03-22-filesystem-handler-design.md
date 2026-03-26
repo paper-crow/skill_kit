@@ -8,7 +8,7 @@ The only way agents can read and write files is through bash commands (`cat`, `e
 
 ### Handler
 
-`SkillKit.Handler.Filesystem` — implements `SkillKit.Handler.Behaviour`. One module providing three tools: `read`, `write`, `edit`.
+`SkillKit.Tools.Filesystem` — implements `SkillKit.Tool`. One module providing three tools: `read`, `write`, `edit`.
 
 #### Tool Definitions
 
@@ -40,15 +40,15 @@ All paths are resolved relative to `context.cwd` (the agent's workspace from Def
 
 #### Tool definitions
 
-The behaviour currently has `tool_definition/0` (singular). Since Filesystem provides three tools, we add `tool_definitions/0` (plural) that returns a list. `tool_definition/0` remains for single-tool handlers like Shell. ToolBuilder checks for both.
+The behaviour currently has `definition/0` (singular). Since Filesystem provides three tools, we add `definitions/0` (plural) that returns a list. `definition/0` remains for single-tool handlers like Shell. ToolBuilder checks for both.
 
 ### Configurable Handler List
 
 ```elixir
-config :skill_kit, :handlers, [SkillKit.Handler.Shell, SkillKit.Handler.Filesystem]
+config :skill_kit, :handlers, [SkillKit.Tools.Shell, SkillKit.Tools.Filesystem]
 ```
 
-Defaults to `[SkillKit.Handler.Shell]` (backward compatible). ToolBuilder reads this config to build the handler tool list.
+Defaults to `[SkillKit.Tools.Shell]` (backward compatible). ToolBuilder reads this config to build the handler tool list.
 
 ### Server Routing
 
@@ -66,8 +66,8 @@ Since handler calls go through the `Execution` pipeline via `Handler.run/3`, hoo
 ## Scope
 
 ### In scope
-- `SkillKit.Handler.Filesystem` with read/write/edit operations
-- `tool_definitions/0` (plural) on handler behaviour
+- `SkillKit.Tools.Filesystem` with read/write/edit operations
+- `definitions/0` (plural) on handler behaviour
 - `config :skill_kit, :handlers` — configurable handler list
 - Server routing by tool name to correct handler
 - Path safety (relative to workspace, no `..` escape)

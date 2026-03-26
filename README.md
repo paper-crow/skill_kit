@@ -36,7 +36,7 @@ Or use the API directly:
 ```elixir
 # Point at a directory containing an AGENT.md
 {:ok, agent} = SkillKit.start_agent("agents/neve",
-  skills: ["skills", SkillKit.Shell],
+  skills: ["skills", SkillKit.Tools.Shell],
   caller: self()
 )
 
@@ -109,7 +109,7 @@ hooks:
           command: "echo 'hook fired'"
 ```
 
-Hooks run in a pipeline: pre-hooks, handler execution, post-hooks. Pre-hooks
+Hooks run in a pipeline: pre-hooks, tool execution, post-hooks. Pre-hooks
 can modify input, deny execution, or suspend for human-in-the-loop approval.
 
 ### [Subagents](guides/architecture.md)
@@ -166,7 +166,7 @@ mix persona_chat --user alice --persona captain_nova
 | Conversation persistence | Per-user conversation isolation via `Conversation.Store.Filesystem` |
 | Scope-based authorization | Owner vs visitor permissions — owners create/delete, visitors chat |
 | Scope variable resolution | `$USERNAME` and `$PERSONA` replaced in skill bodies and system prompts |
-| Shell handler as kit | `SkillKit.Shell` registered alongside filesystem kits |
+| Shell tool as kit | `SkillKit.Tools.Shell` registered alongside filesystem kits |
 
 Only two `.ex` files in the example. Everything else is markdown.
 
@@ -199,7 +199,7 @@ option listing additional kits. Both accept three forms:
 | Form | Resolves to | Example |
 |---|---|---|
 | `"path"` (string) | `{SkillKit.Kit.Local, dir: "path"}` | `"skills"` loads `skills/` directory |
-| `Module` (bare atom) | `{Module, []}` | `SkillKit.Shell` adds bash execution |
+| `Module` (bare atom) | `{Module, []}` | `SkillKit.Tools.Shell` adds bash execution |
 | `{Module, opts}` (tuple) | Used as-is | `{SkillKit.Kit.Local, dir: "/abs/path"}` |
 
 The agent's own kit is auto-included in the tool pool. When you pass
@@ -210,9 +210,9 @@ available tools — no need to list it again in `skills:`.
 ```elixir
 # "agents/neve" provides the agent identity + its own skills.
 # "skills" adds a shared skills directory.
-# SkillKit.Shell adds bash tool execution.
+# SkillKit.Tools.Shell adds bash tool execution.
 SkillKit.start_agent("agents/neve",
-  skills: ["skills", SkillKit.Shell],
+  skills: ["skills", SkillKit.Tools.Shell],
   scope: my_scope,
   conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"}
 )
@@ -220,7 +220,7 @@ SkillKit.start_agent("agents/neve",
 
 Module-backed kits (`use SkillKit.Kit`) work the same way — they implement
 both the `Kit.Provider` behaviour (to load skills from a co-located `skills/`
-directory) and `Handler.Behaviour` (to execute them). See the
+directory) and `Tool` (to execute them). See the
 [Providers guide](guides/providers.md) for details.
 
 ## Configuration
@@ -279,7 +279,7 @@ tree, message flow, and module boundaries.
 - [Architecture](guides/architecture.md) — supervision tree, message flow, module boundaries
 - [Skill Format](guides/skill-format.md) — `SKILL.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
 - [Providers](guides/providers.md) — writing and registering kit providers (`Kit.Local`, `Kit.Memory`, custom)
-- [Hooks and Execution](guides/hooks-and-execution.md) — handler pipeline, pre/post hooks, suspension and resumption
+- [Hooks and Execution](guides/hooks-and-execution.md) — tool execution pipeline, pre/post hooks, suspension and resumption
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter
 - [Conversations](guides/conversations.md) — conversation persistence and custom stores

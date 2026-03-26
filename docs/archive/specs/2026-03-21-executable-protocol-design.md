@@ -17,7 +17,7 @@ The [Agent Skills open standard](https://agentskills.io) and [Claude Code plugin
 
 ### Skill Struct (simplified)
 
-`%SkillKit.Skill{}` becomes pure data. The behaviour callbacks and `:type`/`:module` fields are removed. An `:handler` field holds the module responsible for running commands, defaulting to `SkillKit.Handler.Shell`. A `:hooks` field holds hook definitions that fire when *any* skill executes a command.
+`%SkillKit.Skill{}` becomes pure data. The behaviour callbacks and `:type`/`:module` fields are removed. An `:handler` field holds the module responsible for running commands, defaulting to `SkillKit.Tools.Shell`. A `:hooks` field holds hook definitions that fire when *any* skill executes a command.
 
 ```elixir
 defstruct [
@@ -27,7 +27,7 @@ defstruct [
   :body,            # markdown skill instructions (SKILL.md body after frontmatter)
   :location,        # absolute path to SKILL.md (aligned with Agent Skills spec)
   required_scope: [],
-  handler: SkillKit.Handler.Shell,
+  tool: SkillKit.Tools.Shell,
   hooks: []         # list of %Hook{} definitions — scoped to skill lifetime
 ]
 ```
@@ -38,7 +38,7 @@ New fields: `:handler`, `:hooks`.
 
 > **CHANGED from v1:** The handler field is only set at runtime registration, never parsed from YAML frontmatter. This preserves the `atoms: false` YAML security policy — no string-to-atom conversion from untrusted skill files. The Loader does not parse `handler` from frontmatter.
 
-> **CHANGED from v1:** `Skill.execute/3` is removed entirely. The orchestrator (`SkillKit.Handler.run/4`) is the sole public entry point for execution. This prevents bypassing hooks via a convenience wrapper on the struct.
+> **CHANGED from v1:** `Skill.execute/3` is removed entirely. The orchestrator (`SkillKit.Tool.Runner.run/4`) is the sole public entry point for execution. This prevents bypassing hooks via a convenience wrapper on the struct.
 
 ### Rendering (preprocessing — separate from execution)
 
@@ -71,7 +71,7 @@ This is the evolution of the old `interpolate/2` — same concept (template expa
 A simple contract that any handler module must implement:
 
 ```elixir
-defmodule SkillKit.Handler.Behaviour do
+defmodule SkillKit.Tool do
   @callback execute(command :: String.t(), context :: map()) ::
               {:ok, any()} | {:error, any()} | {:pending, state :: any()}
 
@@ -112,8 +112,8 @@ The orchestrator enriches this context before passing it to hooks and the handle
 The default handler that shells out via `System.cmd/3`:
 
 ```elixir
-defmodule SkillKit.Handler.Shell do
-  @behaviour SkillKit.Handler.Behaviour
+defmodule SkillKit.Tools.Shell do
+  @behaviour SkillKit.Tool
 
   @impl true
   def execute(command, _context) do
@@ -203,7 +203,7 @@ Walks the step list sequentially:
 - **Suspension at any point** — pre-hooks, handler, and post-hooks can all return `{:pending, state}`
 - **Named steps** — like `Ecto.Multi`, each step has a name for lookup and debugging
 
-> **Convenience:** `SkillKit.Handler.run/4` remains as a shortcut that builds and runs the pipeline in one call, for callers that don't need pipeline inspection or suspension support.
+> **Convenience:** `SkillKit.Tool.Runner.run/4` remains as a shortcut that builds and runs the pipeline in one call, for callers that don't need pipeline inspection or suspension support.
 
 ### Hook Struct
 
@@ -260,7 +260,7 @@ Post-hook handlers return the result that the next step (or caller) receives:
 
 > **Design note:** Pre-hooks short-circuit on the first `:deny`. If multiple pre-hooks match, they run sequentially and each receives the (potentially modified) command from the previous hook. When multiple post-hooks match, they chain — each receives the result returned by the previous hook (or the handler's result for the first hook).
 
-> **Handler name extraction:** The matcher regex runs against the unqualified module name — the last segment after the final dot. `SkillKit.Handler.Shell` becomes `"Shell"`, `MyApp.Handler.Docker` becomes `"Docker"`. Extracted via `Module.split(module) |> List.last()`.
+> **Handler name extraction:** The matcher regex runs against the unqualified module name — the last segment after the final dot. `SkillKit.Tools.Shell` becomes `"Shell"`, `MyApp.Handler.Docker` becomes `"Docker"`. Extracted via `Module.split(module) |> List.last()`.
 
 **Hooks are global but lifetime-scoped:**
 
@@ -361,10 +361,10 @@ Authorization filtering happens at tier 1 — filtered skills are hidden entirel
 
 ### New modules
 - `SkillKit.Catalog` — public API layer over Registry with authorization filtering and activation
-- `SkillKit.Handler.Behaviour` — callback contract for handlers (`execute/2`, `resume/3`)
-- `SkillKit.Handler.Shell` — default shell handler via `System.cmd/3`
+- `SkillKit.Tool` — callback contract for handlers (`execute/2`, `resume/3`)
+- `SkillKit.Tools.Shell` — default shell handler via `System.cmd/3`
 - `SkillKit.Execution` — named pipeline struct (steps, results, status, suspension point) inspired by `Ecto.Multi`
-- `SkillKit.Handler` — builds and runs `%Execution{}` pipelines; convenience `run/4` shortcut
+- `SkillKit.Tool.Runner` — builds and runs `%Execution{}` pipelines; convenience `run/4` shortcut
 - `SkillKit.Hook` — hook struct with phase, matcher, and handler
 
 ## Summary of Changes from v1

@@ -127,7 +127,7 @@ from a `skills/` directory co-located with the module's source file.
 defmodule MyApp.FilesKit do
   use SkillKit.Kit
 
-  @impl SkillKit.Handler.Behaviour
+  @impl SkillKit.Tool
   def execute(%SkillKit.Pipeline{} = execution) do
     # handle skill execution
   end
@@ -142,8 +142,8 @@ use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
 ```
 
 `use SkillKit.Kit` implements both `SkillKit.Kit.Provider` (to load skills) and
-`SkillKit.Handler.Behaviour` (to execute them). The macro generates default
-`tool_definition/0` and `resume/3` implementations; you must supply `execute/1`.
+`SkillKit.Tool` (to execute them). The macro generates default
+`definition/0` and `resume/3` implementations; you must supply `execute/1`.
 
 ---
 
