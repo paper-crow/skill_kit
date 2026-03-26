@@ -77,9 +77,11 @@ Server, and SubagentSupervisor — fully isolated from other agents.
 
 ### Skills
 
-Skills are markdown files (`.skill.md` or `SKILL.md` in a directory) that
-inject instructions into an agent's context. They follow the
-[Agent Skills specification](https://agentskills.io/specification):
+Skills are markdown files that inject instructions into an agent's context.
+The standard layout (from the [Agent Skills spec](https://agentskills.io/specification)
+and [Claude Code plugins](https://docs.anthropic.com/en/docs/claude-code/plugins))
+is a `SKILL.md` inside a named directory. SkillKit also supports `*.skill.md`
+flat files as a shorthand for simpler layouts:
 
 ```markdown
 ---
@@ -276,7 +278,7 @@ tree, message flow, and module boundaries.
 ## Guides
 
 - [Architecture](guides/architecture.md) — supervision tree, message flow, module boundaries
-- [Skill Format](guides/skill-format.md) — `.skill.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
+- [Skill Format](guides/skill-format.md) — `SKILL.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
 - [Providers](guides/providers.md) — writing and registering kit providers (`Kit.Local`, `Kit.Memory`, custom)
 - [Hooks and Execution](guides/hooks-and-execution.md) — handler pipeline, pre/post hooks, suspension and resumption
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
@@ -289,10 +291,10 @@ tree, message flow, and module boundaries.
 SkillKit's skill format is compatible with:
 
 - **[Agent Skills](https://agentskills.io/specification)** — the open standard
-  for portable agent skills. SkillKit supports both `SKILL.md` directories and
-  `*.skill.md` flat files. Template tokens (`$ARGUMENTS`, `$SKILL_DIR`,
-  `$SESSION_ID`) and progressive disclosure (metadata at discovery, full body
-  at activation) follow the spec.
+  for portable agent skills. The canonical format is `skills/skill-name/SKILL.md`.
+  SkillKit additionally supports `*.skill.md` flat files as a convenience.
+  Template tokens (`$ARGUMENTS`, `$SKILL_DIR`, `$SESSION_ID`) and progressive
+  disclosure (metadata at discovery, full body at activation) follow the spec.
 
 - **[Claude Code Plugins](https://docs.anthropic.com/en/docs/claude-code/plugins)** —
   SkillKit's `Kit.Local` directory layout aligns with the Claude Code plugin
