@@ -56,7 +56,7 @@ SkillKit.stop_agent(agent)
 
 ## Core Concepts
 
-### Agents
+### [Agents](guides/architecture.md)
 
 Agents are LLM-powered OTP processes defined in `AGENT.md` files with YAML
 frontmatter:
@@ -75,7 +75,7 @@ Your name is Neve. You are a helpful coding assistant.
 Each agent starts its own supervision tree — Registry, Catalog, Mailbox,
 Server, and SubagentSupervisor — fully isolated from other agents.
 
-### Skills
+### [Skills](guides/skill-format.md)
 
 Skills are markdown files that inject instructions into an agent's context.
 The standard layout (from the [Agent Skills spec](https://agentskills.io/specification)
@@ -96,7 +96,7 @@ Skills support template tokens (`$ARGUMENTS`, `$SKILL_DIR`, `$SESSION_ID`),
 scope variable resolution (`$USERNAME`, `$TENANT`), and dynamic command
 injection (`` !`git branch --show-current` ``) that runs at render time.
 
-### Hooks
+### [Hooks](guides/hooks-and-execution.md)
 
 Skills can define pre/post hooks on tool execution for automation:
 
@@ -112,7 +112,7 @@ hooks:
 Hooks run in a pipeline: pre-hooks, handler execution, post-hooks. Pre-hooks
 can modify input, deny execution, or suspend for human-in-the-loop approval.
 
-### Subagents
+### [Subagents](guides/architecture.md)
 
 Agents delegate work to child agents asynchronously. The parent invokes a
 subagent as a tool call, continues its own work, and receives the result when
@@ -129,7 +129,7 @@ then call report_result with your findings.
 
 Delegation depth is enforced via `max_agent_depth` in the agent definition.
 
-### Authorization
+### [Authorization](guides/authorization.md)
 
 Scope-based access control restricts which skills a caller may discover and
 activate. Skills declare `required_scope` in their frontmatter; callers
