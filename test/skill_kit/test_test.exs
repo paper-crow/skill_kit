@@ -120,14 +120,14 @@ defmodule SkillKit.TestTest do
       {:ok, pid, context} =
         SkillKit.Test.start_server(
           agent_name: "custom-agent",
-          scope: ["test:read"]
+          scope: %SkillKit.TestScope{permissions: ["test:read"]}
         )
 
       assert Process.alive?(pid)
       assert context.agent_name == "custom-agent"
 
       state = :sys.get_state(pid)
-      assert state.scope == ["test:read"]
+      assert state.scope == %SkillKit.TestScope{permissions: ["test:read"]}
     end
   end
 end

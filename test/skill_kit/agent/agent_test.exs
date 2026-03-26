@@ -94,7 +94,7 @@ defmodule SkillKit.Agent.AgentTest do
       agent_name: agent_name,
       definition: definition
     } do
-      scope = %{user_id: "user-1", tenant_id: "tenant-1"}
+      scope = %SkillKit.TestScope{user: "user-1", permissions: ["admin:read"]}
 
       opts = %{
         agent_name: agent_name,
