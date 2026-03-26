@@ -54,6 +54,7 @@ defmodule SkillKit.MixProject do
       main: "SkillKit",
       extras: [
         "README.md",
+        "guides/examples.md",
         "guides/architecture.md",
         "guides/skill-format.md",
         "guides/llm-providers.md",

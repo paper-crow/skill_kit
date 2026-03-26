@@ -137,59 +137,14 @@ provide granted scopes via a struct implementing `SkillKit.Scope`.
 
 ## Examples
 
-### Persona Chat
+See the [Examples guide](guides/examples.md) for walkthroughs, directory
+structures, and `start_agent` usage patterns. Highlights:
 
-A full example app in `examples/persona_chat/` that exercises most of
-SkillKit's primitives. Users create AI personas through conversation, then
-chat with them — each user gets isolated conversation history and per-user
-memory.
-
-```bash
-cd examples/persona_chat
-mix deps.get
-
-# Create personas (first user becomes owner)
-mix persona_chat --user alice --manage
-
-# Chat with a persona
-mix persona_chat --user alice --persona captain_nova
-```
-
-**What it exercises:**
-
-| Feature | How |
-|---|---|
-| Agent identity | `AGENT.md` at root of each agent directory |
-| Skills | 7 skills across lobby and memory kits drive all behavior |
-| Subagent delegation | Lobby delegates file writing to a `persona_writer` subagent |
-| Dynamic context injection | `` !`command` `` in skills runs at render time, injecting live persona lists and user memories |
-| Conversation persistence | Per-user conversation isolation via `Conversation.Store.Filesystem` |
-| Scope-based authorization | Owner vs visitor permissions — owners create/delete, visitors chat |
-| Scope variable resolution | `$USERNAME` and `$PERSONA` replaced in skill bodies and system prompts |
-| Shell tool as kit | `SkillKit.Tools.Shell` registered alongside filesystem kits |
-
-Only two `.ex` files in the example. Everything else is markdown.
-
-See [`examples/persona_chat/README.md`](examples/persona_chat/README.md) for
-the full walkthrough.
-
-### Sample Agents and Skills
-
-```
-examples/
-  agents/
-    neve/AGENT.md           # General-purpose coding assistant
-    researcher/AGENT.md     # Research and investigation agent
-    fixer/AGENT.md          # Bug fixing agent
-    code-reviewer/AGENT.md  # Code review subagent
-  skills/
-    bash/SKILL.md           # Shell command guidelines
-    memory/SKILL.md         # Persistent memory management
-    code_review/SKILL.md    # Code review checklist
-    elixir_style/SKILL.md   # Elixir conventions
-```
-
-Run any agent: `mix skill_kit.chat neve` or `mix skill_kit.chat researcher`
+- **[Persona Chat](examples/persona_chat/README.md)** — full app exercising
+  agents, skills, subagents, scope-based auth, conversation persistence, and
+  dynamic context injection. Only two `.ex` files — everything else is markdown.
+- **Sample agents and skills** — ready-to-run agents (`neve`, `researcher`,
+  `fixer`) and reusable skills (`bash`, `memory`, `code_review`, `elixir_style`).
 
 ## Loading Kits
 
@@ -276,6 +231,7 @@ tree, message flow, and module boundaries.
 
 ## Guides
 
+- [Examples](guides/examples.md) — persona chat walkthrough, sample agents, directory structures
 - [Architecture](guides/architecture.md) — supervision tree, message flow, module boundaries
 - [Skill Format](guides/skill-format.md) — `SKILL.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
 - [Providers](guides/providers.md) — writing and registering kit providers (`Kit.Local`, `Kit.Memory`, custom)
