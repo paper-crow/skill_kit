@@ -2,6 +2,7 @@ defmodule SkillKit.Agent.LoopTest do
   use ExUnit.Case, async: true
 
   import Mox
+  import SkillKit.TelemetryHelper
 
   alias SkillKit.Agent
   alias SkillKit.Agent.Definition
@@ -11,6 +12,7 @@ defmodule SkillKit.Agent.LoopTest do
   alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
+  setup :telemetry
 
   setup do
     registry_name = :"loop_test_registry_#{:erlang.unique_integer([:positive])}"
@@ -75,6 +77,11 @@ defmodule SkillKit.Agent.LoopTest do
       assert %AssistantMessage{content: "4"} = Enum.at(state.messages, 1)
     end
 
+    @tag telemetry: [
+           [:skill_kit, :agent, :turn, :start],
+           [:skill_kit, :agent, :response],
+           [:skill_kit, :agent, :turn, :stop]
+         ]
     test "telemetry events fire during loop", %{
       registry: registry,
       agent_name: agent_name,
@@ -88,22 +95,6 @@ defmodule SkillKit.Agent.LoopTest do
 
         {:ok, Stream.map(events, & &1)}
       end)
-
-      test_pid = self()
-      handler_id = "loop-test-#{agent_name}"
-
-      SkillKit.Telemetry.attach_many(
-        handler_id,
-        [
-          [:skill_kit, :agent, :turn, :start],
-          [:skill_kit, :agent, :response],
-          [:skill_kit, :agent, :turn, :stop]
-        ],
-        fn event, measurements, metadata, _config ->
-          send(test_pid, {:telemetry, event, measurements, metadata})
-        end,
-        nil
-      )
 
       opts = %{
         agent_name: agent_name,
@@ -124,18 +115,15 @@ defmodule SkillKit.Agent.LoopTest do
       GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hi"}})
       send(mailbox_pid, :flush)
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn, :start], _,
+      assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :start],
                       %{agent_name: ^agent_name}},
                      500
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :response], _, %{agent_name: ^agent_name}},
+      assert_receive {__MODULE__, [:skill_kit, :agent, :response], %{agent_name: ^agent_name}},
                      500
 
-      assert_receive {:telemetry, [:skill_kit, :agent, :turn, :stop], %{duration: _},
-                      %{agent_name: ^agent_name}},
+      assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :stop], %{agent_name: ^agent_name}},
                      500
-
-      SkillKit.Telemetry.detach(handler_id)
     end
   end
 end
