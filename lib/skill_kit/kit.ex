@@ -131,24 +131,28 @@ defmodule SkillKit.Kit do
 
   defp load_skill_files(dir, kit_name, handler_module, config) do
     case File.ls(dir) do
-      {:ok, entries} ->
-        entries
-        |> Enum.sort()
-        |> Enum.map(&Path.join(dir, &1))
-        |> Enum.filter(&File.dir?/1)
-        |> Enum.filter(&File.exists?(Path.join(&1, "SKILL.md")))
-        |> Enum.reduce_while({:ok, []}, fn skill_dir, {:ok, acc} ->
-          path = Path.join(skill_dir, "SKILL.md")
-
-          case parse_skill_file(path, kit_name, handler_module, config) do
-            {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
-            {:error, _} = error -> {:halt, error}
-          end
-        end)
-
-      {:error, :enoent} ->
-        {:ok, []}
+      {:ok, entries} -> parse_skill_dirs(entries, dir, kit_name, handler_module, config)
+      {:error, :enoent} -> {:ok, []}
     end
+  end
+
+  defp parse_skill_dirs(entries, dir, kit_name, handler_module, config) do
+    entries
+    |> Enum.sort()
+    |> Enum.map(&Path.join(dir, &1))
+    |> Enum.filter(&skill_dir?/1)
+    |> Enum.reduce_while({:ok, []}, fn skill_dir, {:ok, acc} ->
+      path = Path.join(skill_dir, "SKILL.md")
+
+      case parse_skill_file(path, kit_name, handler_module, config) do
+        {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
+        {:error, _} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp skill_dir?(path) do
+    File.dir?(path) and File.exists?(Path.join(path, "SKILL.md"))
   end
 
   defp parse_skill_file(path, kit_name, handler_module, config) do
