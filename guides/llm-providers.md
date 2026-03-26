@@ -69,7 +69,7 @@ carries no output-worthy signal yet.
 defimpl SkillKit.Event.Streamable, for: MyProvider.Event.TextChunk do
   alias SkillKit.Event.Delta
 
-  def to_events(%{text: text}, acc) do
+  def stream(%{text: text}, acc) do
     {[%Delta{text: text}], acc}
   end
 end
@@ -77,7 +77,7 @@ end
 defimpl SkillKit.Event.Streamable, for: MyProvider.Event.ToolStart do
   alias SkillKit.Event.ToolCallStart
 
-  def to_events(%{id: id, name: name}, acc) do
+  def stream(%{id: id, name: name}, acc) do
     {[%ToolCallStart{id: id, name: name}], acc}
   end
 end
@@ -85,7 +85,7 @@ end
 defimpl SkillKit.Event.Streamable, for: MyProvider.Event.ToolDone do
   alias SkillKit.Event.ToolCallComplete
 
-  def to_events(%{id: id, name: name, input_json: json}, acc) do
+  def stream(%{id: id, name: name, input_json: json}, acc) do
     input = Jason.decode!(json)
     {[%ToolCallComplete{id: id, name: name, input: input}], acc}
   end
@@ -95,7 +95,7 @@ defimpl SkillKit.Event.Streamable, for: MyProvider.Event.StreamEnd do
   alias SkillKit.Event.Done
   alias SkillKit.Event.Usage
 
-  def to_events(%{reason: reason, input_tokens: i, output_tokens: o}, acc) do
+  def stream(%{reason: reason, input_tokens: i, output_tokens: o}, acc) do
     events = [
       %Usage{input_tokens: i, output_tokens: o},
       %Done{stop_reason: reason}
@@ -111,7 +111,7 @@ call arrives in fragments), use the accumulator:
 
 ```elixir
 defimpl SkillKit.Event.Streamable, for: MyProvider.Event.JsonFragment do
-  def to_events(%{id: id, partial: json}, acc) do
+  def stream(%{id: id, partial: json}, acc) do
     acc = Map.update(acc, :partial_json, %{id => json}, fn pj ->
       Map.update(pj, id, json, &(&1 <> json))
     end)
@@ -155,7 +155,7 @@ defmodule SkillKit.LLM.MyProvider do
   end
 
   defp to_skill_kit_stream(raw_stream) do
-    Stream.transform(raw_stream, %{}, &Streamable.to_events/2)
+    Stream.transform(raw_stream, %{}, &Streamable.stream/2)
   end
 
   defp resolve_api_key do

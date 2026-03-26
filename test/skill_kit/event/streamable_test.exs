@@ -17,7 +17,7 @@ defmodule SkillKit.Event.StreamableTest do
   describe "ContentBlockStart" do
     test "text block emits nothing" do
       event = %ContentBlockStart{index: 0, content_block: %{type: :text}}
-      assert {[], _acc} = Streamable.to_events(event, new_acc())
+      assert {[], _acc} = Streamable.stream(event, new_acc())
     end
 
     test "tool_use block emits ToolCallStart and stores block metadata" do
@@ -26,7 +26,7 @@ defmodule SkillKit.Event.StreamableTest do
         content_block: %{type: :tool_use, id: "tc_1", name: "echo"}
       }
 
-      {events, acc} = Streamable.to_events(event, new_acc())
+      {events, acc} = Streamable.stream(event, new_acc())
 
       assert [%ToolCallStart{id: "tc_1", name: "echo"}] = events
       assert acc.blocks[0] == %{type: :tool_use, id: "tc_1", name: "echo"}
@@ -36,7 +36,7 @@ defmodule SkillKit.Event.StreamableTest do
   describe "ContentBlockDelta" do
     test "text_delta emits Delta" do
       event = %ContentBlockDelta{index: 0, delta: %{type: :text_delta, text: "Hi"}}
-      {events, _acc} = Streamable.to_events(event, new_acc())
+      {events, _acc} = Streamable.stream(event, new_acc())
 
       assert [%Delta{text: "Hi"}] = events
     end
@@ -47,7 +47,7 @@ defmodule SkillKit.Event.StreamableTest do
         delta: %{type: :input_json_delta, partial_json: "{\"cmd\":"}
       }
 
-      {events, acc} = Streamable.to_events(event, new_acc())
+      {events, acc} = Streamable.stream(event, new_acc())
 
       assert [] = events
       assert acc.partial_json[0] == "{\"cmd\":"
@@ -61,14 +61,14 @@ defmodule SkillKit.Event.StreamableTest do
         delta: %{type: :input_json_delta, partial_json: "{\"cmd\":"}
       }
 
-      {[], acc} = Streamable.to_events(e1, acc)
+      {[], acc} = Streamable.stream(e1, acc)
 
       e2 = %ContentBlockDelta{
         index: 0,
         delta: %{type: :input_json_delta, partial_json: "\"ls\"}"}
       }
 
-      {[], acc} = Streamable.to_events(e2, acc)
+      {[], acc} = Streamable.stream(e2, acc)
 
       assert acc.partial_json[0] == "{\"cmd\":\"ls\"}"
     end
@@ -82,7 +82,7 @@ defmodule SkillKit.Event.StreamableTest do
         |> put_in([:partial_json, 0], "{\"cmd\":\"ls\"}")
 
       event = %ContentBlockStop{index: 0}
-      {events, _acc} = Streamable.to_events(event, acc)
+      {events, _acc} = Streamable.stream(event, acc)
 
       assert [%ToolCallComplete{id: "tc_1", name: "echo", input: %{"cmd" => "ls"}}] = events
     end
@@ -91,13 +91,13 @@ defmodule SkillKit.Event.StreamableTest do
       acc = put_in(new_acc(), [:blocks, 0], %{type: :text})
       event = %ContentBlockStop{index: 0}
 
-      assert {[], _acc} = Streamable.to_events(event, acc)
+      assert {[], _acc} = Streamable.stream(event, acc)
     end
 
     test "tool_use with no partial JSON uses empty object" do
       acc = put_in(new_acc(), [:blocks, 0], %{type: :tool_use, id: "tc_1", name: "noop"})
       event = %ContentBlockStop{index: 0}
-      {events, _acc} = Streamable.to_events(event, acc)
+      {events, _acc} = Streamable.stream(event, acc)
 
       assert [%ToolCallComplete{id: "tc_1", name: "noop", input: %{}}] = events
     end
@@ -106,28 +106,28 @@ defmodule SkillKit.Event.StreamableTest do
   describe "MessageStart" do
     test "emits Usage with input tokens" do
       event = %MessageStart{id: "msg_1", usage: %{"input_tokens" => 42}}
-      {events, _acc} = Streamable.to_events(event, new_acc())
+      {events, _acc} = Streamable.stream(event, new_acc())
 
       assert [%Usage{input_tokens: 42, output_tokens: 0}] = events
     end
 
     test "no usage emits nothing" do
       event = %MessageStart{id: "msg_1", usage: nil}
-      assert {[], _acc} = Streamable.to_events(event, new_acc())
+      assert {[], _acc} = Streamable.stream(event, new_acc())
     end
   end
 
   describe "MessageDelta" do
     test "emits Usage and Done" do
       event = %MessageDelta{stop_reason: :end_turn, usage: %{"output_tokens" => 10}}
-      {events, _acc} = Streamable.to_events(event, new_acc())
+      {events, _acc} = Streamable.stream(event, new_acc())
 
       assert [%Usage{input_tokens: 0, output_tokens: 10}, %Done{stop_reason: :end_turn}] = events
     end
 
     test "without usage emits only Done" do
       event = %MessageDelta{stop_reason: :tool_use, usage: nil}
-      {events, _acc} = Streamable.to_events(event, new_acc())
+      {events, _acc} = Streamable.stream(event, new_acc())
 
       assert [%Done{stop_reason: :tool_use}] = events
     end
@@ -136,7 +136,7 @@ defmodule SkillKit.Event.StreamableTest do
   describe "MessageStop" do
     test "emits nothing" do
       event = %MessageStop{}
-      assert {[], _acc} = Streamable.to_events(event, new_acc())
+      assert {[], _acc} = Streamable.stream(event, new_acc())
     end
   end
 

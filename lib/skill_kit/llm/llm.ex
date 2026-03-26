@@ -25,7 +25,7 @@ defmodule SkillKit.LLM do
 
           case MyProvider.stream(encoded, opts) do
             {:ok, raw_stream} ->
-              {:ok, Stream.transform(raw_stream, %{}, &Streamable.to_events/2)}
+              {:ok, Stream.transform(raw_stream, %{}, &Streamable.stream/2)}
 
             {:error, reason} ->
               {:error, reason}
@@ -52,7 +52,7 @@ defmodule SkillKit.LLM do
   converting them to universal SkillKit events. The provider knows nothing about
   SkillKit — the protocol implementations live in the SkillKit codebase.
 
-  The protocol function `to_events/2` takes a provider event and an accumulator,
+  The protocol function `stream/2` takes a provider event and an accumulator,
   returning `{[SkillKit.Event.*], updated_acc}`. The accumulator carries state
   across events (e.g., partial JSON fragments for tool call inputs).
 
