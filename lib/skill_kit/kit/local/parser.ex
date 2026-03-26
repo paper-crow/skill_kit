@@ -2,11 +2,11 @@ defmodule SkillKit.Kit.Local.Parser do
   @moduledoc """
   Internal parser for the Local provider.
 
-  Parses `.skill.md` files into `%SkillKit.Skill{}` structs. This module is
+  Parses `SKILL.md` files into `%SkillKit.Skill{}` structs. This module is
   internal to the Local provider — callers outside the provider should not
   depend on it directly.
 
-  A `.skill.md` file combines a YAML frontmatter section with a markdown
+  A `SKILL.md` file combines a YAML frontmatter section with a markdown
   prompt template body. The frontmatter must contain exactly the required
   fields; the body below the second `---` delimiter becomes the prompt
   template stored in `%Skill{body: ...}`.
@@ -45,14 +45,14 @@ defmodule SkillKit.Kit.Local.Parser do
 
   ## Example
 
-      iex> SkillKit.Kit.Local.Parser.load_file("/path/to/summarize.skill.md")
+      iex> SkillKit.Kit.Local.Parser.load_file("/path/to/skills/summarize/SKILL.md")
       {:ok, %SkillKit.Skill{
         name: "files:summarize",
         namespace: "files",
         description: "Summarize a file's contents",
         required_scope: ["files:read"],
         body: "Please summarize: {{content}}",
-        location: "/path/to/summarize.skill.md"
+        location: "/path/to/skills/summarize/SKILL.md"
       }}
   """
 
@@ -63,7 +63,7 @@ defmodule SkillKit.Kit.Local.Parser do
   @name_segment_regex ~r/^[a-z][a-z0-9_-]*$/
 
   @doc """
-  Loads a `.skill.md` file from `path` and returns a parsed skill struct.
+  Loads a `SKILL.md` file from `path` and returns a parsed skill struct.
 
   Returns `{:ok, %SkillKit.Skill{}}` on success.
 
