@@ -58,9 +58,9 @@ defmodule SkillKit.Catalog do
     GenServer.call(catalog, {:get_agent, name})
   end
 
-  @spec root_agent(GenServer.server()) :: Definition.t() | nil
-  def root_agent(catalog) do
-    GenServer.call(catalog, :root_agent)
+  @spec agent(GenServer.server()) :: Definition.t() | nil
+  def agent(catalog) do
+    GenServer.call(catalog, :agent)
   end
 
   @spec hooks(GenServer.server()) :: [SkillKit.Hook.t()]
@@ -114,20 +114,20 @@ defmodule SkillKit.Catalog do
 
   def handle_call(:list_agents, _from, state) do
     kits = load_all_kits(state.providers)
-    agents = Enum.flat_map(kits, & &1.agents)
+    agents = Enum.flat_map(kits, & &1.subagents)
     {:reply, agents, state}
   end
 
   def handle_call({:get_agent, name}, _from, state) do
     kits = load_all_kits(state.providers)
-    result = find_agent(kits, name)
+    result = find_subagent(kits, name)
     {:reply, result, state}
   end
 
-  def handle_call(:root_agent, _from, state) do
+  def handle_call(:agent, _from, state) do
     kits = load_all_kits(state.providers)
-    root = find_root_agent(kits)
-    {:reply, root, state}
+    agent = find_agent_definition(kits)
+    {:reply, agent, state}
   end
 
   def handle_call(:hooks, _from, state) do
@@ -230,21 +230,21 @@ defmodule SkillKit.Catalog do
   # Agents
   # -------------------------------------------------------------------
 
-  defp find_agent(kits, name) do
+  defp find_subagent(kits, name) do
     result =
       kits
-      |> Enum.flat_map(& &1.agents)
+      |> Enum.flat_map(& &1.subagents)
       |> Enum.find(&(&1.name == name))
 
-    resolve_agent(result)
+    resolve_subagent(result)
   end
 
-  defp resolve_agent(nil), do: {:error, :not_found}
-  defp resolve_agent(agent), do: {:ok, agent}
+  defp resolve_subagent(nil), do: {:error, :not_found}
+  defp resolve_subagent(agent), do: {:ok, agent}
 
-  defp find_root_agent(kits) do
+  defp find_agent_definition(kits) do
     kits
-    |> Enum.map(& &1.root_agent)
+    |> Enum.map(& &1.agent)
     |> Enum.find(&(&1 != nil))
   end
 
@@ -257,7 +257,7 @@ defmodule SkillKit.Catalog do
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
     visible_skills = filter_authorized_skills(all_skills(kits), state)
-    all_agents = Enum.flat_map(kits, & &1.agents)
+    all_agents = Enum.flat_map(kits, & &1.subagents)
 
     tool_modules = discover_tool_modules(kits)
     tool_defs = Enum.map(tool_modules, & &1.definition())
@@ -387,7 +387,7 @@ defmodule SkillKit.Catalog do
   defp do_classify(kits, tool_name, activated_skills) do
     agent_names =
       kits
-      |> Enum.flat_map(& &1.agents)
+      |> Enum.flat_map(& &1.subagents)
       |> MapSet.new(& &1.name)
 
     module_skill_map = Map.new(activated_skills, &{skill_short_name(&1.name), &1})

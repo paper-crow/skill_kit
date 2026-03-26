@@ -36,15 +36,15 @@ defmodule SkillKit.Kit.LocalTest do
       assert length(kit.skills) == 1
     end
 
-    test "detects root AGENT.md as root_agent" do
+    test "detects root AGENT.md as agent" do
       assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
-      assert kit.root_agent != nil
-      assert kit.root_agent.name == "root-agent"
+      assert kit.agent != nil
+      assert kit.agent.name == "root-agent"
     end
 
-    test "loads agents from agents/*.md" do
+    test "loads subagents from agents/*.md" do
       assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
-      agent_names = Enum.map(kit.agents, & &1.name)
+      agent_names = Enum.map(kit.subagents, & &1.name)
 
       assert "helper" in agent_names
       refute "root-agent" in agent_names
@@ -66,9 +66,9 @@ defmodule SkillKit.Kit.LocalTest do
       assert log =~ "skipped"
     end
 
-    test "kit with no root AGENT.md has nil root_agent" do
+    test "kit with no root AGENT.md has nil agent" do
       assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
-      assert is_nil(kit.root_agent)
+      assert is_nil(kit.agent)
     end
 
     test "returns {:ok, []} for nonexistent directory" do

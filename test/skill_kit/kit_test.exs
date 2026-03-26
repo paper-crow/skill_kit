@@ -68,27 +68,27 @@ defmodule SkillKit.KitTest do
         path: "/tmp"
       }
 
-      kit = %Kit{name: "my-kit", skills: [skill], agents: [agent]}
+      kit = %Kit{name: "my-kit", skills: [skill], subagents: [agent]}
 
       assert kit.name == "my-kit"
       assert length(kit.skills) == 1
-      assert length(kit.agents) == 1
+      assert length(kit.subagents) == 1
       assert kit.metadata == %{}
     end
 
     test "defaults to empty lists and map" do
       kit = %Kit{name: "empty"}
       assert kit.skills == []
-      assert kit.agents == []
+      assert kit.subagents == []
       assert kit.metadata == %{}
     end
 
-    test "root_agent defaults to nil" do
+    test "agent defaults to nil" do
       kit = %Kit{name: "empty"}
-      assert kit.root_agent == nil
+      assert kit.agent == nil
     end
 
-    test "root_agent can hold a Definition struct" do
+    test "agent can hold a Definition struct" do
       root = %Definition{
         name: "root",
         description: "Root agent",
@@ -96,8 +96,8 @@ defmodule SkillKit.KitTest do
         path: "/tmp"
       }
 
-      kit = %Kit{name: "my-kit", root_agent: root}
-      assert kit.root_agent == root
+      kit = %Kit{name: "my-kit", agent: root}
+      assert kit.agent == root
     end
   end
 end

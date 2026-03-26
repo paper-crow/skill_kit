@@ -144,7 +144,7 @@ defmodule SkillKit.CatalogTest do
     test "returns definitions from kits" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -163,7 +163,7 @@ defmodule SkillKit.CatalogTest do
     test "returns agent by name" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -179,27 +179,27 @@ defmodule SkillKit.CatalogTest do
   end
 
   # =====================================================================
-  # root_agent
+  # agent
   # =====================================================================
 
-  describe "root_agent/1" do
-    test "returns root agent when set" do
+  describe "agent/1" do
+    test "returns agent when set" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("main")
-      kit = %Kit{name: "test", root_agent: agent}
+      kit = %Kit{name: "test", agent: agent}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
-      root = Catalog.root_agent(catalog)
-      assert root.name == "main"
+      result = Catalog.agent(catalog)
+      assert result.name == "main"
     end
 
-    test "returns nil when no root agent" do
+    test "returns nil when no agent" do
       {:ok, provider} = Memory.start_link([])
       Memory.put(provider, make_skill("ns:hello"))
 
       catalog = start_catalog(provider)
-      assert Catalog.root_agent(catalog) == nil
+      assert Catalog.agent(catalog) == nil
     end
   end
 
@@ -259,7 +259,7 @@ defmodule SkillKit.CatalogTest do
     test "includes agent tools" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer", description: "Reviews code")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -322,7 +322,7 @@ defmodule SkillKit.CatalogTest do
     test "classifies subagent" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)

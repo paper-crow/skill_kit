@@ -24,8 +24,8 @@ The public API follows a three-step pattern:
 :ok = SkillKit.stop_agent(agent)
 ```
 
-The source-driven form starts a temporary Catalog to discover the root agent
-(the kit with `root_agent` set), then delegates to the definition-driven form.
+The source-driven form resolves the agent identity from the first argument,
+then delegates to the definition-driven form.
 
 `start_agent` builds an `AgentRef` — an opaque struct holding the agent name,
 a unique Registry name, and the supervisor PID. `send_message/2` routes to the
