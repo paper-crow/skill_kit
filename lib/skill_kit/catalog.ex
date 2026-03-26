@@ -16,8 +16,8 @@ defmodule SkillKit.Catalog do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Authorization
-  alias SkillKit.Tool.Definition, as: ToolDefinition
   alias SkillKit.Skill
+  alias SkillKit.Tool.Definition, as: ToolDefinition
 
   @subagent_builtins MapSet.new(["report_status", "report_result"])
 

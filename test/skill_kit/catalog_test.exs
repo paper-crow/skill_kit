@@ -7,6 +7,7 @@ defmodule SkillKit.CatalogTest do
   alias SkillKit.Kit
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
+  alias SkillKit.Tools.Shell
 
   # --- Test scope struct ---
 
@@ -45,7 +46,7 @@ defmodule SkillKit.CatalogTest do
       name: name,
       description: Keyword.get(opts, :description, "#{name} skill"),
       body: Keyword.get(opts, :body, "do the thing"),
-      tool: Keyword.get(opts, :tool, SkillKit.Tools.Shell),
+      tool: Keyword.get(opts, :tool, Shell),
       required_scope: Keyword.get(opts, :required_scope, []),
       hooks: Keyword.get(opts, :hooks, []),
       metadata: Keyword.get(opts, :metadata, %{})
@@ -276,7 +277,7 @@ defmodule SkillKit.CatalogTest do
       kit = %Kit{
         name: "shell_kit",
         skills: [],
-        metadata: %{tool: SkillKit.Tools.Shell}
+        metadata: %{tool: Shell}
       }
 
       Memory.put_kit(provider, kit)
@@ -284,7 +285,7 @@ defmodule SkillKit.CatalogTest do
       catalog = start_catalog(provider)
       tools = Catalog.tool_definitions(catalog, [])
 
-      tool_def = Enum.find(tools, &(&1.name == SkillKit.Tools.Shell.definition().name))
+      tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))
       assert tool_def != nil
     end
 
@@ -292,7 +293,7 @@ defmodule SkillKit.CatalogTest do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
 
-      activated = [make_skill("ns:schedule", tool: SkillKit.Tools.Shell)]
+      activated = [make_skill("ns:schedule", tool: Shell)]
       tools = Catalog.tool_definitions(catalog, activated_skills: activated)
 
       skill_tool = Enum.find(tools, &(&1.name == "schedule"))

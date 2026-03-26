@@ -19,6 +19,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Pipeline
   alias SkillKit.Skill
   alias SkillKit.Telemetry
+  alias SkillKit.Tool.Runner
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
@@ -273,7 +274,7 @@ defmodule SkillKit.Agent.Server do
     tool = find_tool(state)
     context = build_tool_context(state)
 
-    case SkillKit.Tool.Runner.run(tool, catalog(state), input, context) do
+    case Runner.run(tool, catalog(state), input, context) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,

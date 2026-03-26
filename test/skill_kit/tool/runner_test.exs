@@ -1,10 +1,10 @@
 defmodule SkillKit.Tool.RunnerTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Tool.Runner
   alias SkillKit.Hook
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
+  alias SkillKit.Tool.Runner
 
   setup do
     {:ok, provider} = Memory.start_link([])

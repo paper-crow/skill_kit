@@ -100,17 +100,17 @@ defmodule SkillKit.Tools.ShellTest do
 
   describe "load_kits/1 (Backend)" do
     test "returns a kit named shell" do
-      assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits([])
+      assert {:ok, [kit]} = Shell.load_kits([])
       assert kit.name == "shell"
     end
 
     test "stores cwd in metadata when provided" do
-      assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits(cwd: "/tmp")
+      assert {:ok, [kit]} = Shell.load_kits(cwd: "/tmp")
       assert kit.metadata.cwd == "/tmp"
     end
 
     test "stores env in metadata when provided" do
-      assert {:ok, [kit]} = SkillKit.Tools.Shell.load_kits(env: [{"FOO", "bar"}])
+      assert {:ok, [kit]} = Shell.load_kits(env: [{"FOO", "bar"}])
       assert kit.metadata.env == [{"FOO", "bar"}]
     end
   end
