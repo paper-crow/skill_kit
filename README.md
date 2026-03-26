@@ -190,6 +190,38 @@ examples/
 
 Run any agent: `mix skill_kit.chat neve` or `mix skill_kit.chat researcher`
 
+## Loading Kits
+
+`start_agent/2` takes an agent source as its first argument and a `skills:`
+option listing additional kits. Both accept three forms:
+
+| Form | Resolves to | Example |
+|---|---|---|
+| `"path"` (string) | `{SkillKit.Kit.Local, dir: "path"}` | `"skills"` loads `skills/` directory |
+| `Module` (bare atom) | `{Module, []}` | `SkillKit.Shell` adds bash execution |
+| `{Module, opts}` (tuple) | Used as-is | `{SkillKit.Kit.Local, dir: "/abs/path"}` |
+
+The agent's own kit is auto-included in the tool pool. When you pass
+`"agents/neve"` as the agent, its `AGENT.md` defines the identity (name,
+model, system prompt) and any skills or subagents in that directory become
+available tools — no need to list it again in `skills:`.
+
+```elixir
+# "agents/neve" provides the agent identity + its own skills.
+# "skills" adds a shared skills directory.
+# SkillKit.Shell adds bash tool execution.
+SkillKit.start_agent("agents/neve",
+  skills: ["skills", SkillKit.Shell],
+  scope: my_scope,
+  conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"}
+)
+```
+
+Module-backed kits (`use SkillKit.Kit`) work the same way — they implement
+both the `Kit.Provider` behaviour (to load skills from a co-located `skills/`
+directory) and `Handler.Behaviour` (to execute them). See the
+[Providers guide](guides/providers.md) for details.
+
 ## Configuration
 
 ```elixir
@@ -199,17 +231,6 @@ config :skill_kit, SkillKit.LLM,
     anthropic: SkillKit.LLM.Anthropic
   ],
   default_provider: :anthropic
-```
-
-Capabilities are registered per-agent at startup. Pass agent directories,
-kit modules, or provider tuples:
-
-```elixir
-SkillKit.start_agent("agents/neve",
-  skills: ["skills", SkillKit.Shell],
-  scope: my_scope,
-  conversation_store: {SkillKit.Conversation.Store.Filesystem, path: ".conversations"}
-)
 ```
 
 ## Telemetry
