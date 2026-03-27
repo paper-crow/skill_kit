@@ -34,7 +34,8 @@ defmodule SkillKitWeb.MixProject do
       {:ecto_sql, "~> 3.12"},
       {:jason, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:floki, ">= 0.30.0", only: :test}
+      {:floki, ">= 0.30.0", only: :test},
+      {:lazy_html, ">= 0.1.0", only: :test}
     ]
   end
 
