@@ -30,7 +30,7 @@ defmodule SkillKit.Web.EditorLive do
     ~H"""
     <div class="flex h-full w-full">
       <Sidebar.sidebar active={@active_drawer} />
-      <div class="relative flex-1 flex">
+      <div class="flex-1 flex overflow-hidden">
         <DocumentTree.document_tree
           files={@files}
           current_path={@current_path}
@@ -92,15 +92,28 @@ defmodule SkillKit.Web.EditorLive do
     root
     |> Path.join("**/*.md")
     |> Path.wildcard()
-    |> Enum.map(&Path.relative_to(&1, root))
-    |> Enum.sort()
+    |> Enum.map(&file_entry(root, &1))
+    |> Enum.sort_by(& &1.path)
+  end
+
+  defp file_entry(root, full_path) do
+    path = Path.relative_to(full_path, root)
+    title = extract_title(full_path, path)
+    %{path: path, title: title}
+  end
+
+  defp extract_title(full_path, path) do
+    case File.open(full_path, [:read], &IO.read(&1, :line)) do
+      {:ok, "# " <> heading} -> String.trim(heading)
+      _other -> Path.basename(path)
+    end
   end
 
   defp open_first_file(_root, []), do: {nil, nil}
 
-  defp open_first_file(root, [first | _rest]) do
-    content = File.read!(Path.join(root, first))
-    {first, content}
+  defp open_first_file(root, [%{path: path} | _rest]) do
+    content = File.read!(Path.join(root, path))
+    {path, content}
   end
 
   defp toggle_drawer(current, panel) when current == panel, do: nil

@@ -13,10 +13,10 @@ defmodule SkillKit.Web.EditorLiveTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "renders editor with document list", %{conn: conn} do
+  test "renders editor with document list showing titles", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
-    assert html =~ "welcome.md"
-    assert html =~ "features.md"
+    assert html =~ "Welcome"
+    assert html =~ "Features"
   end
 
   test "opens a different document", %{conn: conn} do

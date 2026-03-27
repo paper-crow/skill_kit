@@ -1,6 +1,8 @@
 // skill_kit_web/assets/js/hooks/markdown_editor.js
 const MarkdownEditor = {
   mounted() {
+    this.highlightCode();
+
     this.el.addEventListener("input", () => {
       const content = this.el.innerText;
       this.pushEvent("editor_change", {
@@ -25,6 +27,18 @@ const MarkdownEditor = {
         }
       }
     });
+  },
+
+  updated() {
+    this.highlightCode();
+  },
+
+  highlightCode() {
+    if (typeof hljs !== "undefined") {
+      this.el.querySelectorAll("pre code").forEach((block) => {
+        hljs.highlightElement(block);
+      });
+    }
   },
 };
 

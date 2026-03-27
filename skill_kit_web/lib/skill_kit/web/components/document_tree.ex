@@ -10,8 +10,8 @@ defmodule SkillKit.Web.Components.DocumentTree do
 
     ~H"""
     <div class={[
-      "absolute top-0 left-12 h-full w-56 bg-editor-bg-alt border-r border-editor-border",
-      "flex flex-col z-10",
+      "h-full w-64 shrink-0 bg-editor-bg-alt border-r border-editor-border",
+      "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
       <div class="flex items-center justify-between px-3 py-2 border-b border-editor-border">
@@ -68,22 +68,24 @@ defmodule SkillKit.Web.Components.DocumentTree do
         )
       ]}
     >
-      {@node.name}
+      {@node.title}
     </button>
     """
   end
 
   @doc """
-  Converts a flat list of file paths into a nested tree structure.
+  Converts a flat list of file entries into a nested tree structure.
 
-  Each node is either:
+  Each input entry is `%{path: String.t(), title: String.t()}`.
+
+  Each output node is either:
   - `%{type: :directory, name: String.t(), children: [node]}`
-  - `%{type: :file, name: String.t(), path: String.t()}`
+  - `%{type: :file, name: String.t(), title: String.t(), path: String.t()}`
 
   Files in the root directory appear before subdirectories in the returned list.
   """
-  def build_tree(paths) do
-    grouped = Enum.group_by(paths, &path_prefix/1)
+  def build_tree(entries) do
+    grouped = Enum.group_by(entries, &entry_prefix/1)
     root_files = Map.get(grouped, :root, [])
     dirs = Map.drop(grouped, [:root])
 
@@ -93,19 +95,19 @@ defmodule SkillKit.Web.Components.DocumentTree do
     root_nodes ++ dir_nodes
   end
 
-  defp path_prefix(path) do
+  defp entry_prefix(%{path: path}) do
     case Path.split(path) do
       [_file] -> :root
       [dir | _rest] -> dir
     end
   end
 
-  defp file_node(path) do
-    %{type: :file, name: Path.basename(path), path: path}
+  defp file_node(%{path: path, title: title}) do
+    %{type: :file, name: Path.basename(path), title: title, path: path}
   end
 
-  defp dir_node({dir, paths}) do
-    children = Enum.map(paths, &file_node/1)
+  defp dir_node({dir, entries}) do
+    children = Enum.map(entries, &file_node/1)
     %{type: :directory, name: dir, children: children}
   end
 end

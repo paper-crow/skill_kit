@@ -6,7 +6,11 @@ defmodule SkillKit.Web.Components.DocumentTreeTest do
   alias SkillKit.Web.Components.DocumentTree
 
   test "renders file list grouped by directory" do
-    files = ["guides/auth.md", "guides/tasks.md", "readme.md"]
+    files = [
+      %{path: "guides/auth.md", title: "Authentication"},
+      %{path: "guides/tasks.md", title: "Tasks"},
+      %{path: "readme.md", title: "Readme"}
+    ]
 
     html =
       render_component(&DocumentTree.document_tree/1,
@@ -16,13 +20,16 @@ defmodule SkillKit.Web.Components.DocumentTreeTest do
       )
 
     assert html =~ "guides"
-    assert html =~ "auth.md"
-    assert html =~ "tasks.md"
-    assert html =~ "readme.md"
+    assert html =~ "Authentication"
+    assert html =~ "Tasks"
+    assert html =~ "Readme"
   end
 
   test "highlights the current file" do
-    files = ["readme.md", "guide.md"]
+    files = [
+      %{path: "readme.md", title: "Readme"},
+      %{path: "guide.md", title: "Guide"}
+    ]
 
     html =
       render_component(&DocumentTree.document_tree/1,
@@ -31,13 +38,13 @@ defmodule SkillKit.Web.Components.DocumentTreeTest do
         open: true
       )
 
-    assert html =~ "readme.md"
+    assert html =~ "Readme"
   end
 
   test "hidden when not open" do
     html =
       render_component(&DocumentTree.document_tree/1,
-        files: ["readme.md"],
+        files: [%{path: "readme.md", title: "Readme"}],
         current_path: nil,
         open: false
       )
