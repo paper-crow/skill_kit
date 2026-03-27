@@ -272,12 +272,13 @@ defmodule SkillKit.Agent.Server do
   defp execute_command(%ToolCall{id: id, input: input}, state) do
     tool = find_tool(state)
     context = build_tool_context(state)
+    exec = %ToolExecution{tool: tool, input: input, context: context}
 
-    case ToolExecution.start(tool, catalog(state), input, context) do
+    case ToolExecution.execute(exec) do
       {:ok, execution} ->
         %ToolResult{
           tool_call_id: id,
-          content: extract_output(execution.results["execute"])
+          content: extract_output(execution.result)
         }
 
       {:error, execution} ->
@@ -325,9 +326,9 @@ defmodule SkillKit.Agent.Server do
   defp extract_output(other), do: inspect(other)
 
   defp extract_error(execution) do
-    case execution.results["execute"] do
-      {:error, {output, _code}} -> ensure_non_empty(output)
-      {:error, reason} -> inspect(reason)
+    case execution.result do
+      {output, _code} -> ensure_non_empty(output)
+      reason when is_binary(reason) -> ensure_non_empty(reason)
       _ -> "Execution failed"
     end
   end
