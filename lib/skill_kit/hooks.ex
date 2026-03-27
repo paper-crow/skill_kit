@@ -38,13 +38,13 @@ defmodule SkillKit.Hooks do
         :ok ->
           {result, post_context} = func.()
           notify(catalog, post_event, post_context)
-          {result, %{}, %{}}
+          {result, %{}, context}
 
         {:deny, reason} ->
-          {{:deny, reason}, %{}, %{status: :denied}}
+          {{:deny, reason}, %{}, Map.put(context, :status, :denied)}
 
         {:pending, state} ->
-          {{:pending, state}, %{}, %{status: :suspended}}
+          {{:pending, state}, %{}, Map.put(context, :status, :suspended)}
       end
     end)
   end

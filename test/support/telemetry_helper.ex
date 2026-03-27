@@ -14,10 +14,10 @@ defmodule SkillKit.TelemetryHelper do
 
   Tag your tests with the telemetry events you want to listen for:
 
-      @tag telemetry: [[:skill_kit, :agent, :turn, :stop]]
+      @tag telemetry: [[:skill_kit, :turn, :stop]]
       test "it emits a telemetry event" do
         # ... trigger event ...
-        assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :stop], _metadata}
+        assert_receive {__MODULE__, [:skill_kit, :turn, :stop], _metadata}
       end
   """
 
