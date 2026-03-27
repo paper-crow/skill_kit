@@ -78,21 +78,18 @@ their return values are discarded.
 `SkillKit.Hooks.call/4` drives a gated boundary:
 
 ```elixir
-# call/4 signature:
-# call(catalog, boundary, context, func)
-#
-# catalog  — GenServer.server() for the agent's Catalog
-# boundary — boundary name atom (e.g. :tool_use)
-# context  — map passed to each matching hook handler
-# func     — zero-arity function that performs the boundary action;
-#            must return {result, post_context}
+context = %{tool: MyTool, input: %{"query" => "hello"}, agent_name: "my-agent"}
 
 result =
-  Hooks.call(catalog, :tool_use, hook_context, fn ->
-    do_execute_command(id, tool, input, tool_context, hook_context)
+  Hooks.call(catalog, :tool_use, context, fn ->
+    output = MyTool.run(context.input)
+    {output, Map.put(context, :result, output)}
   end)
 
-unwrap_tool_result(id, result)
+# result is one of:
+# - the output from your function (hooks allowed it)
+# - {:deny, reason}   (a pre-hook blocked it)
+# - {:pending, state}  (a pre-hook suspended it)
 ```
 
 The boundary name is used directly for the telemetry span (`:tool_use`
