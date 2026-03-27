@@ -119,7 +119,9 @@ Server receives {:mailbox_flush, messages}
         └─ if tool calls present:
                │
                ├─ classify each call via Catalog.classify/3
+               ├─ dispatch pre-boundary hooks via Hooks.call/4
                ├─ execute local tools via ToolExecution (authorized by Scope)
+               ├─ dispatch post-boundary hooks via Hooks.cast/3
                ├─ collect results as %ToolResult{} structs
                └─ append results to message history, loop ↑
 ```
@@ -150,6 +152,7 @@ direct caller process — they communicate only through the parent Registry.
 | Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | In-memory kit provider | `SkillKit.Kit.Memory` |
 | Tool aggregation + classification | `SkillKit.Catalog` |
+| Hook dispatch at boundaries | `SkillKit.Hooks` |
 | Tool execution + hooks | `SkillKit.Tool` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |

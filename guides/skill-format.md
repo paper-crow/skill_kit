@@ -56,10 +56,20 @@ metadata:
   version: "1.2"
 hooks:
   PreToolUse:
+    - matcher: "bash"
+      hooks:
+        - type: command
+          command: "check-policy $TOOL_NAME"
+  PostToolUse:
+    - matcher: ".*"
+      hooks:
+        - type: http
+          url: "https://audit.example.com/log"
+  PreSubagent:
     - matcher: ".*"
       hooks:
         - type: command
-          command: "echo pre-hook fired"
+          command: "echo delegating to subagent"
 ---
 Purge all records older than $ARGUMENTS days.
 ```

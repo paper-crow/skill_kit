@@ -98,19 +98,26 @@ injection (`` !`git branch --show-current` ``) that runs at render time.
 
 ### [Hooks](guides/hooks-and-execution.md)
 
-Skills can define pre/post hooks on tool execution for automation:
+Skills can define hooks that fire at agent boundaries — before and after tool
+use, subagent delegation, LLM requests, and more:
 
 ```yaml
 hooks:
+  PreToolUse:
+    - matcher: "bash"
+      hooks:
+        - type: command
+          command: "check-policy $TOOL_NAME"
   PostToolUse:
     - matcher: ".*"
       hooks:
-        - type: command
-          command: "echo 'hook fired'"
+        - type: http
+          url: "https://audit.example.com/log"
 ```
 
-Hooks run in a pipeline: pre-hooks, tool execution, post-hooks. Pre-hooks
-can modify input, deny execution, or suspend for human-in-the-loop approval.
+Hooks are gate-only: they can allow, deny, or suspend a boundary crossing, but
+they cannot transform data. Pre-hooks run synchronously and block the action.
+Post-hooks fire asynchronously and their return values are ignored.
 
 ### [Subagents](guides/architecture.md)
 
@@ -195,6 +202,8 @@ observability and cost tracking:
 | `[:skill_kit, :agent, :subagent_result]` | — | `agent_name`, `subagent_name`, `task`, `result` |
 | `[:skill_kit, :agent, :orphaned_result]` | — | `agent_name`, `parent_name`, `result` |
 | `[:anthropic, :rate_limited]` | `retry_after`, `attempt` | `endpoint` |
+| `[:skill_kit, :hook, :boundary, :start]` | `system_time` | `agent_name`, `event` |
+| `[:skill_kit, :hook, :boundary, :stop]` | `duration` | `agent_name`, `event`, `outcome` |
 
 See the [Telemetry guide](guides/telemetry.md) for handler examples and
 testing helpers.
@@ -224,7 +233,7 @@ tree, message flow, and module boundaries.
 - [Architecture](guides/architecture.md) — supervision tree, message flow, module boundaries
 - [Skill Format](guides/skill-format.md) — `SKILL.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
 - [Providers](guides/providers.md) — writing and registering kit providers (`Kit.Local`, `Kit.Memory`, custom)
-- [Hooks and Execution](guides/hooks-and-execution.md) — tool execution pipeline, pre/post hooks, suspension and resumption
+- [Hooks and Execution](guides/hooks-and-execution.md) — boundary model, hook struct, return contract, handler behaviour, built-in handlers, context maps
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter
 - [Conversations](guides/conversations.md) — conversation persistence and custom stores

@@ -85,6 +85,42 @@ SkillKit agent triggered the request.
 | `:request, :exception` | `duration`, `kind`, `reason`, `stacktrace` | *(provider-defined)* |
 | `:rate_limited` | `:retry_after` (ms), `:attempt` (integer) | `:endpoint` (string) |
 
+### Hook boundary spans
+
+`Hooks.call/4` wraps each gated boundary crossing in a telemetry span. These
+events let you measure the latency of individual boundary types and observe
+which hooks allowed, denied, or suspended a crossing.
+
+| Event | Kind | Description |
+|---|---|---|
+| `[:skill_kit, :hook, :boundary, :start]` | span start | A gated boundary crossing is about to begin |
+| `[:skill_kit, :hook, :boundary, :stop]` | span stop | The boundary crossing completed (allowed or denied) |
+| `[:skill_kit, :hook, :boundary, :exception]` | span exception | A hook handler raised an exception |
+
+#### Measurements and metadata
+
+| Event | Measurements | Metadata keys |
+|---|---|---|
+| `:boundary, :start` | `:system_time` | `:agent_name`, `:event` (boundary event atom) |
+| `:boundary, :stop` | `:duration` | `:agent_name`, `:event`, `:outcome` (`:ok \| :deny \| :pending`) |
+| `:boundary, :exception` | `:duration`, `kind`, `reason`, `stacktrace` | `:agent_name`, `:event` |
+
+To observe every tool-use boundary crossing:
+
+```elixir
+SkillKit.Telemetry.attach_many(
+  :hook_spans,
+  [
+    [:skill_kit, :hook, :boundary, :start],
+    [:skill_kit, :hook, :boundary, :stop]
+  ],
+  fn event, measurements, %{event: boundary, outcome: outcome} = meta, _ ->
+    Logger.debug("boundary #{boundary} #{List.last(event)}: #{outcome}")
+  end,
+  %{}
+)
+```
+
 ---
 
 ## Attaching handlers
