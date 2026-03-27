@@ -1,3 +1,91 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  /* Editor prose styling — applied to Earmark HTML output */
+  .prose-editor h1 {
+    @apply font-heading text-2xl tracking-tight mb-6 text-editor-text;
+  }
+
+  .prose-editor h2 {
+    @apply text-[11px] font-semibold text-editor-accent-muted uppercase tracking-widest mt-10 mb-4;
+  }
+
+  .prose-editor h3 {
+    @apply font-heading text-lg mb-3 mt-6 text-editor-text;
+  }
+
+  .prose-editor h4 {
+    @apply font-heading text-base mb-2 mt-4 text-editor-text;
+  }
+
+  .prose-editor p {
+    @apply text-sm text-editor-text-muted leading-[1.9] mb-4;
+  }
+
+  .prose-editor strong {
+    @apply font-semibold text-editor-text;
+  }
+
+  .prose-editor em {
+    @apply italic;
+  }
+
+  .prose-editor a {
+    @apply text-editor-accent hover:underline;
+  }
+
+  .prose-editor code {
+    @apply font-mono text-xs bg-editor-accent-faint px-1.5 py-0.5 rounded text-editor-text;
+  }
+
+  .prose-editor pre {
+    @apply bg-editor-accent-faint rounded-lg p-4 my-4 overflow-x-auto;
+  }
+
+  .prose-editor pre code {
+    @apply bg-transparent px-0 py-0 text-sm;
+  }
+
+  .prose-editor ul {
+    @apply list-disc pl-6 mb-4 space-y-1;
+  }
+
+  .prose-editor ol {
+    @apply list-decimal pl-6 mb-4 space-y-1;
+  }
+
+  .prose-editor li {
+    @apply text-sm text-editor-text-muted leading-[1.9];
+  }
+
+  .prose-editor hr {
+    @apply border-editor-divider my-8;
+  }
+
+  .prose-editor blockquote {
+    @apply border-l-2 border-editor-accent-muted pl-4 my-4 italic text-editor-text-faint;
+  }
+
+  .prose-editor table {
+    @apply w-full text-sm my-4 border-collapse;
+  }
+
+  .prose-editor thead th {
+    @apply text-left text-editor-accent-muted text-xs font-semibold uppercase tracking-wider
+           pb-2 border-b border-editor-border;
+  }
+
+  .prose-editor tbody td {
+    @apply text-editor-text-muted py-2 border-b border-editor-divider;
+  }
+
+  .prose-editor tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .prose-editor img {
+    @apply rounded my-4 max-w-full;
+  }
+}

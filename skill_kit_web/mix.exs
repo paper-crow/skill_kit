@@ -35,6 +35,7 @@ defmodule SkillKitWeb.MixProject do
       {:ecto, "~> 3.12"},
       {:ecto_sql, "~> 3.12"},
       {:bandit, "~> 1.0"},
+      {:earmark, "~> 1.4"},
       {:jason, "~> 1.4"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:esbuild, "~> 0.8", only: :dev},

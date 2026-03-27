@@ -580,6 +580,196 @@ video {
   --editor-divider: rgba(255, 255, 255, 0.04);
 }
 
+/* Editor prose styling — applied to Earmark HTML output */
+
+.prose-editor h1 {
+  margin-bottom: 1.5rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.5rem;
+  line-height: 2rem;
+  letter-spacing: -0.025em;
+  color: var(--editor-text);
+}
+
+.prose-editor h2 {
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--editor-accent-muted);
+}
+
+.prose-editor h3 {
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.125rem;
+  line-height: 1.75rem;
+  color: var(--editor-text);
+}
+
+.prose-editor h4 {
+  margin-bottom: 0.5rem;
+  margin-top: 1rem;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  color: var(--editor-text);
+}
+
+.prose-editor p {
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  line-height: 1.9;
+  color: var(--editor-text-muted);
+}
+
+.prose-editor strong {
+  font-weight: 600;
+  color: var(--editor-text);
+}
+
+.prose-editor em {
+  font-style: italic;
+}
+
+.prose-editor a {
+  color: var(--editor-accent);
+}
+
+.prose-editor a:hover {
+  text-decoration-line: underline;
+}
+
+.prose-editor code {
+  border-radius: 0.25rem;
+  background-color: var(--editor-accent-faint);
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--editor-text);
+}
+
+.prose-editor pre {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background-color: var(--editor-accent-faint);
+  padding: 1rem;
+}
+
+.prose-editor pre code {
+  background-color: transparent;
+  padding-left: 0px;
+  padding-right: 0px;
+  padding-top: 0px;
+  padding-bottom: 0px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.prose-editor ul {
+  margin-bottom: 1rem;
+  list-style-type: disc;
+}
+
+.prose-editor ul > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
+}
+
+.prose-editor ul {
+  padding-left: 1.5rem;
+}
+
+.prose-editor ol {
+  margin-bottom: 1rem;
+  list-style-type: decimal;
+}
+
+.prose-editor ol > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
+}
+
+.prose-editor ol {
+  padding-left: 1.5rem;
+}
+
+.prose-editor li {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  line-height: 1.9;
+  color: var(--editor-text-muted);
+}
+
+.prose-editor hr {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  border-color: var(--editor-divider);
+}
+
+.prose-editor blockquote {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border-left-width: 2px;
+  border-color: var(--editor-accent-muted);
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--editor-text-faint);
+}
+
+.prose-editor table {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.prose-editor thead th {
+  border-bottom-width: 1px;
+  border-color: var(--editor-border);
+  padding-bottom: 0.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--editor-accent-muted);
+}
+
+.prose-editor tbody td {
+  border-bottom-width: 1px;
+  border-color: var(--editor-divider);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  color: var(--editor-text-muted);
+}
+
+.prose-editor tbody tr:last-child td {
+  border-bottom-width: 0px;
+}
+
+.prose-editor img {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  max-width: 100%;
+  border-radius: 0.25rem;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -617,38 +807,16 @@ video {
   margin-right: auto;
 }
 
-.my-4 {
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-}
-
-.my-6 {
-  margin-top: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
 .mb-1 {
   margin-bottom: 0.25rem;
-}
-
-.mb-3 {
-  margin-bottom: 0.75rem;
 }
 
 .mb-4 {
   margin-bottom: 1rem;
 }
 
-.mt-8 {
-  margin-top: 2rem;
-}
-
 .mt-auto {
   margin-top: auto;
-}
-
-.inline {
-  display: inline;
 }
 
 .flex {
@@ -657,10 +825,6 @@ video {
 
 .hidden {
   display: none;
-}
-
-.h-3 {
-  height: 0.75rem;
 }
 
 .h-5 {
@@ -715,14 +879,6 @@ video {
   flex-shrink: 0;
 }
 
-.list-decimal {
-  list-style-type: decimal;
-}
-
-.list-disc {
-  list-style-type: disc;
-}
-
 .flex-col {
   flex-direction: column;
 }
@@ -743,18 +899,8 @@ video {
   gap: 0.375rem;
 }
 
-.space-y-1 > :not([hidden]) ~ :not([hidden]) {
-  --tw-space-y-reverse: 0;
-  margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
-}
-
 .overflow-hidden {
   overflow: hidden;
-}
-
-.overflow-x-auto {
-  overflow-x: auto;
 }
 
 .overflow-y-auto {
@@ -799,15 +945,6 @@ video {
   background-color: var(--editor-bg-alt);
 }
 
-.p-4 {
-  padding: 1rem;
-}
-
-.px-1 {
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
-}
-
 .px-3 {
   padding-left: 0.75rem;
   padding-right: 0.75rem;
@@ -838,38 +975,12 @@ video {
   padding-bottom: 0.5rem;
 }
 
-.pl-6 {
-  padding-left: 1.5rem;
-}
-
 .pt-4 {
   padding-top: 1rem;
 }
 
 .text-left {
   text-align: left;
-}
-
-.font-heading {
-  font-family: Georgia, 'Times New Roman', serif;
-}
-
-.font-mono {
-  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
-}
-
-.text-2xl {
-  font-size: 1.5rem;
-  line-height: 2rem;
-}
-
-.text-\[11px\] {
-  font-size: 11px;
-}
-
-.text-base {
-  font-size: 1rem;
-  line-height: 1.5rem;
 }
 
 .text-sm {
@@ -890,24 +1001,8 @@ video {
   text-transform: uppercase;
 }
 
-.italic {
-  font-style: italic;
-}
-
-.leading-\[1\.9\] {
-  line-height: 1.9;
-}
-
-.tracking-tight {
-  letter-spacing: -0.025em;
-}
-
 .tracking-wide {
   letter-spacing: 0.025em;
-}
-
-.tracking-widest {
-  letter-spacing: 0.1em;
 }
 
 .text-editor-accent {
@@ -966,10 +1061,6 @@ video {
 
 .hover\:text-editor-text-muted:hover {
   color: var(--editor-text-muted);
-}
-
-.hover\:underline:hover {
-  text-decoration-line: underline;
 }
 
 .dark\:inline:is(.dark *) {
