@@ -22,8 +22,9 @@ config :skill_kit_web, SkillKit.Web.DevEndpoint,
   ]
 
 # In dev, point to the parent project (worktree root)
-config :skill_kit_web, :project_root, Path.expand("..", __DIR__)
-config :skill_kit_web, :docs_root, Path.expand("../guides", __DIR__)
+# __DIR__ is skill_kit_web/config/, so ../.. gets to the worktree root
+config :skill_kit_web, :project_root, Path.expand("../..", __DIR__)
+config :skill_kit_web, :docs_root, Path.expand("../../guides", __DIR__)
 
 config :esbuild,
   version: "0.24.2",
