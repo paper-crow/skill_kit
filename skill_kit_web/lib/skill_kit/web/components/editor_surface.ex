@@ -21,11 +21,8 @@ defmodule SkillKit.Web.Components.EditorSurface do
       <div class="flex-1 overflow-y-auto">
         <div
           id="editor-surface"
-          class="max-w-editor mx-auto px-8 py-10 outline-none prose-editor"
-          contenteditable="true"
-          spellcheck="false"
+          class="max-w-editor mx-auto px-8 py-10 prose-editor"
           phx-hook="MarkdownEditor"
-          phx-debounce="500"
           data-path={@path}
         >
           {Phoenix.HTML.raw(@rendered_html)}

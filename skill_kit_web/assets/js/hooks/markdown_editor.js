@@ -3,14 +3,7 @@ const MarkdownEditor = {
   mounted() {
     this.highlightCode();
 
-    this.el.addEventListener("input", () => {
-      const content = this.el.innerText;
-      this.pushEvent("editor_change", {
-        path: this.el.dataset.path,
-        content: content,
-      });
-    });
-
+    // Track text selection for inline threads (Plan 3)
     document.addEventListener("mouseup", () => {
       const selection = window.getSelection();
       if (selection.rangeCount > 0 && !selection.isCollapsed) {
