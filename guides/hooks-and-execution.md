@@ -87,14 +87,12 @@ their return values are discarded.
 # func     — zero-arity function that performs the boundary action;
 #            must return {result, post_context}
 
-case Hooks.call(catalog, :tool_use, hook_context, fn ->
-  result = ToolExecution.execute(exec)
-  {result, Map.put(hook_context, :result, result)}
-end) do
-  {:deny, reason}   -> {:error, {:denied, reason}}
-  {:pending, state} -> {:suspended, state}
-  result            -> result
-end
+result =
+  Hooks.call(catalog, :tool_use, hook_context, fn ->
+    do_execute_command(id, tool, input, tool_context, hook_context)
+  end)
+
+unwrap_tool_result(id, result)
 ```
 
 The boundary name is used directly for the telemetry span (`:tool_use`
