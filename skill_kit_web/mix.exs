@@ -38,6 +38,10 @@ defmodule SkillKitWeb.MixProject do
     ]
   end
 
+  def cli do
+    [preferred_envs: [precommit: :test]]
+  end
+
   defp aliases do
     [
       precommit: [
