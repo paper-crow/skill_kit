@@ -20,9 +20,6 @@ defmodule SkillKit.Web.Components.EditorSurface do
 
     ~H"""
     <div class="flex-1 flex flex-col overflow-hidden">
-      <div class="px-8 py-2 border-b border-editor-border">
-        <span class="text-xs text-editor-accent-muted">{@path}</span>
-      </div>
       <div class="flex-1 overflow-y-auto">
         <div
           id="editor-surface"
