@@ -714,17 +714,22 @@ defmodule SkillKit.Agent.Server do
     load_context = %{agent_name: agent_name}
 
     try do
-      case Hooks.call(catalog, :conversation_load, load_context, fn ->
-             result = do_load_conversation(mod, agent_name, config)
-             {result, Map.put(load_context, :messages, result)}
-           end) do
-        {:deny, _reason} -> []
-        messages -> messages
-      end
+      result = hooked_load(catalog, load_context, mod, agent_name, config)
+      unwrap_load_result(result)
     catch
       :exit, _reason -> do_load_conversation(mod, agent_name, config)
     end
   end
+
+  defp hooked_load(catalog, load_context, mod, agent_name, config) do
+    Hooks.call(catalog, :conversation_load, load_context, fn ->
+      messages = do_load_conversation(mod, agent_name, config)
+      {messages, Map.put(load_context, :messages, messages)}
+    end)
+  end
+
+  defp unwrap_load_result({:deny, _reason}), do: []
+  defp unwrap_load_result(messages), do: messages
 
   defp do_load_conversation(mod, agent_name, config) do
     case apply(mod, :load, [agent_name, config]) do
