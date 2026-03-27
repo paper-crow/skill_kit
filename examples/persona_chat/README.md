@@ -8,10 +8,10 @@ Users create AI personas through conversation, then chat with them. Each user ge
 
 | SkillKit Feature | How it's used |
 |---|---|
-| **Source-driven start_agent** | `start_agent(skills: [...])` discovers the root agent from sources — no Definition parsing |
+| **Agent identity** | `start_agent("agents/lobby", ...)` loads AGENT.md from the directory — agent identity is the first argument |
 | **Skills** | 7 skills across 2 kits drive all behavior (brainstorming, voice development, memory, etc.) |
-| **SkillKit.Shell as Kit** | Shell handler registered through `skills:` like any other kit |
-| **Backend.Filesystem** | Skills and agents loaded from directories via `dir:` option |
+| **SkillKit.Tools.Shell as Kit** | Shell tool registered through `skills:` like any other kit |
+| **Kit.Local** | Skills and agents loaded from directories via string paths (resolved to `Kit.Local`) |
 | **Root agent convention** | AGENT.md at root of source dir is the top-level agent; nested agents are subagents |
 | **Subagent delegation** | Lobby delegates file writing to a `persona_writer` subagent |
 | **Dynamic context injection** | `` !`command` `` in skills runs at render time, injecting live data (persona list, user memories) |
@@ -84,20 +84,22 @@ examples/persona_chat/
 ├── lib/persona_chat/
 │   ├── cli.ex              # CLI harness — the only app logic
 │   └── scope.ex            # Scope struct + SkillKit.Scope protocol impl
-├── .skills/
-│   ├── AGENT.md            # Lobby — root agent for management
-│   ├── persona_kit/
-│   │   ├── brainstorm.skill.md
-│   │   ├── develop_voice.skill.md
-│   │   ├── build_backstory.skill.md
-│   │   ├── finalize_persona.skill.md
-│   │   ├── list_personas.skill.md
-│   │   ├── delete_persona.skill.md
-│   │   └── persona_writer/
-│   │       └── AGENT.md    # Subagent for silent file writing
-│   └── memory_kit/
-│       └── user_memory.skill.md
-├── personas/               # Generated at runtime
+├── agents/
+│   ├── lobby/
+│   │   ├── AGENT.md        # Lobby — root agent for management
+│   │   ├── agents/
+│   │   │   └── persona-writer.md  # Subagent for silent file writing
+│   │   └── skills/
+│   │       ├── brainstorm/SKILL.md
+│   │       ├── develop-voice/SKILL.md
+│   │       ├── build-backstory/SKILL.md
+│   │       ├── finalize-persona/SKILL.md
+│   │       ├── list-personas/SKILL.md
+│   │       └── delete-persona/SKILL.md
+│   └── personas/           # Generated at runtime
+│       └── valentina_restrepo/AGENT.md
+├── skills/
+│   └── user-memory/SKILL.md
 ├── data/
 │   ├── conversations/      # Per user:persona conversation files
 │   └── memories/           # Per user:persona memory files
@@ -108,27 +110,20 @@ Only two `.ex` files. Everything else is markdown — agent definitions and skil
 
 ## Key SkillKit features demonstrated
 
-### Source-driven agent startup
+### Agent identity separate from tools
 
-The CLI doesn't parse AGENT.md files or construct Definition structs. It just points `start_agent` at source directories:
+The CLI passes the agent directory as the first argument to `start_agent`, and additional skill directories as the `skills:` option:
 
 ```elixir
-# Lobby — .skills/ contains AGENT.md at root + all skills
-SkillKit.start_agent(
-  skills: [
-    {SkillKit.Backend.Filesystem, dir: ".skills"},
-    {SkillKit.Shell, []}
-  ],
+# Lobby — agents/lobby/ contains AGENT.md at root + all skills
+SkillKit.start_agent("agents/lobby",
+  skills: ["skills", SkillKit.Tools.Shell],
   scope: scope
 )
 
-# Persona — persona dir has AGENT.md, memory_kit has skills
-SkillKit.start_agent(
-  skills: [
-    {SkillKit.Backend.Filesystem, dir: "personas/valentina_restrepo"},
-    {SkillKit.Backend.Filesystem, dir: ".skills/memory_kit"},
-    {SkillKit.Shell, []}
-  ],
+# Persona — persona dir has AGENT.md, skills dir has shared skills
+SkillKit.start_agent("agents/personas/valentina_restrepo",
+  skills: ["skills", SkillKit.Tools.Shell],
   name: "valentina_restrepo:alice",
   scope: scope,
   conversation_store: {SkillKit.Conversation.Store.Filesystem, path: "data/conversations"}
@@ -141,7 +136,7 @@ Skills use `` !`command` `` to inject live data at render time. The command runs
 
 ```markdown
 ## Available personas
-!`for dir in personas/*/; do ... done`
+!`for dir in agents/personas/*/; do ... done`
 ```
 
 The LLM receives the persona list directly. No bash tool call needed for read operations.

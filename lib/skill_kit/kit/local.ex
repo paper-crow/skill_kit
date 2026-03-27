@@ -100,8 +100,8 @@ defmodule SkillKit.Kit.Local do
 
   defp load_kit(dir) do
     {skills, skill_errors} = load_skills(dir)
-    {agents, agent_errors} = load_agents(dir)
-    {root_agent, root_errors} = load_root_agent(dir)
+    {subagents, agent_errors} = load_subagents(dir)
+    {agent, root_errors} = load_agent(dir)
     errors = skill_errors ++ agent_errors ++ root_errors
 
     if errors != [] do
@@ -115,7 +115,7 @@ defmodule SkillKit.Kit.Local do
       )
     end
 
-    %Kit{name: Path.basename(dir), skills: skills, agents: agents, root_agent: root_agent}
+    %Kit{name: Path.basename(dir), skills: skills, subagents: subagents, agent: agent}
   end
 
   # -------------------------------------------------------------------
@@ -159,10 +159,10 @@ defmodule SkillKit.Kit.Local do
   end
 
   # -------------------------------------------------------------------
-  # Agents: agents/*.md (flat, no recursion)
+  # Subagents: agents/*.md (flat, no recursion)
   # -------------------------------------------------------------------
 
-  defp load_agents(dir) do
+  defp load_subagents(dir) do
     agents_dir = Path.join(dir, "agents")
 
     if File.dir?(agents_dir) do
@@ -183,10 +183,10 @@ defmodule SkillKit.Kit.Local do
   end
 
   # -------------------------------------------------------------------
-  # Root agent: AGENT.md at kit root
+  # Agent: AGENT.md at kit root
   # -------------------------------------------------------------------
 
-  defp load_root_agent(dir) do
+  defp load_agent(dir) do
     root_path = Path.join(dir, "AGENT.md")
 
     if File.exists?(root_path) do

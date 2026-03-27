@@ -5,17 +5,18 @@ defmodule SkillKit.Telemetry do
   All events are prefixed with `[:skill_kit]`. Unless specified,
   all times are in `:native` units.
 
-  ## Agent events
+  ## Boundary spans
 
-  - `[:skill_kit, :agent, :turn_start, :start]`
-  - `[:skill_kit, :agent, :turn_start, :stop]`
-  - `[:skill_kit, :agent, :usage]`
-  - `[:skill_kit, :agent, :response]`
-  - `[:skill_kit, :agent, :error]`
-  - `[:skill_kit, :agent, :tool_call]`
-  - `[:skill_kit, :agent, :tool_result]`
-  - `[:skill_kit, :agent, :subagent_result]`
-  - `[:skill_kit, :agent, :orphaned_result]`
+  Each agent boundary emits a span with `:start` and `:stop` events:
+
+  - `[:skill_kit, :tool_use, :start/:stop]`
+  - `[:skill_kit, :subagent, :start/:stop]`
+  - `[:skill_kit, :skill_activation, :start/:stop]`
+  - `[:skill_kit, :conversation_save, :start/:stop]`
+  - `[:skill_kit, :conversation_load, :start/:stop]`
+  - `[:skill_kit, :llm_request, :start/:stop]`
+  - `[:skill_kit, :turn, :start/:stop]`
+  - `[:skill_kit, :agent, :start/:stop]`
 
   ## LLM events
 

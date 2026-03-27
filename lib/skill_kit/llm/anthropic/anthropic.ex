@@ -43,7 +43,7 @@ defmodule SkillKit.LLM.Anthropic do
   defp maybe_put_tools(opts, tools), do: Keyword.put(opts, :tools, tools)
 
   defp to_skill_kit_stream(anthropic_stream) do
-    Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, &Streamable.to_events/2)
+    Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, &Streamable.stream/2)
   end
 
   defp resolve_api_key do

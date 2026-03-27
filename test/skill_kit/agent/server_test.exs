@@ -172,7 +172,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       Memory.put_kit(provider, %Kit{
         name: "shell",
-        metadata: %{handler: SkillKit.Shell}
+        metadata: %{tool: SkillKit.Tools.Shell}
       })
 
       Memory.put(provider, %Skill{

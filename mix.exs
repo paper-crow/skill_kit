@@ -54,7 +54,9 @@ defmodule SkillKit.MixProject do
       main: "SkillKit",
       extras: [
         "README.md",
+        "guides/examples.md",
         "guides/architecture.md",
+        "guides/skill-format.md",
         "guides/llm-providers.md",
         "guides/providers.md",
         "guides/hooks-and-execution.md",
@@ -120,10 +122,10 @@ defmodule SkillKit.MixProject do
           SkillKit.Frontmatter
         ],
         "Execution & Hooks": [
-          SkillKit.Handler,
-          SkillKit.Handler.Behaviour,
-          SkillKit.Shell,
-          SkillKit.Handler.ToolDefinition,
+          SkillKit.Tool.Runner,
+          SkillKit.Tool,
+          SkillKit.Tools.Shell,
+          SkillKit.Tool.Definition,
           SkillKit.Pipeline,
           SkillKit.Hook
         ],

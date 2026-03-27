@@ -16,9 +16,10 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
-  alias SkillKit.Pipeline
+  alias SkillKit.Hooks
   alias SkillKit.Skill
   alias SkillKit.Telemetry
+  alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
@@ -80,33 +81,48 @@ defmodule SkillKit.Agent.Server do
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
 
-    messages =
-      case conversation_store do
-        {mod, config} ->
-          case mod.load(agent_name, config) do
-            {:ok, msgs} -> msgs
-            {:error, _} -> []
-          end
+    agent_catalog = {:via, Registry, {registry, {agent_name, :catalog}}}
+    messages = load_conversation(conversation_store, agent_name, agent_catalog)
 
-        nil ->
-          []
-      end
+    state = %__MODULE__{
+      agent_name: agent_name,
+      parent_name: parent_name,
+      definition: definition,
+      depth: depth,
+      scope: scope,
+      registry: registry,
+      caller: caller,
+      parent_registry: parent_registry,
+      skills: skills,
+      conversation_store: conversation_store,
+      messages: messages,
+      halted: false
+    }
 
-    {:ok,
-     %__MODULE__{
-       agent_name: agent_name,
-       parent_name: parent_name,
-       definition: definition,
-       depth: depth,
-       scope: scope,
-       registry: registry,
-       caller: caller,
-       parent_registry: parent_registry,
-       skills: skills,
-       conversation_store: conversation_store,
-       messages: messages,
-       halted: false
-     }}
+    try do
+      Hooks.cast(catalog(state), :pre_agent, %{
+        agent_name: agent_name,
+        definition: definition
+      })
+    catch
+      :exit, _reason -> :ok
+    end
+
+    {:ok, state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    try do
+      Hooks.cast(catalog(state), :post_agent, %{
+        agent_name: state.agent_name,
+        definition: state.definition
+      })
+    catch
+      :exit, _reason -> :ok
+    end
+
+    :ok
   end
 
   # --- Agent Loop ---
@@ -118,15 +134,13 @@ defmodule SkillKit.Agent.Server do
 
   @impl true
   def handle_info({:mailbox_flush, new_messages}, state) do
-    start_time =
-      Telemetry.start(
-        [:agent, :turn],
-        %{agent_name: state.agent_name, message_count: length(new_messages)}
-      )
+    turn_context = %{agent_name: state.agent_name, message_count: length(new_messages)}
 
-    state = run_agent_loop(state, new_messages)
-
-    Telemetry.stop([:agent, :turn], start_time, %{agent_name: state.agent_name})
+    state =
+      Hooks.call(catalog(state), :turn, turn_context, fn ->
+        updated = run_agent_loop(state, new_messages)
+        {updated, turn_context}
+      end)
 
     save_conversation(state)
 
@@ -159,11 +173,11 @@ defmodule SkillKit.Agent.Server do
           """
         }
 
-        Telemetry.event([:agent, :subagent_result], %{}, %{
-          agent_name: state.agent_name,
-          subagent_name: entry.name,
+        Hooks.cast(catalog(state), :post_subagent, %{
+          name: entry.name,
           task: entry.task,
-          result: result
+          result: result,
+          agent_name: state.agent_name
         })
 
         cast_to_mailbox(state, {:message, message})
@@ -205,29 +219,37 @@ defmodule SkillKit.Agent.Server do
         activated_skills: state.activated_skills
       )
 
-    case stream(state, tools) do
+    llm_context = %{
+      agent_name: state.agent_name,
+      model: state.definition.model,
+      message_count: length(state.messages),
+      tool_count: length(tools)
+    }
+
+    llm_result = hooked_llm_request(state, tools, llm_context)
+
+    case llm_result do
+      {:deny, reason} ->
+        notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
+        state
+
       {:ok, event_stream} ->
         acc = Enum.reduce(event_stream, new_accumulator(), &process_event(&1, &2, state))
-
         response = finalize_response(acc)
-
-        Telemetry.event([:agent, :usage], acc.usage, %{agent_name: state.agent_name})
-
-        Telemetry.event([:agent, :response], %{}, %{
-          agent_name: state.agent_name,
-          response: response
-        })
-
         state = %{state | messages: state.messages ++ [response]}
-
         handle_response(response, state)
 
       {:error, reason} ->
-        Telemetry.event([:agent, :error], %{}, %{agent_name: state.agent_name, error: reason})
-
         notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
         state
     end
+  end
+
+  defp hooked_llm_request(state, tools, llm_context) do
+    Hooks.call(catalog(state), :llm_request, llm_context, fn ->
+      result = stream(state, tools)
+      {result, llm_context}
+    end)
   end
 
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
@@ -237,26 +259,15 @@ defmodule SkillKit.Agent.Server do
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
     {results, state} = execute_tool_calls(tool_calls, state)
-
-    Enum.each(results, fn result ->
-      Telemetry.event([:agent, :tool_result], %{}, %{
-        agent_name: state.agent_name,
-        tool_call_id: result.tool_call_id,
-        result: result
-      })
-    end)
-
     state = %{state | messages: state.messages ++ results}
     run_agent_loop(state, [])
   end
 
   defp execute_tool_calls(tool_calls, state) do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
-      Telemetry.event([:agent, :tool_call], %{}, %{agent_name: acc.agent_name, tool_call: tc})
-
       {result, acc} =
         case SkillKit.Catalog.classify(catalog(acc), tc.name, acc.activated_skills) do
-          :handler -> {execute_command(tc, acc), acc}
+          :tool -> {execute_command(tc, acc), acc}
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
           :subagent -> spawn_subagent(tc, acc)
@@ -270,45 +281,70 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_command(%ToolCall{id: id, input: input}, state) do
-    handler = find_handler(state)
-    context = build_handler_context(state)
+    tool = find_tool(state)
+    tool_context = build_tool_context(state)
 
-    case SkillKit.Handler.run(handler, catalog(state), input, context) do
+    hook_context = %{
+      tool: tool,
+      input: input,
+      skill: nil,
+      scope: state.scope,
+      agent_name: state.agent_name
+    }
+
+    result =
+      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+        do_execute_command(id, tool, input, tool_context, hook_context)
+      end)
+
+    unwrap_tool_result(id, result)
+  end
+
+  defp do_execute_command(id, tool, input, tool_context, hook_context) do
+    exec = %ToolExecution{tool: tool, input: input, context: tool_context}
+
+    case ToolExecution.execute(exec) do
       {:ok, execution} ->
-        %ToolResult{
-          tool_call_id: id,
-          content: extract_output(execution.results["execute"])
-        }
+        result = %ToolResult{tool_call_id: id, content: extract_output(execution.result)}
+        {result, Map.put(hook_context, :result, execution.result)}
 
       {:error, execution} ->
-        %ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
+        result = %ToolResult{
+          tool_call_id: id,
+          content: extract_error(execution),
+          is_error: true
+        }
+
+        {result, Map.put(hook_context, :result, execution.result)}
 
       {:pending, _execution} ->
-        %ToolResult{
+        result = %ToolResult{
           tool_call_id: id,
           content: "Command requires approval (not yet supported).",
           is_error: true
         }
+
+        {result, hook_context}
     end
   end
 
-  defp find_handler(state) do
-    case SkillKit.Catalog.handler_config(catalog(state)) do
-      nil -> SkillKit.Shell
-      {handler, _metadata} -> handler
+  defp find_tool(state) do
+    case SkillKit.Catalog.tool_config(catalog(state)) do
+      nil -> SkillKit.Tools.Shell
+      {tool, _metadata} -> tool
     end
   end
 
-  defp build_handler_context(state) do
+  defp build_tool_context(state) do
     base_context = %{scope: state.scope}
 
-    case SkillKit.Catalog.handler_config(catalog(state)) do
+    case SkillKit.Catalog.tool_config(catalog(state)) do
       nil -> base_context
-      {_handler, metadata} -> merge_handler_config(base_context, metadata)
+      {_tool, metadata} -> merge_tool_config(base_context, metadata)
     end
   end
 
-  defp merge_handler_config(context, metadata) do
+  defp merge_tool_config(context, metadata) do
     context
     |> maybe_put_cwd(metadata)
     |> maybe_put_env(metadata)
@@ -325,9 +361,9 @@ defmodule SkillKit.Agent.Server do
   defp extract_output(other), do: inspect(other)
 
   defp extract_error(execution) do
-    case execution.results["execute"] do
-      {:error, {output, _code}} -> ensure_non_empty(output)
-      {:error, reason} -> inspect(reason)
+    case execution.result do
+      {output, _code} -> ensure_non_empty(output)
+      reason when is_binary(reason) -> ensure_non_empty(reason)
       _ -> "Execution failed"
     end
   end
@@ -336,14 +372,26 @@ defmodule SkillKit.Agent.Server do
   defp ensure_non_empty(str) when is_binary(str), do: str
   defp ensure_non_empty(nil), do: "(no output)"
 
+  defp unwrap_tool_result(id, {:deny, reason}) do
+    %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+  end
+
+  defp unwrap_tool_result(_id, result), do: result
+
+  defp unwrap_stateful_result(id, {:deny, reason}, state) do
+    result = %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+    {result, state}
+  end
+
+  defp unwrap_stateful_result(_id, result, _state), do: result
+
   defp activate_skill(%ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
     arguments = Map.get(input, "arguments", "")
 
     case SkillKit.Catalog.get_skill(catalog(state), skill_name) do
       {:ok, skill} ->
-        scope_context = %{agent: state.agent_name, skill: skill_name}
-        render_and_activate(id, skill, arguments, state, scope_context)
+        activate_skill_with_hook(id, skill, skill_name, arguments, state)
 
       {:error, :unauthorized} ->
         result = %ToolResult{
@@ -365,6 +413,29 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
+  defp activate_skill_with_hook(id, skill, skill_name, arguments, state) do
+    hook_context = %{
+      skill: skill,
+      skill_name: skill_name,
+      arguments: arguments,
+      agent_name: state.agent_name,
+      scope: state.scope
+    }
+
+    result =
+      Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
+        do_activate_skill(id, skill, skill_name, arguments, state, hook_context)
+      end)
+
+    unwrap_stateful_result(id, result, state)
+  end
+
+  defp do_activate_skill(id, skill, skill_name, arguments, state, hook_context) do
+    scope_context = %{agent: state.agent_name, skill: skill_name}
+    result = render_and_activate(id, skill, arguments, state, scope_context)
+    {result, Map.put(hook_context, :result, result)}
+  end
+
   defp render_and_activate(id, skill, arguments, state, scope_context) do
     rendered = Skill.render(skill, %{"arguments" => arguments}, state.scope, scope_context)
     handle_skill_activation(id, skill, rendered, state)
@@ -374,7 +445,7 @@ defmodule SkillKit.Agent.Server do
     already_activated = Enum.any?(state.activated_skills, &(&1.name == skill.name))
 
     state =
-      if skill.handler != SkillKit.Shell and not already_activated do
+      if skill.tool != SkillKit.Tools.Shell and not already_activated do
         %{state | activated_skills: [skill | state.activated_skills]}
       else
         state
@@ -384,21 +455,41 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp execute_module_skill(%ToolCall{id: id, input: input}, skill, state) do
+    hook_context = %{
+      tool: skill.tool,
+      input: input,
+      skill: skill,
+      scope: state.scope,
+      agent_name: state.agent_name
+    }
+
+    result =
+      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+        do_execute_module_skill(id, skill, input, state, hook_context)
+      end)
+
+    unwrap_tool_result(id, result)
+  end
+
+  defp do_execute_module_skill(id, skill, input, state, hook_context) do
     source_config = Map.get(skill.metadata, "source_config", [])
 
     context =
       %{scope: state.scope, agent_name: state.agent_name}
       |> Map.merge(Map.new(source_config))
 
-    execution = %Pipeline{skill: skill, input: input, context: context}
+    execution = %ToolExecution{skill: skill, input: input, context: context}
 
-    case skill.handler.execute(execution) do
-      {:ok, result} ->
-        %ToolResult{tool_call_id: id, content: to_string(result)}
+    result =
+      case apply(skill.tool, :execute, [execution]) do
+        {:ok, value} ->
+          %ToolResult{tool_call_id: id, content: to_string(value)}
 
-      {:error, reason} ->
-        %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
-    end
+        {:error, reason} ->
+          %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
+      end
+
+    {result, Map.put(hook_context, :result, result)}
   end
 
   defp spawn_subagent(%ToolCall{id: id, name: name, input: input}, state) do
@@ -425,9 +516,26 @@ defmodule SkillKit.Agent.Server do
           {result, state}
 
         {:ok, agent_def} ->
-          do_spawn_subagent(id, name, task, agent_def, state)
+          spawn_subagent_with_hook(id, name, task, agent_def, state)
       end
     end
+  end
+
+  defp spawn_subagent_with_hook(id, name, task, agent_def, state) do
+    hook_context = %{
+      name: name,
+      task: task,
+      agent_name: state.agent_name,
+      depth: state.depth
+    }
+
+    result =
+      Hooks.call(catalog(state), :subagent, hook_context, fn ->
+        spawn_result = do_spawn_subagent(id, name, task, agent_def, state)
+        {spawn_result, Map.put(hook_context, :result, spawn_result)}
+      end)
+
+    unwrap_stateful_result(id, result, state)
   end
 
   defp do_spawn_subagent(id, name, task, agent_def, state) do
@@ -458,7 +566,7 @@ defmodule SkillKit.Agent.Server do
             agent_ref: agent_ref
           })
 
-        state = %{state | subagents: subagents}
+        updated_state = %{state | subagents: subagents}
 
         SkillKit.send_message(agent_ref, task)
 
@@ -467,7 +575,7 @@ defmodule SkillKit.Agent.Server do
           content: "Delegated to #{name}. You will receive the result when it completes."
         }
 
-        {result, state}
+        {result, updated_state}
 
       {:error, reason} ->
         result = %ToolResult{
@@ -595,10 +703,49 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
+  defp load_conversation(nil, _agent_name, _catalog), do: []
+
+  defp load_conversation({mod, config}, agent_name, catalog) do
+    load_context = %{agent_name: agent_name}
+
+    try do
+      catalog
+      |> hooked_load(load_context, mod, agent_name, config)
+      |> unwrap_load_result()
+    catch
+      :exit, _reason -> do_load_conversation(mod, agent_name, config)
+    end
+  end
+
+  defp hooked_load(catalog, load_context, mod, agent_name, config) do
+    Hooks.call(catalog, :conversation_load, load_context, fn ->
+      messages = do_load_conversation(mod, agent_name, config)
+      {messages, Map.put(load_context, :messages, messages)}
+    end)
+  end
+
+  defp unwrap_load_result({:deny, _reason}), do: []
+  defp unwrap_load_result(messages), do: messages
+
+  defp do_load_conversation(mod, agent_name, config) do
+    case apply(mod, :load, [agent_name, config]) do
+      {:ok, msgs} -> msgs
+      {:error, _} -> []
+    end
+  end
+
   defp save_conversation(%{conversation_store: nil}), do: :ok
 
-  defp save_conversation(%{conversation_store: {mod, config}, agent_name: id, messages: msgs}) do
-    mod.save(id, msgs, config)
+  defp save_conversation(%{conversation_store: {mod, config}} = state) do
+    save_context = %{
+      agent_name: state.agent_name,
+      message_count: length(state.messages)
+    }
+
+    Hooks.call(catalog(state), :conversation_save, save_context, fn ->
+      apply(mod, :save, [state.agent_name, state.messages, config])
+      {:ok, save_context}
+    end)
   end
 
   defp catalog(state) do

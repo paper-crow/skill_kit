@@ -78,9 +78,9 @@ defmodule SkillKit.Agent.LoopTest do
     end
 
     @tag telemetry: [
-           [:skill_kit, :agent, :turn, :start],
-           [:skill_kit, :agent, :response],
-           [:skill_kit, :agent, :turn, :stop]
+           [:skill_kit, :turn, :start],
+           [:skill_kit, :llm_request, :stop],
+           [:skill_kit, :turn, :stop]
          ]
     test "telemetry events fire during loop", %{
       registry: registry,
@@ -115,14 +115,13 @@ defmodule SkillKit.Agent.LoopTest do
       GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hi"}})
       send(mailbox_pid, :flush)
 
-      assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :start],
-                      %{agent_name: ^agent_name}},
+      assert_receive {__MODULE__, [:skill_kit, :turn, :start], %{agent_name: ^agent_name}},
                      500
 
-      assert_receive {__MODULE__, [:skill_kit, :agent, :response], %{agent_name: ^agent_name}},
+      assert_receive {__MODULE__, [:skill_kit, :llm_request, :stop], %{agent_name: ^agent_name}},
                      500
 
-      assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :stop], %{agent_name: ^agent_name}},
+      assert_receive {__MODULE__, [:skill_kit, :turn, :stop], %{agent_name: ^agent_name}},
                      500
     end
   end

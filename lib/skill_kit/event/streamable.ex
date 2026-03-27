@@ -8,7 +8,7 @@ defprotocol SkillKit.Event.Streamable do
 
   ## How it works
 
-  `to_events/2` takes a single provider event and an accumulator map, returning
+  `stream/2` takes a single provider event and an accumulator map, returning
   `{events, updated_acc}` where `events` is a list of zero or more `SkillKit.Event.*`
   structs.
 
@@ -34,20 +34,20 @@ defprotocol SkillKit.Event.Streamable do
      (not in the provider — SkillKit owns the conversion):
 
           defimpl SkillKit.Event.Streamable, for: MyProvider.Event.TextChunk do
-            def to_events(%{text: text}, acc) do
+            def stream(%{text: text}, acc) do
               {[%SkillKit.Event.Delta{text: text}], acc}
             end
           end
 
           defimpl SkillKit.Event.Streamable, for: MyProvider.Event.Done do
-            def to_events(%{reason: reason}, acc) do
+            def stream(%{reason: reason}, acc) do
               {[%SkillKit.Event.Done{stop_reason: reason}], acc}
             end
           end
 
   3. Wire the stream in your LLM adapter using `Stream.transform/3`:
 
-          Stream.transform(provider_stream, %{}, &Streamable.to_events/2)
+          Stream.transform(provider_stream, %{}, &Streamable.stream/2)
 
   ## Accumulator
 
@@ -62,6 +62,6 @@ defprotocol SkillKit.Event.Streamable do
   complete reference implementation.
   """
 
-  @spec to_events(t(), map()) :: {[struct()], map()}
-  def to_events(event, acc)
+  @spec stream(t(), map()) :: {[struct()], map()}
+  def stream(event, acc)
 end

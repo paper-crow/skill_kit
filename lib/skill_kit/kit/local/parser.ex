@@ -56,6 +56,8 @@ defmodule SkillKit.Kit.Local.Parser do
       }}
   """
 
+  require Logger
+
   alias SkillKit.Hook
   alias SkillKit.Skill
 
@@ -162,71 +164,90 @@ defmodule SkillKit.Kit.Local.Parser do
   # Private: Hook parsing
   # ---------------------------------------------------------------------------
 
-  # Converts the Claude Code hook YAML format into a list of %Hook{} structs.
+  # Converts the hook YAML format into a list of %Hook{} structs.
   #
-  # Supported event names:
-  #   - "PreToolUse"  → phase: :pre
-  #   - "PostToolUse" → phase: :post
+  # Event names map to boundary-derived atoms:
+  #   - "PreToolUse"  → :pre_tool_use
+  #   - "PostToolUse" → :post_tool_use
+  #   - etc.
   #
-  # Other event names are silently ignored.
+  # Unknown event names are silently ignored.
   # If no "hooks" key is present, returns {:ok, []}.
   @spec parse_hooks(map()) :: {:ok, [Hook.t()]}
-  @phase_map %{"PreToolUse" => :pre, "PostToolUse" => :post}
+
+  @event_map %{
+    "PreToolUse" => :pre_tool_use,
+    "PostToolUse" => :post_tool_use,
+    "PreSubagent" => :pre_subagent,
+    "PostSubagent" => :post_subagent,
+    "PreSkillActivation" => :pre_skill_activation,
+    "PostSkillActivation" => :post_skill_activation,
+    "PreConversationSave" => :pre_conversation_save,
+    "PostConversationSave" => :post_conversation_save,
+    "PreConversationLoad" => :pre_conversation_load,
+    "PostConversationLoad" => :post_conversation_load,
+    "PreLlmRequest" => :pre_llm_request,
+    "PostLlmRequest" => :post_llm_request,
+    "PreTurn" => :pre_turn,
+    "PostTurn" => :post_turn,
+    "PreAgent" => :pre_agent,
+    "PostAgent" => :post_agent
+  }
 
   defp parse_hooks(yaml_map) do
+    hook_handlers = Application.get_env(:skill_kit, :hook_handlers, %{})
+
     hooks =
       yaml_map
       |> Map.get("hooks", %{})
-      |> Enum.flat_map(&parse_hook_event/1)
+      |> Enum.flat_map(&parse_hook_event(&1, hook_handlers))
 
     {:ok, hooks}
   end
 
-  defp parse_hook_event({event_name, entries}) do
-    case Map.fetch(@phase_map, event_name) do
-      {:ok, phase} -> Enum.map(entries, &build_hook(phase, &1))
+  defp parse_hook_event({event_name, entries}, hook_handlers) do
+    case Map.fetch(@event_map, event_name) do
+      {:ok, event} -> Enum.map(entries, &build_hook(event, &1, hook_handlers))
       :error -> []
     end
   end
 
-  defp build_hook(phase, entry) do
+  defp build_hook(event, entry, hook_handlers) do
     %Hook{
-      phase: phase,
-      matcher: Regex.compile!(Map.get(entry, "matcher", ".*")),
-      handler: build_hook_handler(Map.get(entry, "hooks", []))
+      event: event,
+      matcher: compile_matcher(Map.get(entry, "matcher")),
+      handler: build_hook_handler(Map.get(entry, "hooks", []), hook_handlers)
     }
   end
 
-  # Builds a handler function from a list of hook handler definitions.
-  #
-  # For "type: command", returns a function that shells out to the command.
-  # Unknown types return a no-op handler that returns :allow.
-  # When multiple handler definitions are given, the first one wins.
-  @spec build_hook_handler(list()) :: Hook.handler()
-  defp build_hook_handler([%{"type" => "command", "command" => cmd} | _rest]) do
-    fn context -> run_command_hook(context, cmd) end
+  defp compile_matcher(nil), do: nil
+  defp compile_matcher(pattern), do: Regex.compile!(pattern)
+
+  @spec build_hook_handler(list(), map()) :: Hook.handler()
+  defp build_hook_handler([config], hook_handlers) do
+    resolve_handler(config, hook_handlers)
   end
 
-  defp build_hook_handler(_other) do
-    fn context -> noop_hook(context) end
+  defp build_hook_handler([config | _rest], hook_handlers) do
+    Logger.warning("Multiple handlers per matcher entry not supported; using first")
+    resolve_handler(config, hook_handlers)
   end
 
-  defp run_command_hook(%{result: _}, cmd) do
-    # Post-hook: run command, always succeed (post hooks are observational)
-    System.cmd("sh", ["-c", cmd], stderr_to_stdout: true)
-    {:ok, :completed}
+  defp build_hook_handler(_other, _hook_handlers) do
+    fn _context -> :ok end
   end
 
-  defp run_command_hook(_context, cmd) do
-    # Pre-hook: command exit code determines allow/deny
-    case System.cmd("sh", ["-c", cmd], stderr_to_stdout: true) do
-      {_output, 0} -> :allow
-      {output, _code} -> {:deny, output}
+  defp resolve_handler(%{"type" => type} = config, hook_handlers) do
+    case Map.fetch(hook_handlers, type) do
+      {:ok, handler_mod} ->
+        handler_config = Map.drop(config, ["type"])
+        {handler_mod, handler_config}
+
+      :error ->
+        Logger.warning("Unknown hook handler type: #{type}")
+        fn _context -> :ok end
     end
   end
-
-  defp noop_hook(%{result: _}), do: {:ok, :completed}
-  defp noop_hook(_context), do: :allow
 
   # Fetches a required string field from the YAML map.
   # Returns {:error, {:missing_field, key}} if absent, nil, or empty string.

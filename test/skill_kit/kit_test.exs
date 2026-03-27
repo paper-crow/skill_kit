@@ -2,10 +2,10 @@ defmodule SkillKit.KitTest.TestKit do
   use SkillKit.Kit,
     skills_dir: Path.join(__DIR__, "../support/fixtures/test_kit/skills")
 
-  alias SkillKit.Pipeline
+  alias SkillKit.ToolExecution
 
-  @impl SkillKit.Handler.Behaviour
-  def execute(%Pipeline{skill: %{name: "test_kit:greet"}, input: input}) do
+  @impl SkillKit.Tool
+  def execute(%ToolExecution{skill: %{name: "test_kit:greet"}, input: input}) do
     {:ok, "Hello, #{input["name"]}!"}
   end
 end
@@ -16,8 +16,8 @@ defmodule SkillKit.KitTest do
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
-  alias SkillKit.Pipeline
   alias SkillKit.Skill
+  alias SkillKit.ToolExecution
 
   describe "use SkillKit.Kit" do
     test "load_kits/1 returns kit with skills from skills/ directory" do
@@ -28,7 +28,7 @@ defmodule SkillKit.KitTest do
       [skill] = kit.skills
       assert skill.name == "test_kit:greet"
       assert skill.description == "Greet a user"
-      assert skill.handler == SkillKit.KitTest.TestKit
+      assert skill.tool == SkillKit.KitTest.TestKit
       assert skill.body =~ "greet"
     end
 
@@ -42,7 +42,7 @@ defmodule SkillKit.KitTest do
       {:ok, [kit]} = TestKit.load_kits([])
       [skill] = kit.skills
 
-      execution = %Pipeline{
+      execution = %ToolExecution{
         skill: skill,
         input: %{"name" => "World"},
         context: %{}
@@ -68,27 +68,27 @@ defmodule SkillKit.KitTest do
         path: "/tmp"
       }
 
-      kit = %Kit{name: "my-kit", skills: [skill], agents: [agent]}
+      kit = %Kit{name: "my-kit", skills: [skill], subagents: [agent]}
 
       assert kit.name == "my-kit"
       assert length(kit.skills) == 1
-      assert length(kit.agents) == 1
+      assert length(kit.subagents) == 1
       assert kit.metadata == %{}
     end
 
     test "defaults to empty lists and map" do
       kit = %Kit{name: "empty"}
       assert kit.skills == []
-      assert kit.agents == []
+      assert kit.subagents == []
       assert kit.metadata == %{}
     end
 
-    test "root_agent defaults to nil" do
+    test "agent defaults to nil" do
       kit = %Kit{name: "empty"}
-      assert kit.root_agent == nil
+      assert kit.agent == nil
     end
 
-    test "root_agent can hold a Definition struct" do
+    test "agent can hold a Definition struct" do
       root = %Definition{
         name: "root",
         description: "Root agent",
@@ -96,8 +96,8 @@ defmodule SkillKit.KitTest do
         path: "/tmp"
       }
 
-      kit = %Kit{name: "my-kit", root_agent: root}
-      assert kit.root_agent == root
+      kit = %Kit{name: "my-kit", agent: root}
+      assert kit.agent == root
     end
   end
 end

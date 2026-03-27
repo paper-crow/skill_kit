@@ -201,8 +201,8 @@ defmodule SkillKit.Kit.Memory do
     kit = %Kit{
       name: "memory",
       skills: skills,
-      agents: [],
-      root_agent: nil,
+      subagents: [],
+      agent: nil,
       metadata: %{}
     }
 

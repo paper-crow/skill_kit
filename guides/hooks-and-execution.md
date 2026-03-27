@@ -1,197 +1,224 @@
-# Hooks and Execution
+# Hooks
 
-Every skill input runs through a structured pipeline: pre-hooks, the handler,
-then post-hooks. This page explains how that pipeline is built and run, how
-hooks are defined and matched, and how to suspend and resume execution for
-human-in-the-loop approval flows.
+Hooks let skills enforce policy at agent boundaries — moments where an
+agent is about to execute a tool, spawn a subagent, call the LLM, or
+persist a conversation. They are gate-only: a hook can allow, deny, or
+suspend the action, but never modify the data flowing through it.
 
-## Overview
+## Defining Hooks on Skills
 
-When `SkillKit.Handler.run/3,4` is called, it collects all hooks from every
-registered skill, builds a `Pipeline` with hooks filtered to those
-matching the handler (ordered as pre-steps, the execute step, and post-steps),
-and walks it sequentially, recording each step's result by name.
+Hooks are declared in a skill's YAML frontmatter under the `hooks` key.
+Each event name maps to a list of matcher entries, each with a list of
+handler configs:
 
-A step that returns `{:pending, state}` suspends the pipeline. The caller
-holds the execution struct and resumes it later with `Handler.resume/2`.
+```yaml
+---
+name: ops:deploy
+description: Deploy a service to staging.
+hooks:
+  PreToolUse:
+    - matcher: "Shell"
+      hooks:
+        - type: command
+          command: "./scripts/check-deploy-policy.sh"
+  PostToolUse:
+    - hooks:
+        - type: http
+          url: "https://audit.example.com/log"
+---
+Deploy $ARGUMENTS to staging.
+```
 
-## Hook Struct
+Hooks are scoped to the skill's lifetime. When the skill is unregistered,
+its hooks stop firing.
 
-`SkillKit.Hook` carries three fields:
+## Available Events
 
-| Field      | Type                       | Description                                      |
-|------------|----------------------------|--------------------------------------------------|
-| `:phase`   | `:pre \| :post`             | When the hook fires relative to the execute step |
-| `:matcher` | `Regex.t()`                | Matched against the last segment of the handler module name |
-| `:handler` | `(map() -> any()) \| {m, f, a}` | The function to invoke                      |
+Each boundary has a pre-event (can deny) and a post-event (observational).
+Use PascalCase in YAML frontmatter:
 
-Hooks are defined on a skill and scoped to its lifetime — when the skill is
-unregistered, its hooks are removed from all future pipelines.
+| Pre-event | Post-event | What it gates |
+|---|---|---|
+| `PreToolUse` | `PostToolUse` | OS command or module-skill tool execution |
+| `PreSubagent` | `PostSubagent` | Spawning a subagent |
+| `PreSkillActivation` | `PostSkillActivation` | Activating a skill |
+| `PreLlmRequest` | `PostLlmRequest` | Sending a request to the LLM provider |
+| `PreConversationSave` | `PostConversationSave` | Persisting conversation history |
+| `PreConversationLoad` | `PostConversationLoad` | Loading conversation history |
+| `PreTurn` | `PostTurn` | Processing a batch of messages (one agent loop) |
+| `PreAgent` | `PostAgent` | Agent process init / terminate |
 
-Pre-hook functions receive a context map with `:skill`, `:scope`, `:input`,
-and `:handler`. Post-hook functions receive the same map plus `:result`, which
-holds the execute step's return value.
+Unknown event names are silently ignored.
 
-A pre-hook may return:
+## Matchers
 
-- `:allow` — continue unchanged
-- `{:allow, new_input}` — continue with a modified input map
-- `{:deny, reason}` — halt the pipeline with a `:failed` status
+The optional `matcher` field is a regex that filters which boundary
+crossings trigger the hook. What it matches against depends on the
+boundary:
 
-## Execution Pipeline
+| Boundary | Matched against | Example |
+|---|---|---|
+| Tool use | Last segment of tool module name | `"Shell"`, `"Sandbox"` |
+| Subagent | Subagent name | `"researcher"` |
+| Skill activation | Skill name | `"ops:deploy"` |
+| LLM request | Model string | `"claude-opus"` |
+| All others | Agent name | `"my-agent"` |
 
-### Construction
+Omit `matcher` to match all crossings for that event.
 
-`SkillKit.Handler.run/3,4` builds the pipeline struct directly. It collects
-hooks from the registry, filters them by handler name, builds the step list,
-and constructs a `%Pipeline{}`:
+## Return Values
+
+Pre-event hook handlers return one of:
+
+| Return | Effect |
+|---|---|
+| `:ok` | Allow — proceed to the next hook or the action |
+| `{:deny, reason}` | Block — the action does not run |
+| `{:pending, state}` | Suspend — the action pauses for approval |
+
+Pre-hooks run in order. The first `:deny` or `:pending` short-circuits —
+remaining hooks and the action itself are skipped.
+
+Post-event hooks always run after the action completes. Their return
+values are ignored.
+
+## Built-in Handler Types
+
+### Command
+
+Shells out to a command. The hook context is passed as JSON in the
+`HOOK_INPUT` environment variable.
+
+```yaml
+hooks:
+  PreToolUse:
+    - matcher: "Shell"
+      hooks:
+        - type: command
+          command: "./scripts/validate.sh"
+```
+
+Exit code semantics (matching Claude Code):
+
+| Exit code | Result |
+|---|---|
+| `0` | `:ok` |
+| `2` | `{:deny, output}` |
+| Any other | `:ok` (non-blocking error) |
+
+### Http
+
+POSTs the hook context as JSON to a URL.
+
+```yaml
+hooks:
+  PreSubagent:
+    - hooks:
+        - type: http
+          url: "https://policy.example.com/approve"
+          timeout: 10
+```
+
+Response interpretation:
+
+| Response | Result |
+|---|---|
+| 2xx with `{"decision": "deny", "reason": "..."}` | `{:deny, reason}` |
+| 2xx with `{"decision": "allow"}` or no `decision` field | `:ok` |
+| Non-2xx | `{:deny, "HTTP hook returned status <code>"}` |
+| Connection error | `:ok` (non-blocking) |
+
+Optional fields: `headers` (map), `timeout` (seconds, default 30).
+
+## Custom Handler Types
+
+Implement `SkillKit.Hooks.Handler`:
 
 ```elixir
-# Handler.run/4 does this internally:
-%Pipeline{
-  skill: skill,
-  input: input,
-  context: context,
-  steps: pre_steps ++ [{:execute, "execute", handler}] ++ post_steps
+defmodule MyApp.Hooks.Slack do
+  @behaviour SkillKit.Hooks.Handler
+
+  @impl true
+  def execute(%{"channel" => channel} = config, context) do
+    message = Map.get(config, "message", "Hook fired")
+    MyApp.Slack.post(channel, "#{message}: #{inspect(context)}")
+    :ok
+  end
+end
+```
+
+Register the type in application config:
+
+```elixir
+# config/config.exs
+config :skill_kit, :hook_handlers, %{
+  "command" => SkillKit.Hooks.Command,
+  "http" => SkillKit.Hooks.Http,
+  "slack" => MyApp.Hooks.Slack
 }
 ```
 
-### Step Names
-
-Steps are named for introspection and resumption:
-
-- Pre-hooks: `"pre:0"`, `"pre:1"`, ...
-- Execute step: `"execute"`
-- Post-hooks: `"post:0"`, `"post:1"`, ...
-
-Results accumulate in `execution.results`, a map keyed by step name.
-
-### Status Transitions
-
-| Status       | Meaning                                   |
-|--------------|-------------------------------------------|
-| `:pending`   | Built but not yet run                     |
-| `:running`   | Actively walking steps                    |
-| `:suspended` | Paused at a step awaiting a decision      |
-| `:complete`  | All steps succeeded                       |
-| `:failed`    | A step returned an error or denial        |
-
-### Running
+Or per-agent via `start_agent`:
 
 ```elixir
-case Pipeline.run(execution) do
-  {:ok, exec}      -> exec.results["execute"]   # success
-  {:error, exec}   -> exec.results             # inspect failures
-  {:pending, exec} -> exec                      # hold for resumption
-end
+SkillKit.start_agent("agents/my-agent",
+  skills: ["skills"],
+  hook_handlers: %{"slack" => MyApp.Hooks.Slack}
+)
 ```
 
-## The Three-Value Return
+Skills can then reference the custom type in YAML:
 
-Every handler and hook ultimately returns one of three tagged tuples:
-
-- `{:ok, result}` — the step completed; execution continues.
-- `{:error, reason}` — the step failed; the pipeline halts with `:failed`.
-- `{:pending, state}` — the step needs a decision; the pipeline suspends
-  with `:suspended`, recording `state` in `execution.suspended_state`.
-
-## Suspension and Resumption
-
-When a step returns `{:pending, state}`, `Pipeline.run/1` returns
-`{:pending, execution}` immediately. The pipeline does not advance further.
-
-To continue, call `Handler.resume/2` (or `Pipeline.resume/2` directly):
-
-```elixir
-{:pending, exec} = Handler.run(catalog, skill, input, context)
-
-case Handler.resume(exec, :approved) do
-  {:ok, exec}      -> :done
-  {:error, exec}   -> :denied_or_failed
-  {:pending, exec} -> :another_approval_needed
-end
+```yaml
+hooks:
+  PostToolUse:
+    - hooks:
+        - type: slack
+          channel: "#deployments"
+          message: "Tool executed"
 ```
 
-`resume/2` replays from the suspended step — calling `resume/3` on the handler
-for execute steps, or re-invoking the hook function for hook steps. The
-`decision` value is passed straight through to `resume/3`.
+The remaining YAML fields (everything except `type`) become the `config`
+map passed to your handler's `execute/2`.
 
-## Handler Behaviour
+## Programmatic Hooks
 
-Custom handlers implement `SkillKit.Handler.Behaviour`:
-
-```elixir
-@callback execute(execution :: SkillKit.Pipeline.t()) ::
-            {:ok, any()} | {:error, any()} | {:pending, any()}
-
-@callback resume(execution :: SkillKit.Pipeline.t(), state :: any(),
-                 decision :: :approved | {:denied, any()}) ::
-            {:ok, any()} | {:error, any()} | {:pending, any()}
-
-@callback tool_definition() :: SkillKit.Handler.ToolDefinition.t()
-```
-
-`execute/1` receives the full execution struct. `resume/3` receives the same
-struct, the `state` saved at suspension, and the caller's decision.
-`tool_definition/0` describes the tool for LLM tool-use schemas.
-
-## Writing a Custom Handler
+Module-based kits and tests can define hooks directly on skill structs
+using function or MFA handlers:
 
 ```elixir
-defmodule MyApp.Handler.Sandbox do
-  @behaviour SkillKit.Handler.Behaviour
-
-  alias SkillKit.Pipeline
-
-  @impl true
-  def execute(%Pipeline{input: %{"command" => command}} = exec) do
-    case MyApp.Sandbox.check_policy(command) do
-      :allow   -> {:ok, MyApp.Sandbox.run(command)}
-      :needs_approval -> {:pending, %{command: command}}
-      {:deny, reason} -> {:error, {:denied, reason}}
-    end
-  end
-
-  @impl true
-  def resume(%Pipeline{} = exec, %{command: command}, :approved) do
-    {:ok, MyApp.Sandbox.run(command)}
-  end
-
-  def resume(_exec, _state, {:denied, reason}) do
-    {:error, {:denied, reason}}
-  end
-
-  @impl true
-  def tool_definition do
-    %SkillKit.Handler.ToolDefinition{
-      name: "sandbox",
-      description: "Run a command in the sandbox environment.",
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{"command" => %{"type" => "string"}},
-        "required" => ["command"]
-      }
+%Skill{
+  name: "policy:enforcer",
+  hooks: [
+    %Hook{
+      event: :pre_tool_use,
+      matcher: ~r/Shell/,
+      handler: fn context -> check_policy(context) end
     }
-  end
-end
+  ]
+}
 ```
 
-Configure SkillKit to use it:
+## Hook Context
 
-```elixir
-config :skill_kit, handler: MyApp.Handler.Sandbox
-```
+Each boundary passes a context map to matching handlers. Common keys
+across all boundaries:
 
-## How Hooks Are Collected
+| Key | Type | Present on |
+|---|---|---|
+| `:agent_name` | `String.t()` | All boundaries |
+| `:scope` | `term()` | Tool use, skill activation |
 
-Hooks are defined on skills and gathered at run time. `SkillKit.Handler.run/4`
-calls `SkillKit.Catalog.hooks/1`, which flat-maps every skill's `:hooks` list
-across all loaded kits, then filters by handler name and builds the step list
-for the `%SkillKit.Pipeline{}` struct.
+Boundary-specific keys:
 
-The matcher regex is tested against only the last segment of the handler module
-name. A hook with `~r/Shell/` matches `SkillKit.Shell` but not
-`MyApp.Handler.Sandbox`. A catch-all hook can use `~r/.*/`.
-
-Because hooks are lifetime-scoped to their defining skill, unregistering a
-skill implicitly deactivates all of its hooks for every subsequent pipeline run.
+| Boundary | Additional keys |
+|---|---|
+| Tool use | `:tool` (module), `:input` (map), `:skill` (Skill.t or nil) |
+| Tool use (post) | Same + `:result` |
+| Subagent | `:name`, `:task`, `:depth` |
+| Subagent (post) | `:name`, `:task`, `:result` |
+| Skill activation | `:skill` (Skill.t), `:skill_name`, `:arguments` |
+| LLM request | `:model`, `:message_count`, `:tool_count` |
+| Conversation save | `:message_count` |
+| Agent | `:definition` (Definition.t) |
+| Turn | `:message_count` |

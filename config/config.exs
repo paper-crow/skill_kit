@@ -6,4 +6,9 @@ config :skill_kit, SkillKit.LLM,
   ],
   default_provider: :anthropic
 
+config :skill_kit, :hook_handlers, %{
+  "command" => SkillKit.Hooks.Command,
+  "http" => SkillKit.Hooks.Http
+}
+
 import_config "#{config_env()}.exs"

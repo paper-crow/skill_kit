@@ -60,19 +60,18 @@ becomes one kit; the kit name is the directory's basename.
 ### Directory structure
 
 ```
-skills/
-  files/                     ← becomes kit "files"
-    read.skill.md
-    write.skill.md
-    summarize/
-      AGENT.md               ← agent definition (optional)
-  tools/                     ← becomes kit "tools"
-    web_search.skill.md
+my_kit/                        ← becomes kit "my_kit"
+  AGENT.md                     ← root agent (optional)
+  skills/
+    read/SKILL.md              ← skill "read"
+    write/SKILL.md             ← skill "write"
+  agents/
+    summarize.md               ← sub-agent definition (optional)
 ```
 
 ### Skill file format
 
-Each `*.skill.md` file uses YAML frontmatter followed by the skill body:
+Each `SKILL.md` file uses YAML frontmatter followed by the skill body:
 
 ```markdown
 ---
@@ -128,8 +127,8 @@ from a `skills/` directory co-located with the module's source file.
 defmodule MyApp.FilesKit do
   use SkillKit.Kit
 
-  @impl SkillKit.Handler.Behaviour
-  def execute(%SkillKit.Pipeline{} = execution) do
+  @impl SkillKit.Tool
+  def execute(%SkillKit.ToolExecution{} = execution) do
     # handle skill execution
   end
 end
@@ -143,8 +142,8 @@ use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
 ```
 
 `use SkillKit.Kit` implements both `SkillKit.Kit.Provider` (to load skills) and
-`SkillKit.Handler.Behaviour` (to execute them). The macro generates default
-`tool_definition/0` and `resume/3` implementations; you must supply `execute/1`.
+`SkillKit.Tool` (to execute them). The macro generates default
+`definition/0` and `resume/3` implementations; you must supply `execute/1`.
 
 ---
 

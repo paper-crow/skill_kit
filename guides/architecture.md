@@ -24,8 +24,8 @@ The public API follows a three-step pattern:
 :ok = SkillKit.stop_agent(agent)
 ```
 
-The source-driven form starts a temporary Catalog to discover the root agent
-(the kit with `root_agent` set), then delegates to the definition-driven form.
+The source-driven form resolves the agent identity from the first argument,
+then delegates to the definition-driven form.
 
 `start_agent` builds an `AgentRef` — an opaque struct holding the agent name,
 a unique Registry name, and the supervisor PID. `send_message/2` routes to the
@@ -60,7 +60,7 @@ which avoids start-order coupling within the `:rest_for_one` chain.
 
 `SkillKit.Catalog` is a GenServer that aggregates kits from one or more
 providers and exposes everything the Server needs: tool definitions, tool call
-classification, skill lookup, agent lookup, hooks, and handler config.
+classification, skill lookup, agent lookup, hooks, and tool config.
 
 **Always fresh.** Every call to the Catalog invokes `list_kits/1` on each
 provider — there is no internal caching. This ensures the catalog always
@@ -73,8 +73,8 @@ Providers implement two callbacks:
 - `get_kit/2` — return a single kit by name
 
 The Catalog unpacks kits into skills, agents, and hooks; filters skills by
-authorization scope; builds `ToolDefinition` structs for the LLM; and classifies
-each incoming tool call as one of: `:handler`, `:activate_skill`, `:builtin`,
+authorization scope; builds `Tool` structs for the LLM; and classifies
+each incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,
 `:subagent`, or `{:module_skill, skill}`.
 
 ## Message Flow
@@ -119,13 +119,15 @@ Server receives {:mailbox_flush, messages}
         └─ if tool calls present:
                │
                ├─ classify each call via Catalog.classify/3
-               ├─ execute local tools via Handler (authorized by Scope)
+               ├─ dispatch pre-boundary hooks via Hooks.call/4
+               ├─ execute local tools via ToolExecution (authorized by Scope)
+               ├─ dispatch post-boundary hooks via Hooks.cast/3
                ├─ collect results as %ToolResult{} structs
                └─ append results to message history, loop ↑
 ```
 
-The Server calls `Catalog.classify/3` before each tool execution. Local handler
-tools are dispatched to the configured Handler module. The loop continues until
+The Server calls `Catalog.classify/3` before each tool execution. Local tools
+are dispatched to the configured Tool module. The loop continues until
 the LLM responds with no tool calls or a halt condition is reached.
 
 ## Subagents
@@ -150,7 +152,8 @@ direct caller process — they communicate only through the parent Registry.
 | Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | In-memory kit provider | `SkillKit.Kit.Memory` |
 | Tool aggregation + classification | `SkillKit.Catalog` |
-| Tool execution + hooks | `SkillKit.Handler` behaviour |
+| Hook dispatch at boundaries | `SkillKit.Hooks` |
+| Tool execution + hooks | `SkillKit.Tool` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |
 

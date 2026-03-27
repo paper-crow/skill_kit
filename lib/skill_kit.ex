@@ -35,9 +35,11 @@ defmodule SkillKit do
 
   ## Configuration
 
-      # Default LLM provider
       config :skill_kit, SkillKit.LLM,
-        {SkillKit.LLM.Anthropic, [api_key: System.get_env("ANTHROPIC_API_KEY")]}
+        providers: [
+          anthropic: SkillKit.LLM.Anthropic
+        ],
+        default_provider: :anthropic
   """
 
   alias SkillKit.Agent
@@ -139,9 +141,9 @@ defmodule SkillKit do
     case module.load_kits(config) do
       {:ok, kits} ->
         kits
-        |> Enum.map(& &1.root_agent)
+        |> Enum.map(& &1.agent)
         |> Enum.find(& &1) ||
-          raise "No root agent (AGENT.md) found in agent: provider #{inspect(module)}"
+          raise "No agent (AGENT.md) found in agent: provider #{inspect(module)}"
 
       {:error, reason} ->
         raise "Failed to load agent from #{inspect(module)}: #{inspect(reason)}"

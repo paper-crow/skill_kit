@@ -593,7 +593,7 @@ Ephemeral. Spawned under `Agent.SubagentSupervisor`. Activates the skill via `Ca
 
 **Error handling relies on process lifecycle, not timeouts.** If any step fails — skill not found, LLM stream error, handler crash — the subagent either reports the error and stops normally, or crashes. Either way, the parent's monitor fires and the error enters the conversation as a `%Message.System{}`. The parent's LLM decides what to do.
 
-If `SkillKit.Handler.run` returns `{:pending, state}` (approval flow), the subagent holds the suspended execution in its state and waits for a resume signal from the parent. This maps to the existing `SkillKit.Execution` suspend/resume lifecycle.
+If `SkillKit.ToolExecution.start` returns `{:pending, state}` (approval flow), the subagent holds the suspended execution in its state and waits for a resume signal from the parent. This maps to the existing `SkillKit.ToolExecution` suspend/resume lifecycle.
 
 ```elixir
 defmodule Subagent.Skill do
@@ -628,7 +628,7 @@ defmodule Subagent.Skill do
            ),
            {:ok, command} <- get_command(rendered_body, task.llm_opts) do
         context = build_context(task, skill)
-        SkillKit.Handler.run(task.registry, skill, command, context)
+        SkillKit.ToolExecution.start(task.registry, skill, command, context)
       end
 
     case result do

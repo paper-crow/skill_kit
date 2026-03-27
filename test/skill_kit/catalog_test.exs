@@ -7,6 +7,7 @@ defmodule SkillKit.CatalogTest do
   alias SkillKit.Kit
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
+  alias SkillKit.Tools.Shell
 
   # --- Test scope struct ---
 
@@ -45,7 +46,7 @@ defmodule SkillKit.CatalogTest do
       name: name,
       description: Keyword.get(opts, :description, "#{name} skill"),
       body: Keyword.get(opts, :body, "do the thing"),
-      handler: Keyword.get(opts, :handler, SkillKit.Shell),
+      tool: Keyword.get(opts, :tool, Shell),
       required_scope: Keyword.get(opts, :required_scope, []),
       hooks: Keyword.get(opts, :hooks, []),
       metadata: Keyword.get(opts, :metadata, %{})
@@ -143,7 +144,7 @@ defmodule SkillKit.CatalogTest do
     test "returns definitions from kits" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -162,7 +163,7 @@ defmodule SkillKit.CatalogTest do
     test "returns agent by name" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -178,27 +179,27 @@ defmodule SkillKit.CatalogTest do
   end
 
   # =====================================================================
-  # root_agent
+  # agent
   # =====================================================================
 
-  describe "root_agent/1" do
-    test "returns root agent when set" do
+  describe "agent/1" do
+    test "returns agent when set" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("main")
-      kit = %Kit{name: "test", root_agent: agent}
+      kit = %Kit{name: "test", agent: agent}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
-      root = Catalog.root_agent(catalog)
-      assert root.name == "main"
+      result = Catalog.agent(catalog)
+      assert result.name == "main"
     end
 
-    test "returns nil when no root agent" do
+    test "returns nil when no agent" do
       {:ok, provider} = Memory.start_link([])
       Memory.put(provider, make_skill("ns:hello"))
 
       catalog = start_catalog(provider)
-      assert Catalog.root_agent(catalog) == nil
+      assert Catalog.agent(catalog) == nil
     end
   end
 
@@ -206,16 +207,25 @@ defmodule SkillKit.CatalogTest do
   # hooks
   # =====================================================================
 
-  describe "hooks/1" do
-    test "returns hooks from skills" do
+  describe "list_hooks/2" do
+    test "returns hooks from skills matching the given event" do
       {:ok, provider} = Memory.start_link([])
-      hook = %Hook{phase: :pre, matcher: ~r/Shell/, handler: fn _ -> :ok end}
+      hook = %Hook{event: :pre_tool_use, matcher: ~r/Shell/, handler: fn _ -> :ok end}
       Memory.put(provider, make_skill("ns:hooked", hooks: [hook]))
 
       catalog = start_catalog(provider)
-      hooks = Catalog.hooks(catalog)
+      hooks = Catalog.list_hooks(catalog, :pre_tool_use)
       assert length(hooks) == 1
-      assert hd(hooks).phase == :pre
+      assert hd(hooks).event == :pre_tool_use
+    end
+
+    test "returns empty list when no hooks match the given event" do
+      {:ok, provider} = Memory.start_link([])
+      hook = %Hook{event: :pre_tool_use, matcher: ~r/Shell/, handler: fn _ -> :ok end}
+      Memory.put(provider, make_skill("ns:hooked", hooks: [hook]))
+
+      catalog = start_catalog(provider)
+      assert Catalog.list_hooks(catalog, :post_tool_use) == []
     end
   end
 
@@ -258,7 +268,7 @@ defmodule SkillKit.CatalogTest do
     test "includes agent tools" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer", description: "Reviews code")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -270,13 +280,13 @@ defmodule SkillKit.CatalogTest do
       assert agent_tool.input_schema["required"] == ["task"]
     end
 
-    test "includes handler tools from kit metadata" do
+    test "includes tool definitions from kit metadata" do
       {:ok, provider} = Memory.start_link([])
 
       kit = %Kit{
         name: "shell_kit",
         skills: [],
-        metadata: %{handler: SkillKit.Shell}
+        metadata: %{tool: Shell}
       }
 
       Memory.put_kit(provider, kit)
@@ -284,15 +294,15 @@ defmodule SkillKit.CatalogTest do
       catalog = start_catalog(provider)
       tools = Catalog.tool_definitions(catalog, [])
 
-      handler_tool = Enum.find(tools, &(&1.name == SkillKit.Shell.tool_definition().name))
-      assert handler_tool != nil
+      tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))
+      assert tool_def != nil
     end
 
     test "includes activated skill tools" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
 
-      activated = [make_skill("ns:schedule", handler: SkillKit.Shell)]
+      activated = [make_skill("ns:schedule", tool: Shell)]
       tools = Catalog.tool_definitions(catalog, activated_skills: activated)
 
       skill_tool = Enum.find(tools, &(&1.name == "schedule"))
@@ -321,7 +331,7 @@ defmodule SkillKit.CatalogTest do
     test "classifies subagent" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer")
-      kit = %Kit{name: "test", agents: [agent]}
+      kit = %Kit{name: "test", subagents: [agent]}
       Memory.put_kit(provider, kit)
 
       catalog = start_catalog(provider)
@@ -336,10 +346,10 @@ defmodule SkillKit.CatalogTest do
       assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
     end
 
-    test "classifies handler as default" do
+    test "classifies tool as default" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
-      assert Catalog.classify(catalog, "bash") == :handler
+      assert Catalog.classify(catalog, "bash") == :tool
     end
   end
 
