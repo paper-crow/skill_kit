@@ -103,8 +103,8 @@ defmodule SkillKit.Agent.Server do
         agent_name: agent_name,
         definition: definition
       })
-    rescue
-      _ -> :ok
+    catch
+      :exit, _reason -> :ok
     end
 
     {:ok, state}
@@ -117,8 +117,8 @@ defmodule SkillKit.Agent.Server do
         agent_name: state.agent_name,
         definition: state.definition
       })
-    rescue
-      _ -> :ok
+    catch
+      :exit, _reason -> :ok
     end
 
     :ok

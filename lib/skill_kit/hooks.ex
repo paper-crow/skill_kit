@@ -12,6 +12,8 @@ defmodule SkillKit.Hooks do
   fires `:pre_tool_use` before and `:post_tool_use` after the callback.
   """
 
+  require Logger
+
   alias SkillKit.Catalog
   alias SkillKit.Hook
   alias SkillKit.Telemetry
@@ -38,7 +40,7 @@ defmodule SkillKit.Hooks do
         :ok ->
           {result, post_context} = func.()
           notify(catalog, post_event, post_context)
-          {result, %{}, context}
+          {result, %{}, %{status: :ok}}
 
         {:deny, reason} ->
           {{:deny, reason}, %{}, Map.put(context, :status, :denied)}
@@ -70,7 +72,14 @@ defmodule SkillKit.Hooks do
     catalog
     |> Catalog.list_hooks(event)
     |> filter_by_matcher(event, context)
-    |> Enum.each(&invoke_handler(&1.handler, context))
+    |> Enum.each(fn hook ->
+      try do
+        invoke_handler(hook.handler, context)
+      rescue
+        e ->
+          Logger.warning("Post-event hook handler failed: #{Exception.message(e)}")
+      end
+    end)
 
     :ok
   end
@@ -79,9 +88,18 @@ defmodule SkillKit.Hooks do
 
   defp reduce_until_denied([hook | rest], context) do
     case invoke_handler(hook.handler, context) do
-      :ok -> reduce_until_denied(rest, context)
-      {:deny, _reason} = deny -> deny
-      {:pending, _state} = pending -> pending
+      :ok ->
+        reduce_until_denied(rest, context)
+
+      {:deny, _reason} = deny ->
+        deny
+
+      {:pending, _state} = pending ->
+        pending
+
+      other ->
+        Logger.warning("Hook handler returned unexpected value: #{inspect(other)}")
+        reduce_until_denied(rest, context)
     end
   end
 
