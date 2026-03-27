@@ -165,13 +165,13 @@ defmodule SkillKit.Kit.Local.Parser do
   # Converts the Claude Code hook YAML format into a list of %Hook{} structs.
   #
   # Supported event names:
-  #   - "PreToolUse"  → phase: :pre
-  #   - "PostToolUse" → phase: :post
+  #   - "PreToolUse"  → event: :pre_tool_use
+  #   - "PostToolUse" → event: :post_tool_use
   #
   # Other event names are silently ignored.
   # If no "hooks" key is present, returns {:ok, []}.
   @spec parse_hooks(map()) :: {:ok, [Hook.t()]}
-  @phase_map %{"PreToolUse" => :pre, "PostToolUse" => :post}
+  @event_map %{"PreToolUse" => :pre_tool_use, "PostToolUse" => :post_tool_use}
 
   defp parse_hooks(yaml_map) do
     hooks =
@@ -183,15 +183,15 @@ defmodule SkillKit.Kit.Local.Parser do
   end
 
   defp parse_hook_event({event_name, entries}) do
-    case Map.fetch(@phase_map, event_name) do
-      {:ok, phase} -> Enum.map(entries, &build_hook(phase, &1))
+    case Map.fetch(@event_map, event_name) do
+      {:ok, event} -> Enum.map(entries, &build_hook(event, &1))
       :error -> []
     end
   end
 
-  defp build_hook(phase, entry) do
+  defp build_hook(event, entry) do
     %Hook{
-      phase: phase,
+      event: event,
       matcher: Regex.compile!(Map.get(entry, "matcher", ".*")),
       handler: build_hook_handler(Map.get(entry, "hooks", []))
     }

@@ -211,8 +211,11 @@ defmodule SkillKit.ToolExecution do
   end
 
   defp build_steps(hooks, tool) do
-    pre_steps = hooks |> Enum.filter(&(&1.phase == :pre)) |> index_steps(:pre_hook, "pre")
-    post_steps = hooks |> Enum.filter(&(&1.phase == :post)) |> index_steps(:post_hook, "post")
+    pre_steps =
+      hooks |> Enum.filter(&(&1.event == :pre_tool_use)) |> index_steps(:pre_hook, "pre")
+
+    post_steps =
+      hooks |> Enum.filter(&(&1.event == :post_tool_use)) |> index_steps(:post_hook, "post")
 
     pre_steps ++ [{:execute, "execute", tool}] ++ post_steps
   end
