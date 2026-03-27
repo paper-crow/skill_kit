@@ -200,10 +200,10 @@ defmodule SkillKit.ToolExecution do
 
   defp collect_and_filter_hooks(catalog, tool) do
     tool_name = tool |> Module.split() |> List.last()
-
-    catalog
-    |> SkillKit.Catalog.hooks()
-    |> Enum.filter(&Regex.match?(&1.matcher, tool_name))
+    pre = SkillKit.Catalog.list_hooks(catalog, :pre_tool_use)
+    post = SkillKit.Catalog.list_hooks(catalog, :post_tool_use)
+    all_hooks = pre ++ post
+    Enum.filter(all_hooks, &Regex.match?(&1.matcher, tool_name))
   rescue
     _ -> []
   catch

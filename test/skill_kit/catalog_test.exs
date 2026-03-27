@@ -207,16 +207,25 @@ defmodule SkillKit.CatalogTest do
   # hooks
   # =====================================================================
 
-  describe "hooks/1" do
-    test "returns hooks from skills" do
+  describe "list_hooks/2" do
+    test "returns hooks from skills matching the given event" do
       {:ok, provider} = Memory.start_link([])
-      hook = %Hook{phase: :pre, matcher: ~r/Shell/, handler: fn _ -> :ok end}
+      hook = %Hook{event: :pre_tool_use, matcher: ~r/Shell/, handler: fn _ -> :ok end}
       Memory.put(provider, make_skill("ns:hooked", hooks: [hook]))
 
       catalog = start_catalog(provider)
-      hooks = Catalog.hooks(catalog)
+      hooks = Catalog.list_hooks(catalog, :pre_tool_use)
       assert length(hooks) == 1
-      assert hd(hooks).phase == :pre
+      assert hd(hooks).event == :pre_tool_use
+    end
+
+    test "returns empty list when no hooks match the given event" do
+      {:ok, provider} = Memory.start_link([])
+      hook = %Hook{event: :pre_tool_use, matcher: ~r/Shell/, handler: fn _ -> :ok end}
+      Memory.put(provider, make_skill("ns:hooked", hooks: [hook]))
+
+      catalog = start_catalog(provider)
+      assert Catalog.list_hooks(catalog, :post_tool_use) == []
     end
   end
 

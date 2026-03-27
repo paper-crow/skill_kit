@@ -1,6 +1,6 @@
 defmodule SkillKit.Catalog do
   @moduledoc """
-  Aggregates kits from multiple providers and exposes skills, agents, hooks,
+  Aggregates kits from multiple providers and exposes skills, agents,
   tool definitions, and tool call classification.
 
   ## Always Fresh
@@ -63,9 +63,9 @@ defmodule SkillKit.Catalog do
     GenServer.call(catalog, :agent)
   end
 
-  @spec hooks(GenServer.server()) :: [SkillKit.Hook.t()]
-  def hooks(catalog) do
-    GenServer.call(catalog, :hooks)
+  @spec list_hooks(GenServer.server(), SkillKit.Hook.event()) :: [SkillKit.Hook.t()]
+  def list_hooks(catalog, event) do
+    GenServer.call(catalog, {:list_hooks, event})
   end
 
   @spec tool_definitions(GenServer.server(), keyword()) :: [Tool.t()]
@@ -130,13 +130,14 @@ defmodule SkillKit.Catalog do
     {:reply, agent, state}
   end
 
-  def handle_call(:hooks, _from, state) do
+  def handle_call({:list_hooks, event}, _from, state) do
     kits = load_all_kits(state.providers)
 
     hooks =
       kits
       |> all_skills()
       |> Enum.flat_map(& &1.hooks)
+      |> Enum.filter(&(&1.event == event))
 
     {:reply, hooks, state}
   end
