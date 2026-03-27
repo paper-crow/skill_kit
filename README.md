@@ -190,20 +190,20 @@ config :skill_kit, SkillKit.LLM,
 SkillKit emits [`:telemetry`](https://hexdocs.pm/telemetry) events for
 observability and cost tracking:
 
-| Event | Measurements | Metadata |
+| Event | Measurements | Notes |
 |---|---|---|
-| `[:skill_kit, :agent, :turn, :start]` | `system_time`, `message_count` | `agent_name` |
-| `[:skill_kit, :agent, :turn, :stop]` | `duration` | `agent_name` |
-| `[:skill_kit, :agent, :usage]` | `input_tokens`, `output_tokens` | `agent_name` |
-| `[:skill_kit, :agent, :response]` | — | `agent_name`, `response` |
-| `[:skill_kit, :agent, :tool_call]` | — | `agent_name`, `tool_call` |
-| `[:skill_kit, :agent, :tool_result]` | — | `agent_name`, `tool_call_id`, `result` |
-| `[:skill_kit, :agent, :error]` | — | `agent_name`, `error` |
-| `[:skill_kit, :agent, :subagent_result]` | — | `agent_name`, `subagent_name`, `task`, `result` |
-| `[:skill_kit, :agent, :orphaned_result]` | — | `agent_name`, `parent_name`, `result` |
-| `[:anthropic, :rate_limited]` | `retry_after`, `attempt` | `endpoint` |
-| `[:skill_kit, :hook, :boundary, :start]` | `system_time` | `agent_name`, `event` |
-| `[:skill_kit, :hook, :boundary, :stop]` | `duration` | `agent_name`, `event`, `outcome` |
+| `[:skill_kit, :turn, :start/:stop]` | `system_time` / `duration` | One agent loop (batch of messages) |
+| `[:skill_kit, :llm_request, :start/:stop]` | `system_time` / `duration` | LLM call inside a turn |
+| `[:skill_kit, :tool_use, :start/:stop]` | `system_time` / `duration` | Tool or module-skill execution |
+| `[:skill_kit, :subagent, :start/:stop]` | `system_time` / `duration` | Spawning a subagent |
+| `[:skill_kit, :skill_activation, :start/:stop]` | `system_time` / `duration` | Activating a skill |
+| `[:skill_kit, :conversation_save, :start/:stop]` | `system_time` / `duration` | Persisting conversation |
+| `[:skill_kit, :conversation_load, :start/:stop]` | `system_time` / `duration` | Loading conversation |
+| `[:skill_kit, :agent, :start/:stop]` | `system_time` / `duration` | Agent process lifecycle |
+| `[:skill_kit, :llm, :stream, :start/:stop]` | `system_time` / `duration` | Raw LLM HTTP stream |
+| `[:skill_kit, :llm, :stream, :error]` | — | Model URI could not be resolved |
+| `[:skill_kit, :agent, :orphaned_result]` | — | Subagent result with no parent |
+| `[:anthropic, :rate_limited]` | `retry_after`, `attempt` | 429 triggered automatic retry |
 
 See the [Telemetry guide](guides/telemetry.md) for handler examples and
 testing helpers.

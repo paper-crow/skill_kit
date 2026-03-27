@@ -18,12 +18,11 @@ All durations are in `:native` time units (convert with
 
 ## SkillKit events
 
-### Hook boundary spans
+### Boundary spans
 
-`Hooks.call/4` wraps each gated boundary crossing in a telemetry span.
-The span name is derived directly from the boundary name. These spans let
-you measure latency per boundary type and observe which crossings were
-allowed, denied, or suspended.
+Each agent boundary emits a telemetry span, letting you measure latency
+per boundary type and observe which crossings were allowed, denied, or
+suspended.
 
 | Event | Kind | Description |
 |---|---|---|
@@ -37,8 +36,8 @@ allowed, denied, or suspended.
 | `[:skill_kit, :agent, :start/:stop]` | span | Agent process lifecycle |
 
 Each span emits a `:start` event (with `:system_time`) and a `:stop` event
-(with `:duration`). The metadata for both events is the boundary `context`
-map that was passed to `Hooks.call/4`.
+(with `:duration`). The metadata map contains the boundary context keys
+described in the [Hooks guide](hooks-and-execution.md#hook-context).
 
 To observe every tool-use boundary crossing:
 
