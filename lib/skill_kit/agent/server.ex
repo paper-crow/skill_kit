@@ -286,37 +286,41 @@ defmodule SkillKit.Agent.Server do
     }
 
     case Hooks.call(catalog(state), :tool_use, hook_context, fn ->
-           exec = %ToolExecution{tool: tool, input: input, context: tool_context}
-
-           case ToolExecution.execute(exec) do
-             {:ok, execution} ->
-               result = %ToolResult{tool_call_id: id, content: extract_output(execution.result)}
-               {result, Map.put(hook_context, :result, execution.result)}
-
-             {:error, execution} ->
-               result = %ToolResult{
-                 tool_call_id: id,
-                 content: extract_error(execution),
-                 is_error: true
-               }
-
-               {result, Map.put(hook_context, :result, execution.result)}
-
-             {:pending, _execution} ->
-               result = %ToolResult{
-                 tool_call_id: id,
-                 content: "Command requires approval (not yet supported).",
-                 is_error: true
-               }
-
-               {result, hook_context}
-           end
+           do_execute_command(id, tool, input, tool_context, hook_context)
          end) do
       {:deny, reason} ->
         %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
 
       result ->
         result
+    end
+  end
+
+  defp do_execute_command(id, tool, input, tool_context, hook_context) do
+    exec = %ToolExecution{tool: tool, input: input, context: tool_context}
+
+    case ToolExecution.execute(exec) do
+      {:ok, execution} ->
+        result = %ToolResult{tool_call_id: id, content: extract_output(execution.result)}
+        {result, Map.put(hook_context, :result, execution.result)}
+
+      {:error, execution} ->
+        result = %ToolResult{
+          tool_call_id: id,
+          content: extract_error(execution),
+          is_error: true
+        }
+
+        {result, Map.put(hook_context, :result, execution.result)}
+
+      {:pending, _execution} ->
+        result = %ToolResult{
+          tool_call_id: id,
+          content: "Command requires approval (not yet supported).",
+          is_error: true
+        }
+
+        {result, hook_context}
     end
   end
 
@@ -370,31 +374,7 @@ defmodule SkillKit.Agent.Server do
 
     case SkillKit.Catalog.get_skill(catalog(state), skill_name) do
       {:ok, skill} ->
-        hook_context = %{
-          skill: skill,
-          skill_name: skill_name,
-          arguments: arguments,
-          agent_name: state.agent_name,
-          scope: state.scope
-        }
-
-        case Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
-               scope_context = %{agent: state.agent_name, skill: skill_name}
-               result = render_and_activate(id, skill, arguments, state, scope_context)
-               {result, Map.put(hook_context, :result, result)}
-             end) do
-          {:deny, reason} ->
-            result = %ToolResult{
-              tool_call_id: id,
-              content: "Denied: #{reason}",
-              is_error: true
-            }
-
-            {result, state}
-
-          {result, updated_state} ->
-            {result, updated_state}
-        end
+        activate_skill_with_hook(id, skill, skill_name, arguments, state)
 
       {:error, :unauthorized} ->
         result = %ToolResult{
@@ -414,6 +394,38 @@ defmodule SkillKit.Agent.Server do
 
         {result, state}
     end
+  end
+
+  defp activate_skill_with_hook(id, skill, skill_name, arguments, state) do
+    hook_context = %{
+      skill: skill,
+      skill_name: skill_name,
+      arguments: arguments,
+      agent_name: state.agent_name,
+      scope: state.scope
+    }
+
+    case Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
+           do_activate_skill(id, skill, skill_name, arguments, state, hook_context)
+         end) do
+      {:deny, reason} ->
+        result = %ToolResult{
+          tool_call_id: id,
+          content: "Denied: #{reason}",
+          is_error: true
+        }
+
+        {result, state}
+
+      {result, updated_state} ->
+        {result, updated_state}
+    end
+  end
+
+  defp do_activate_skill(id, skill, skill_name, arguments, state, hook_context) do
+    scope_context = %{agent: state.agent_name, skill: skill_name}
+    result = render_and_activate(id, skill, arguments, state, scope_context)
+    {result, Map.put(hook_context, :result, result)}
   end
 
   defp render_and_activate(id, skill, arguments, state, scope_context) do
@@ -444,24 +456,7 @@ defmodule SkillKit.Agent.Server do
     }
 
     case Hooks.call(catalog(state), :tool_use, hook_context, fn ->
-           source_config = Map.get(skill.metadata, "source_config", [])
-
-           context =
-             %{scope: state.scope, agent_name: state.agent_name}
-             |> Map.merge(Map.new(source_config))
-
-           execution = %ToolExecution{skill: skill, input: input, context: context}
-
-           result =
-             case apply(skill.tool, :execute, [execution]) do
-               {:ok, value} ->
-                 %ToolResult{tool_call_id: id, content: to_string(value)}
-
-               {:error, reason} ->
-                 %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
-             end
-
-           {result, Map.put(hook_context, :result, result)}
+           do_execute_module_skill(id, skill, input, state, hook_context)
          end) do
       {:deny, reason} ->
         %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
@@ -469,6 +464,27 @@ defmodule SkillKit.Agent.Server do
       result ->
         result
     end
+  end
+
+  defp do_execute_module_skill(id, skill, input, state, hook_context) do
+    source_config = Map.get(skill.metadata, "source_config", [])
+
+    context =
+      %{scope: state.scope, agent_name: state.agent_name}
+      |> Map.merge(Map.new(source_config))
+
+    execution = %ToolExecution{skill: skill, input: input, context: context}
+
+    result =
+      case apply(skill.tool, :execute, [execution]) do
+        {:ok, value} ->
+          %ToolResult{tool_call_id: id, content: to_string(value)}
+
+        {:error, reason} ->
+          %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
+      end
+
+    {result, Map.put(hook_context, :result, result)}
   end
 
   defp spawn_subagent(%ToolCall{id: id, name: name, input: input}, state) do
@@ -495,30 +511,34 @@ defmodule SkillKit.Agent.Server do
           {result, state}
 
         {:ok, agent_def} ->
-          hook_context = %{
-            name: name,
-            task: task,
-            agent_name: state.agent_name,
-            depth: state.depth
-          }
-
-          case Hooks.call(catalog(state), :subagent, hook_context, fn ->
-                 result = do_spawn_subagent(id, name, task, agent_def, state)
-                 {result, Map.put(hook_context, :result, result)}
-               end) do
-            {:deny, reason} ->
-              result = %ToolResult{
-                tool_call_id: id,
-                content: "Denied: #{reason}",
-                is_error: true
-              }
-
-              {result, state}
-
-            {result, updated_state} ->
-              {result, updated_state}
-          end
+          spawn_subagent_with_hook(id, name, task, agent_def, state)
       end
+    end
+  end
+
+  defp spawn_subagent_with_hook(id, name, task, agent_def, state) do
+    hook_context = %{
+      name: name,
+      task: task,
+      agent_name: state.agent_name,
+      depth: state.depth
+    }
+
+    case Hooks.call(catalog(state), :subagent, hook_context, fn ->
+           result = do_spawn_subagent(id, name, task, agent_def, state)
+           {result, Map.put(hook_context, :result, result)}
+         end) do
+      {:deny, reason} ->
+        result = %ToolResult{
+          tool_call_id: id,
+          content: "Denied: #{reason}",
+          is_error: true
+        }
+
+        {result, state}
+
+      {result, updated_state} ->
+        {result, updated_state}
     end
   end
 
