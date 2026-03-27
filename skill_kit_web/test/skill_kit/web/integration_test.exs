@@ -10,9 +10,9 @@ defmodule SkillKit.Web.IntegrationTest do
 
   setup do
     File.rm_rf!(@tmp_dir)
-    File.mkdir_p!(Path.join(@tmp_dir, "guides"))
-    File.write!(Path.join(@tmp_dir, "guides/welcome.md"), "# Welcome\n\nWhat are you building?")
-    Application.put_env(:skill_kit_web, :project_root, @tmp_dir)
+    File.mkdir_p!(@tmp_dir)
+    File.write!(Path.join(@tmp_dir, "welcome.md"), "# Welcome\n\nWhat are you building?")
+    Application.put_env(:skill_kit_web, :docs_root, @tmp_dir)
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
@@ -37,7 +37,7 @@ defmodule SkillKit.Web.IntegrationTest do
     execution = %ToolExecution{
       skill: %Skill{name: "docs:read"},
       tool: SkillKit.Web.DocumentKit.Tool,
-      input: %{"path" => "guides/welcome.md"},
+      input: %{"path" => "welcome.md"},
       context: %{project_root: @tmp_dir},
       status: :running
     }

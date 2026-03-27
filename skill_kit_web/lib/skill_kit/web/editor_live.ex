@@ -9,13 +9,14 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    root = SkillKitWeb.project_root()
-    files = list_files(root)
-    {current_path, content} = open_first_file(root, files)
+    docs_root = SkillKitWeb.docs_root()
+    File.mkdir_p!(docs_root)
+    files = list_files(docs_root)
+    {current_path, content} = open_first_file(docs_root, files)
 
     socket =
       socket
-      |> assign(:project_root, root)
+      |> assign(:docs_root, docs_root)
       |> assign(:files, files)
       |> assign(:current_path, current_path)
       |> assign(:content, content)
@@ -57,7 +58,7 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("open_document", %{"path" => path}, socket) do
-    root = socket.assigns.project_root
+    root = socket.assigns.docs_root
     full_path = Path.join(root, path)
     content = File.read!(full_path)
 
@@ -71,7 +72,7 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("editor_change", %{"content" => content}, socket) do
-    root = socket.assigns.project_root
+    root = socket.assigns.docs_root
     full_path = Path.join(root, socket.assigns.current_path)
     File.write!(full_path, content)
     {:noreply, assign(socket, :content, content)}

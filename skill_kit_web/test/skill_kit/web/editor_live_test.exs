@@ -7,10 +7,9 @@ defmodule SkillKit.Web.EditorLiveTest do
   setup do
     File.rm_rf!(@tmp_dir)
     File.mkdir_p!(@tmp_dir)
-    File.mkdir_p!(Path.join(@tmp_dir, "guides"))
-    File.write!(Path.join(@tmp_dir, "guides/welcome.md"), "# Welcome\n\nDescribe your project.")
-    File.write!(Path.join(@tmp_dir, "guides/features.md"), "# Features\n\nList features here.")
-    Application.put_env(:skill_kit_web, :project_root, @tmp_dir)
+    File.write!(Path.join(@tmp_dir, "welcome.md"), "# Welcome\n\nDescribe your project.")
+    File.write!(Path.join(@tmp_dir, "features.md"), "# Features\n\nList features here.")
+    Application.put_env(:skill_kit_web, :docs_root, @tmp_dir)
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
@@ -22,7 +21,7 @@ defmodule SkillKit.Web.EditorLiveTest do
 
   test "opens a different document", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
-    view |> element(~s{button[phx-value-path="guides/welcome.md"]}) |> render_click()
+    view |> element(~s{button[phx-value-path="welcome.md"]}) |> render_click()
     assert render(view) =~ "Welcome"
   end
 

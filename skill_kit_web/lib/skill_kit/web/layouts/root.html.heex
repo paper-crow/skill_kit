@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
     <title>SkillKit Editor</title>
+    <link phx-track-static rel="stylesheet" href="/assets/app.css" />
     <script>
       if (localStorage.getItem("skill_kit_theme") === "light") {
         document.documentElement.classList.remove("dark");
       }
+    </script>
+    <script defer phx-track-static type="text/javascript" src="/assets/app.js">
     </script>
   </head>
   <body class="bg-editor-bg text-editor-text antialiased">
