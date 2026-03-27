@@ -79,14 +79,14 @@ their return values are discarded.
 
 ```elixir
 @spec call(GenServer.server(), atom(), map(), (-> {term(), map()})) :: term()
+```
 
-# Wraps a boundary in a telemetry span.
-# Fires :pre_<boundary> hooks before func, :post_<boundary> after.
-# Returns the func result, {:deny, reason}, or {:pending, state}.
-#
-# func must return {result, post_context} where post_context is the
-# context map enriched with the outcome — passed to post-event hooks.
-# By convention, post_context is the original context with :result added.
+The callback must return `{result, post_context}`:
+
+- **`result`** — returned to the caller of `call/4` (or `{:deny, reason}` / `{:pending, state}` if a pre-hook intervened)
+- **`post_context`** — passed to `:post_<boundary>` hooks. By convention, this is the original context with `:result` added so post-hooks can observe the outcome.
+
+```elixir
 Hooks.call(catalog, :tool_use, context, fn ->
   result = do_work()
   {result, Map.put(context, :result, result)}
