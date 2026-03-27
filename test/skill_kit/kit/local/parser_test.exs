@@ -1,6 +1,7 @@
 defmodule SkillKit.Kit.Local.ParserTest do
   use ExUnit.Case, async: true
 
+  alias SkillKit.Hook
   alias SkillKit.Kit.Local.Parser
   alias SkillKit.Skill
 
@@ -225,7 +226,7 @@ defmodule SkillKit.Kit.Local.ParserTest do
   # ---------------------------------------------------------------------------
 
   describe "load_file/1 with hooks in frontmatter" do
-    test "parses PreToolUse hooks into %Hook{} structs" do
+    test "parses PreToolUse hooks — event atom and matcher regex" do
       content = """
       ---
       name: "secure:check"
@@ -245,11 +246,11 @@ defmodule SkillKit.Kit.Local.ParserTest do
       assert length(skill.hooks) == 1
 
       [hook] = skill.hooks
-      assert hook.phase == :pre
+      assert hook.event == :pre_tool_use
       assert Regex.match?(hook.matcher, "Shell")
     end
 
-    test "parses PostToolUse hooks" do
+    test "parses PostToolUse hooks — event atom" do
       content = """
       ---
       name: "audit:log"
@@ -269,12 +270,115 @@ defmodule SkillKit.Kit.Local.ParserTest do
       assert length(skill.hooks) == 1
 
       [hook] = skill.hooks
-      assert hook.phase == :post
+      assert hook.event == :post_tool_use
+    end
+
+    test "handler type 'command' resolves to {SkillKit.Hooks.Command, config}" do
+      content = """
+      ---
+      name: "tools:guarded"
+      description: "Guarded tool"
+      hooks:
+        PreToolUse:
+          - hooks:
+              - type: command
+                command: "./scripts/guard.sh"
+      ---
+      Body.
+      """
+
+      path = write_tmp_fixture("command_handler.md", content)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
+      [hook] = skill.hooks
+      assert {SkillKit.Hooks.Command, %{"command" => "./scripts/guard.sh"}} = hook.handler
+    end
+
+    test "nil matcher when no matcher specified" do
+      content = """
+      ---
+      name: "tools:no-matcher"
+      description: "No matcher"
+      hooks:
+        PreToolUse:
+          - hooks:
+              - type: command
+                command: "./scripts/run.sh"
+      ---
+      Body.
+      """
+
+      path = write_tmp_fixture("no_matcher.md", content)
+      assert {:ok, %Skill{} = skill} = Parser.load_file(path)
+      [hook] = skill.hooks
+      assert hook.matcher == nil
+    end
+
+    test "unknown event names produce no hooks" do
+      content = """
+      ---
+      name: "tools:unknown"
+      description: "Unknown event"
+      hooks:
+        UnknownEvent:
+          - matcher: ".*"
+            hooks:
+              - type: command
+                command: "./scripts/run.sh"
+      ---
+      Body.
+      """
+
+      path = write_tmp_fixture("unknown_event.md", content)
+      assert {:ok, %Skill{hooks: []}} = Parser.load_file(path)
     end
 
     test "skills without hooks have empty hooks list" do
       path = Path.join(@fixtures_path, "valid/skills/summarize/SKILL.md")
       assert {:ok, %Skill{hooks: []}} = Parser.load_file(path)
+    end
+
+    test "all 16 event names in @event_map map to correct atoms" do
+      event_pairs = [
+        {"PreToolUse", :pre_tool_use},
+        {"PostToolUse", :post_tool_use},
+        {"PreSubagent", :pre_subagent},
+        {"PostSubagent", :post_subagent},
+        {"PreSkillActivation", :pre_skill_activation},
+        {"PostSkillActivation", :post_skill_activation},
+        {"PreConversationSave", :pre_conversation_save},
+        {"PostConversationSave", :post_conversation_save},
+        {"PreConversationLoad", :pre_conversation_load},
+        {"PostConversationLoad", :post_conversation_load},
+        {"PreLlmRequest", :pre_llm_request},
+        {"PostLlmRequest", :post_llm_request},
+        {"PreTurn", :pre_turn},
+        {"PostTurn", :post_turn},
+        {"PreAgent", :pre_agent},
+        {"PostAgent", :post_agent}
+      ]
+
+      Enum.each(event_pairs, fn {yaml_name, expected_atom} ->
+        content = """
+        ---
+        name: "tools:test"
+        description: "Event test"
+        hooks:
+          #{yaml_name}:
+            - hooks:
+                - type: command
+                  command: "./scripts/run.sh"
+        ---
+        Body.
+        """
+
+        path = write_tmp_fixture("event_#{yaml_name}.md", content)
+        assert {:ok, %Skill{} = skill} = Parser.load_file(path)
+        assert length(skill.hooks) == 1
+        [%Hook{event: event}] = skill.hooks
+
+        assert event == expected_atom,
+               "Expected #{yaml_name} → #{expected_atom}, got #{inspect(event)}"
+      end)
     end
   end
 
