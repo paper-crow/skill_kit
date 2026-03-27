@@ -32,7 +32,7 @@ module.exports = {
         "editor-label": ["11px", { lineHeight: "1.5", letterSpacing: "0.125em" }],
       },
       maxWidth: {
-        editor: "620px",
+        editor: "780px",
       },
       spacing: {
         "section": "24px",
