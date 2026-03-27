@@ -28,6 +28,7 @@ defmodule SkillKit.Web.Components.EditorSurface do
           id="editor-surface"
           class="max-w-editor mx-auto px-8 py-10 outline-none"
           contenteditable="true"
+          spellcheck="false"
           phx-hook="MarkdownEditor"
           phx-debounce="500"
           data-path={@path}
