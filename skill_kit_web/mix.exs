@@ -9,6 +9,7 @@ defmodule SkillKitWeb.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
+      listeners: [Phoenix.CodeReloader],
       deps: deps(),
       name: "SkillKit Web",
       docs: [main: "readme", extras: ["README.md"]]

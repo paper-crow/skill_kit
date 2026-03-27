@@ -4,10 +4,14 @@ defmodule SkillKitWeb.Application do
 
   @impl true
   def start(_type, _args) do
-    children = dev_children()
+    children = base_children() ++ dev_children()
 
     opts = [strategy: :one_for_one, name: SkillKitWeb.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  defp base_children do
+    [{Phoenix.PubSub, name: SkillKitWeb.PubSub}]
   end
 
   defp dev_children do

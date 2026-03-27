@@ -3,6 +3,7 @@ import Config
 config :skill_kit_web, SkillKit.Web.DevEndpoint,
   adapter: Bandit.PhoenixAdapter,
   http: [port: 4040],
+  pubsub_server: SkillKitWeb.PubSub,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
@@ -20,7 +21,9 @@ config :skill_kit_web, SkillKit.Web.DevEndpoint,
     ]
   ]
 
-config :skill_kit_web, :project_root, File.cwd!()
+# In dev, point to the parent project (worktree root)
+config :skill_kit_web, :project_root, Path.expand("..", __DIR__)
+config :skill_kit_web, :docs_root, Path.expand("../guides", __DIR__)
 
 config :esbuild,
   version: "0.24.2",
