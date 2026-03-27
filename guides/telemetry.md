@@ -8,7 +8,7 @@ SkillKit itself.
 
 Two namespaces are used:
 
-- `[:skill_kit, ...]` — high-level agent and LLM pipeline events
+- `[:skill_kit, ...]` — agent boundary spans and LLM pipeline events
 - `[:anthropic, ...]` — low-level HTTP client events for the Anthropic API
 
 All durations are in `:native` time units (convert with
@@ -18,33 +18,43 @@ All durations are in `:native` time units (convert with
 
 ## SkillKit events
 
-### Agent events
+### Hook boundary spans
+
+`Hooks.call/4` wraps each gated boundary crossing in a telemetry span.
+The span name is derived directly from the boundary name. These spans let
+you measure latency per boundary type and observe which crossings were
+allowed, denied, or suspended.
 
 | Event | Kind | Description |
 |---|---|---|
-| `[:skill_kit, :agent, :turn, :start]` | span start | A new batch of messages begins processing |
-| `[:skill_kit, :agent, :turn, :stop]` | span stop | The agent turn completed successfully |
-| `[:skill_kit, :agent, :usage]` | point | Token usage totals for one LLM call |
-| `[:skill_kit, :agent, :response]` | point | The final assistant message for one loop iteration |
-| `[:skill_kit, :agent, :error]` | point | The LLM call returned an error |
-| `[:skill_kit, :agent, :tool_call]` | point | A tool call is about to be dispatched |
-| `[:skill_kit, :agent, :tool_result]` | point | A tool call returned a result |
-| `[:skill_kit, :agent, :subagent_result]` | point | A spawned subagent reported its result |
-| `[:skill_kit, :agent, :orphaned_result]` | point | A subagent tried to report but its parent was not found |
+| `[:skill_kit, :tool_use, :start/:stop]` | span | OS command or module-skill tool execution |
+| `[:skill_kit, :subagent, :start/:stop]` | span | Spawning a subagent |
+| `[:skill_kit, :skill_activation, :start/:stop]` | span | Activating a skill |
+| `[:skill_kit, :conversation_save, :start/:stop]` | span | Persisting conversation history |
+| `[:skill_kit, :conversation_load, :start/:stop]` | span | Loading conversation history |
+| `[:skill_kit, :llm_request, :start/:stop]` | span | Sending a request to the LLM |
+| `[:skill_kit, :turn, :start/:stop]` | span | Processing a batch of messages |
+| `[:skill_kit, :agent, :start/:stop]` | span | Agent process lifecycle |
 
-#### Measurements and metadata
+Each span emits a `:start` event (with `:system_time`) and a `:stop` event
+(with `:duration`). The metadata for both events is the boundary `context`
+map that was passed to `Hooks.call/4`.
 
-| Event | Measurements | Metadata keys |
-|---|---|---|
-| `:turn, :start` | `:system_time`, `:message_count` | `:agent_name` |
-| `:turn, :stop` | `:duration` | `:agent_name` |
-| `:usage` | `:input_tokens`, `:output_tokens` | `:agent_name` |
-| `:response` | `%{}` | `:agent_name`, `:response` (`AssistantMessage.t()`) |
-| `:error` | `%{}` | `:agent_name`, `:error` (term) |
-| `:tool_call` | `%{}` | `:agent_name`, `:tool_call` (`ToolCall.t()`) |
-| `:tool_result` | `%{}` | `:agent_name`, `:tool_call_id`, `:result` (`ToolResult.t()`) |
-| `:subagent_result` | `%{}` | `:agent_name`, `:subagent_name`, `:task`, `:result` (string) |
-| `:orphaned_result` | `%{}` | `:agent_name`, `:parent_name`, `:result` (string) |
+To observe every tool-use boundary crossing:
+
+```elixir
+SkillKit.Telemetry.attach_many(
+  :tool_use_spans,
+  [
+    [:skill_kit, :tool_use, :start],
+    [:skill_kit, :tool_use, :stop]
+  ],
+  fn event, measurements, meta, _ ->
+    IO.inspect({List.last(event), meta.agent_name, meta.tool})
+  end,
+  %{}
+)
+```
 
 ### LLM events
 
@@ -58,9 +68,15 @@ All durations are in `:native` time units (convert with
 
 | Event | Measurements | Metadata keys |
 |---|---|---|
-| `:stream, :start` | `system_time` | `:provider` (module), `:model` (string) |
-| `:stream, :stop` | `duration` | `:provider`, `:model`, `:error` (on failure) |
+| `:stream, :start` | `:system_time` | `:provider` (module), `:model` (string) |
+| `:stream, :stop` | `:duration` | `:provider`, `:model`, `:error` (on failure) |
 | `:stream, :error` | `%{}` | `:error` (the `{:error, _}` tuple), `:model` (string) |
+
+### Agent events
+
+| Event | Kind | Description |
+|---|---|---|
+| `[:skill_kit, :agent, :orphaned_result]` | point | A subagent tried to report but its parent was not found |
 
 ---
 
@@ -85,42 +101,6 @@ SkillKit agent triggered the request.
 | `:request, :exception` | `duration`, `kind`, `reason`, `stacktrace` | *(provider-defined)* |
 | `:rate_limited` | `:retry_after` (ms), `:attempt` (integer) | `:endpoint` (string) |
 
-### Hook boundary spans
-
-`Hooks.call/4` wraps each gated boundary crossing in a telemetry span. These
-events let you measure the latency of individual boundary types and observe
-which hooks allowed, denied, or suspended a crossing.
-
-| Event | Kind | Description |
-|---|---|---|
-| `[:skill_kit, :hook, :boundary, :start]` | span start | A gated boundary crossing is about to begin |
-| `[:skill_kit, :hook, :boundary, :stop]` | span stop | The boundary crossing completed (allowed or denied) |
-| `[:skill_kit, :hook, :boundary, :exception]` | span exception | A hook handler raised an exception |
-
-#### Measurements and metadata
-
-| Event | Measurements | Metadata keys |
-|---|---|---|
-| `:boundary, :start` | `:system_time` | `:agent_name`, `:event` (boundary event atom) |
-| `:boundary, :stop` | `:duration` | `:agent_name`, `:event`, `:outcome` (`:ok \| :deny \| :pending`) |
-| `:boundary, :exception` | `:duration`, `kind`, `reason`, `stacktrace` | `:agent_name`, `:event` |
-
-To observe every tool-use boundary crossing:
-
-```elixir
-SkillKit.Telemetry.attach_many(
-  :hook_spans,
-  [
-    [:skill_kit, :hook, :boundary, :start],
-    [:skill_kit, :hook, :boundary, :stop]
-  ],
-  fn event, measurements, %{event: boundary, outcome: outcome} = meta, _ ->
-    Logger.debug("boundary #{boundary} #{List.last(event)}: #{outcome}")
-  end,
-  %{}
-)
-```
-
 ---
 
 ## Attaching handlers
@@ -132,8 +112,8 @@ Handler functions must match `(event, measurements, metadata, config)`.
 SkillKit.Telemetry.attach_many(
   :my_app_telemetry,
   [
-    [:skill_kit, :agent, :turn, :stop],
-    [:skill_kit, :agent, :usage],
+    [:skill_kit, :turn, :stop],
+    [:skill_kit, :llm_request, :stop],
     [:anthropic, :rate_limited]
   ],
   &MyApp.TelemetryHandler.handle_event/4,
@@ -143,6 +123,25 @@ SkillKit.Telemetry.attach_many(
 # Cleanup:
 SkillKit.Telemetry.detach(:my_app_telemetry)
 ```
+
+Alternatively, implement `SkillKit.Telemetry.Handler` to create a
+supervised GenServer handler:
+
+```elixir
+defmodule MyApp.Handlers.TurnLogger do
+  use SkillKit.Telemetry.Handler, events: [
+    [:skill_kit, :turn, :stop]
+  ]
+
+  @impl true
+  def handle_event([:skill_kit, :turn, :stop], measurements, metadata) do
+    Logger.info("[#{metadata.agent_name}] turn completed in #{measurements.duration}ns")
+    :ok
+  end
+end
+```
+
+Add it to your supervision tree and it will subscribe automatically on startup.
 
 ---
 
@@ -160,17 +159,16 @@ defmodule MyApp.AgentTest do
   setup :telemetry
 
   @tag telemetry: [
-    [:skill_kit, :agent, :turn, :stop],
-    [:skill_kit, :agent, :usage]
+    [:skill_kit, :turn, :stop],
+    [:skill_kit, :tool_use, :stop]
   ]
-  test "agent emits turn and usage events" do
+  test "agent emits turn and tool_use spans" do
     # ... trigger agent activity ...
 
-    assert_receive {__MODULE__, [:skill_kit, :agent, :turn, :stop], meta}
-    assert meta.agent_name == :my_agent
+    assert_receive {__MODULE__, [:skill_kit, :turn, :stop], meta}
+    assert meta.agent_name == "my_agent"
 
-    assert_receive {__MODULE__, [:skill_kit, :agent, :usage], measurements}
-    assert measurements.input_tokens > 0
+    assert_receive {__MODULE__, [:skill_kit, :tool_use, :stop], _meta}
   end
 end
 ```
@@ -189,19 +187,19 @@ defmodule MyApp.TelemetryLogger do
   require Logger
 
   @events [
-    [:skill_kit, :agent, :turn, :stop],
-    [:skill_kit, :agent, :error],
+    [:skill_kit, :turn, :stop],
+    [:skill_kit, :llm_request, :stop],
     [:anthropic, :rate_limited]
   ]
 
   def attach, do: SkillKit.Telemetry.attach_many(__MODULE__, @events, &handle_event/4, %{})
 
-  def handle_event([:skill_kit, :agent, :turn, :stop], %{duration: d}, %{agent_name: name}, _) do
+  def handle_event([:skill_kit, :turn, :stop], %{duration: d}, %{agent_name: name}, _) do
     Logger.info("[#{name}] turn completed in #{System.convert_time_unit(d, :native, :millisecond)}ms")
   end
 
-  def handle_event([:skill_kit, :agent, :error], _, %{agent_name: name, error: err}, _) do
-    Logger.error("[#{name}] LLM error: #{inspect(err)}")
+  def handle_event([:skill_kit, :llm_request, :stop], %{duration: d}, meta, _) do
+    Logger.debug("[#{meta.agent_name}] LLM request in #{System.convert_time_unit(d, :native, :millisecond)}ms")
   end
 
   def handle_event([:anthropic, :rate_limited], %{retry_after: ms, attempt: n}, _, _) do
@@ -215,9 +213,9 @@ For structured metrics with `:telemetry_metrics` (Prometheus, StatsD, etc.):
 ```elixir
 def metrics do
   [
-    Metrics.sum("skill_kit.agent.usage.input_tokens", tags: [:agent_name]),
-    Metrics.sum("skill_kit.agent.usage.output_tokens", tags: [:agent_name]),
-    Metrics.distribution("skill_kit.agent.turn.stop.duration",
+    Metrics.distribution("skill_kit.turn.stop.duration",
+      unit: {:native, :millisecond}, tags: [:agent_name]),
+    Metrics.distribution("skill_kit.tool_use.stop.duration",
       unit: {:native, :millisecond}, tags: [:agent_name]),
     Metrics.counter("anthropic.rate_limited", tags: [:endpoint])
   ]

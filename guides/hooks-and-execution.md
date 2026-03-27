@@ -3,7 +3,8 @@
 Hooks fire at agent boundaries — moments where an agent is about to cross
 into an external system or delegate to another process. They are gate-only:
 a hook can allow, deny, or suspend a boundary crossing, but it cannot modify
-the data flowing through it. Post-boundary hooks are fire-and-forget.
+the data flowing through it. Post-boundary hooks are fire-and-forget (their
+return values are ignored).
 
 ## Overview
 
@@ -17,27 +18,31 @@ points:
 
 - `Hooks.call/4` — gated boundary dispatch with a telemetry span. Runs
   pre-event hooks in order, executes the boundary action if all hooks
-  allow, then fires post-event hooks in a cast (fire-and-forget). Returns
-  `{:ok, result}`, `{:deny, reason}`, or `{:pending, state}`.
-- `Hooks.cast/3` — fire-and-forget dispatch used for post-events. Hooks
-  run asynchronously; their return values are ignored.
+  allow, then fires post-event hooks synchronously with their return values
+  discarded. Returns the result of the action, `{:deny, reason}`, or
+  `{:pending, state}`.
+- `Hooks.cast/3` — fire-and-forget dispatch. Hooks run synchronously but
+  their return values are ignored.
 
 ## Boundary Model
 
 The 16 event names, grouped by boundary:
 
-| Boundary | Pre-event | Post-event |
-|---|---|---|
-| `:tool_use` | `:pre_tool_use` | `:post_tool_use` |
-| `:subagent` | `:pre_subagent` | `:post_subagent` |
-| `:llm_request` | `:pre_llm_request` | `:post_llm_request` |
-| `:skill_activation` | `:pre_skill_activation` | `:post_skill_activation` |
-| `:message_send` | `:pre_message_send` | `:post_message_send` |
-| `:agent_start` | `:pre_agent_start` | `:post_agent_start` |
-| `:agent_stop` | `:pre_agent_stop` | `:post_agent_stop` |
-| `:builtin` | `:pre_builtin` | `:post_builtin` |
+| Boundary | Pre-event | Post-event | What it gates |
+|---|---|---|---|
+| `:tool_use` | `:pre_tool_use` | `:post_tool_use` | OS command or module-skill tool execution |
+| `:subagent` | `:pre_subagent` | `:post_subagent` | Spawning a subagent |
+| `:skill_activation` | `:pre_skill_activation` | `:post_skill_activation` | Activating a skill |
+| `:conversation_save` | `:pre_conversation_save` | `:post_conversation_save` | Persisting conversation history |
+| `:conversation_load` | `:pre_conversation_load` | `:post_conversation_load` | Loading conversation history |
+| `:llm_request` | `:pre_llm_request` | `:post_llm_request` | Sending a request to the LLM |
+| `:turn` | `:pre_turn` | `:post_turn` | Processing a batch of messages (one agent loop) |
+| `:agent` | `:pre_agent` | `:post_agent` | Agent process lifecycle (init/terminate) |
 
-In YAML frontmatter these are written in PascalCase: `PreToolUse`,
+The `:agent` boundary fires via `Hooks.cast/3` — `pre_agent` on init and
+`post_agent` on terminate. Return values from these hooks are always ignored.
+
+In YAML frontmatter these event names are written in PascalCase: `PreToolUse`,
 `PostToolUse`, `PreSubagent`, etc.
 
 ## Hook Struct
@@ -47,8 +52,8 @@ In YAML frontmatter these are written in PascalCase: `PreToolUse`,
 | Field | Type | Description |
 |---|---|---|
 | `:event` | `atom()` | The boundary event this hook responds to (e.g. `:pre_tool_use`) |
-| `:matcher` | `Regex.t() \| nil` | Matched against boundary-specific input. `nil` matches everything. |
-| `:handler` | `{module, config} \| function \| mfa` | The handler to invoke |
+| `:matcher` | `Regex.t() \| nil` | Matched against a boundary-specific string. `nil` matches everything. |
+| `:handler` | `{module, config} \| (map() -> any()) \| {module, atom, list}` | The handler to invoke |
 
 Hooks are defined on skills and scoped to the skill's lifetime. Unregistering
 a skill deactivates all of its hooks for every subsequent boundary crossing.
@@ -60,55 +65,62 @@ Pre-event hooks return one of three values:
 | Return | Meaning |
 |---|---|
 | `:ok` | Allow the boundary crossing to proceed |
-| `{:deny, reason}` | Block the crossing; `Hooks.call/4` returns `{:deny, reason}` |
-| `{:pending, state}` | Suspend; `Hooks.call/4` returns `{:pending, state}` for the caller to resume |
+| `{:deny, reason}` | Block the crossing; `Hooks.call/4` returns `{:deny, reason}` to the caller |
+| `{:pending, state}` | Suspend; `Hooks.call/4` returns `{:pending, state}` to the caller |
 
-Post-event hooks (fired via `Hooks.cast/3`) run asynchronously. Their
-return values are always ignored.
+`Hooks.call/4` evaluates pre-event hooks in list order and stops at the first
+`:deny` or `:pending`. If all pre-event hooks return `:ok`, the boundary
+action runs. Post-event hooks always run synchronously after the action, but
+their return values are discarded.
 
 ## Hooks Module
 
 `SkillKit.Hooks.call/4` drives a gated boundary:
 
 ```elixir
-# Hooks.call/4 signature:
-# call(hooks, event, context, action_fn)
+# call/4 signature:
+# call(catalog, boundary, context, func)
 #
-# hooks   — list of %Hook{} structs collected by the Catalog
-# event   — the boundary event atom (e.g. :pre_tool_use)
-# context — map passed to each matching hook handler
-# action_fn — zero-arity function that performs the boundary action
+# catalog  — GenServer.server() for the agent's Catalog
+# boundary — boundary name atom (e.g. :tool_use)
+# context  — map passed to each matching hook handler
+# func     — zero-arity function that performs the boundary action;
+#            must return {result, post_context}
 
-case Hooks.call(hooks, :pre_tool_use, context, fn -> Tool.execute(execution) end) do
-  {:ok, result}      -> result
-  {:deny, reason}    -> {:error, {:denied, reason}}
-  {:pending, state}  -> {:suspended, state}
+case Hooks.call(catalog, :tool_use, hook_context, fn ->
+  result = ToolExecution.execute(exec)
+  {result, Map.put(hook_context, :result, result)}
+end) do
+  {:deny, reason}   -> {:error, {:denied, reason}}
+  {:pending, state} -> {:suspended, state}
+  result            -> result
 end
 ```
 
-`SkillKit.Hooks.cast/3` fires post-event hooks without blocking:
+The boundary name is used directly for the telemetry span (`:tool_use`
+becomes `[:skill_kit, :tool_use, :start/:stop]`). The pre-event and
+post-event names are derived from it.
+
+`SkillKit.Hooks.cast/3` fires a single hook event without gating:
 
 ```elixir
 # cast/3 signature:
-# cast(hooks, event, context)
-Hooks.cast(hooks, :post_tool_use, Map.put(context, :result, result))
+# cast(catalog, event, context)
+Hooks.cast(catalog, :post_subagent, %{name: name, result: result, agent_name: agent_name})
 ```
 
 ## Matcher Semantics
 
-Each boundary matches the hook's `:matcher` regex against a boundary-specific
-string. A `nil` matcher matches everything.
+Each boundary matches the hook's `:matcher` regex against a
+boundary-specific string. A `nil` matcher matches everything.
 
 | Boundary | Matched against |
 |---|---|
-| `:tool_use` | Tool name (e.g. `"bash"`, `"files:read"`) |
-| `:subagent` | Agent name (e.g. `"code-reviewer"`) |
-| `:llm_request` | Model string (e.g. `"claude-sonnet-4-20250514"`) |
-| `:skill_activation` | Skill name (e.g. `"system:memory"`) |
-| `:message_send` | Message role (`"user"`, `"assistant"`) |
-| `:agent_start` | Agent name |
-| `:agent_stop` | Agent name |
-| `:builtin` | Builtin function name (e.g. `"report_result"`) |
+| `:tool_use` | Last segment of the tool module name (e.g. `"Shell"`) |
+| `:subagent` | Subagent name from context `:name` key, falling back to `:agent_name` |
+| `:skill_activation` | Skill name string (e.g. `"ops:deploy"`) |
+| `:llm_request` | Model string from context `:model` key, falling back to `:agent_name` |
+| All others | Agent name string from `:agent_name` key |
 
 ## Handler Behaviour
 
@@ -119,27 +131,48 @@ Custom handlers implement `SkillKit.Hooks.Handler`:
   :ok | {:deny, reason :: any()} | {:pending, state :: any()}
 ```
 
-The `config` map comes from the hook definition (e.g. the YAML frontmatter
-values). The `context` map contains boundary-specific information (see
+The `config` map comes from the hook definition (the YAML fields minus
+`type`). The `context` map contains boundary-specific information (see
 [Hook Context Maps](#hook-context-maps) below).
+
+Three handler forms are supported:
+
+- `{module, config}` — calls `module.execute(config, context)`
+- `fun/1` — calls `fun.(context)`
+- `{module, fun, args}` — calls `apply(module, fun, [context | args])`
 
 ### Built-in Handlers
 
-**Command** — runs an OS command and interprets its exit code:
+**Command** — runs an OS command. The hook context is passed as JSON in the
+`HOOK_INPUT` environment variable.
+
+Exit code semantics (matching Claude Code):
+
+| Exit code | Result |
+|---|---|
+| `0` | `:ok` (allow) |
+| `2` | `{:deny, output}` (block) |
+| Any other | `:ok` (non-blocking error) |
 
 ```yaml
 hooks:
   PreToolUse:
-    - matcher: "bash"
+    - matcher: "Shell"
       hooks:
         - type: command
-          command: "check-policy $TOOL_NAME"
+          command: "check-deploy-policy"
 ```
 
-Exit code `0` → `:ok`. Exit code `1` → `{:deny, stderr}`. Any other code →
-`{:pending, state}` (suspend for human review).
+**Http** — POSTs the context as JSON to a URL.
 
-**Http** — POSTs the context to an HTTP endpoint and interprets the response:
+Response semantics:
+
+| Response | Result |
+|---|---|
+| 2xx with `{"decision": "deny", "reason": "..."}` | `{:deny, reason}` |
+| 2xx with `{"decision": "allow"}` or no `decision` field | `:ok` |
+| Non-2xx | `{:deny, "HTTP hook returned status <code>"}` |
+| Connection error | `:ok` (non-blocking, matches Claude Code) |
 
 ```yaml
 hooks:
@@ -148,57 +181,47 @@ hooks:
       hooks:
         - type: http
           url: "https://policy.example.com/approve"
+          timeout: 30
 ```
 
-HTTP `200` → `:ok`. HTTP `403` → `{:deny, body}`. HTTP `202` →
-`{:pending, state}` (suspend awaiting callback).
+Optional `headers` map and `timeout` (seconds, default 30) are supported.
 
 ## Configuring Handler Types
 
-Register handler modules via application config or per-agent option:
+Handler modules are registered via application config:
 
 ```elixir
 # config/config.exs
-config :skill_kit, SkillKit.Hooks,
-  handlers: %{
-    "command" => SkillKit.Hooks.Handlers.Command,
-    "http"    => SkillKit.Hooks.Handlers.Http,
-    "my_type" => MyApp.Hooks.CustomHandler
-  }
+config :skill_kit, :hook_handlers, %{
+  "command" => SkillKit.Hooks.Command,
+  "http"    => SkillKit.Hooks.Http,
+  "my_type" => MyApp.Hooks.CustomHandler
+}
 ```
 
-Or override at agent start:
-
-```elixir
-SkillKit.start_agent("agents/neve",
-  skills: ["skills"],
-  hook_handlers: %{
-    "audit" => MyApp.Hooks.AuditHandler
-  }
-)
-```
-
-Per-agent `hook_handlers` merges with (and overrides) the application config.
+The parser reads this map at skill load time to resolve `type:` strings
+to handler modules. Unknown types log a warning and default to a no-op
+handler that always returns `:ok`.
 
 ## Tool Execution
 
-`SkillKit.ToolExecution` handles the actual tool invocation after hooks have
+`SkillKit.ToolExecution` manages the actual tool invocation after hooks have
 cleared the boundary. It exposes two operations:
 
-- `ToolExecution.execute/1` — runs the tool. Returns `{:ok, result}`,
-  `{:error, reason}`, or `{:pending, state}` if the tool itself needs to
-  suspend.
-- `ToolExecution.resume/2` — resumes a suspended tool with a decision
-  (`decision` is `:approved` or `{:denied, reason}`).
+- `ToolExecution.execute/1` — runs the tool. Returns `{:ok, execution}`,
+  `{:error, execution}`, or `{:pending, execution}` if the tool suspends.
+- `ToolExecution.resume/2` — resumes a suspended execution. Takes the
+  execution struct and a decision value, passes it to the tool's `resume/3`
+  callback.
 
-Hooks are not part of the `ToolExecution` pipeline. The `Agent.Server`
-calls `Hooks.call/4` before dispatching to `ToolExecution`.
+Hooks are not part of the `ToolExecution` pipeline. `Agent.Server` calls
+`Hooks.call/4` before dispatching to `ToolExecution`.
 
 ## Defining Hooks in Skills
 
-Hooks are declared in YAML frontmatter under the `hooks` key, using the same
-nested structure as Claude Code. Each event key maps to a list of matchers,
-each with its own list of handler entries:
+Hooks are declared in YAML frontmatter under the `hooks` key. Each event key
+maps to a list of entries, each with an optional `matcher` and a `hooks` list
+of handler configs:
 
 ```markdown
 ---
@@ -206,7 +229,7 @@ name: "ops:deploy"
 description: Deploy a service to the staging environment.
 hooks:
   PreToolUse:
-    - matcher: "bash"
+    - matcher: "Shell"
       hooks:
         - type: command
           command: "check-deploy-policy"
@@ -227,41 +250,89 @@ Deploy $ARGUMENTS to staging.
 All 16 event names in YAML (PascalCase):
 
 ```
-PreToolUse    PostToolUse
-PreSubagent   PostSubagent
-PreLlmRequest PostLlmRequest
-PreSkillActivation  PostSkillActivation
-PreMessageSend      PostMessageSend
-PreAgentStart       PostAgentStart
-PreAgentStop        PostAgentStop
-PreBuiltin          PostBuiltin
+PreToolUse              PostToolUse
+PreSubagent             PostSubagent
+PreSkillActivation      PostSkillActivation
+PreConversationSave     PostConversationSave
+PreConversationLoad     PostConversationLoad
+PreLlmRequest           PostLlmRequest
+PreTurn                 PostTurn
+PreAgent                PostAgent
 ```
+
+Unknown event names are silently ignored.
 
 ## Hook Context Maps
 
-Each boundary passes a context map to matching handlers. Common keys are
-present in every context; boundary-specific keys are listed separately.
+Each boundary passes a context map to matching handlers. The keys vary by
+boundary.
 
-**Common keys** (all boundaries):
+**`:tool_use`** (pre and post):
 
 | Key | Type | Description |
 |---|---|---|
-| `:agent_name` | `atom()` | Name of the agent firing the hook |
-| `:event` | `atom()` | The boundary event atom |
-| `:skill` | `SkillKit.Skill.t() \| nil` | The skill that owns the hook |
+| `:tool` | `module()` | The tool module being invoked |
+| `:input` | `map()` | Tool input arguments |
+| `:skill` | `Skill.t() \| nil` | The skill that triggered the tool call, if any |
+| `:scope` | `term()` | The agent's authorization scope |
+| `:agent_name` | `String.t()` | Name of the agent |
 
-**Boundary-specific keys:**
+Post-event also includes `:result` with the tool outcome.
 
-| Boundary | Additional keys |
-|---|---|
-| `:tool_use` | `:tool_name`, `:tool_input` (map) |
-| `:subagent` | `:subagent_name`, `:task` (string) |
-| `:llm_request` | `:model` (string), `:message_count` |
-| `:skill_activation` | `:skill_name`, `:arguments` (string) |
-| `:message_send` | `:role` (string), `:content` |
-| `:agent_start` | `:agent_name`, `:definition` |
-| `:agent_stop` | `:agent_name`, `:reason` |
-| `:builtin` | `:function_name`, `:arguments` |
+**`:subagent`** (pre):
 
-Post-events receive the same context as their pre-event counterpart, plus
-a `:result` key holding the outcome of the boundary action.
+| Key | Type | Description |
+|---|---|---|
+| `:name` | `String.t()` | The subagent's definition name |
+| `:task` | `String.t()` | The task being delegated |
+| `:agent_name` | `String.t()` | Name of the parent agent |
+| `:depth` | `non_neg_integer()` | Current agent nesting depth |
+
+**`:subagent`** (post, via `cast/3`):
+
+| Key | Type | Description |
+|---|---|---|
+| `:name` | `String.t()` | The subagent's definition name |
+| `:task` | `String.t()` | The task that was delegated |
+| `:result` | `String.t()` | The subagent's reported result |
+| `:agent_name` | `String.t()` | Name of the parent agent |
+
+**`:skill_activation`**:
+
+| Key | Type | Description |
+|---|---|---|
+| `:skill` | `Skill.t()` | The skill being activated |
+| `:skill_name` | `String.t()` | The skill's name string |
+| `:arguments` | `String.t()` | Arguments passed to the skill |
+| `:agent_name` | `String.t()` | Name of the agent |
+| `:scope` | `term()` | The agent's authorization scope |
+
+**`:llm_request`**:
+
+| Key | Type | Description |
+|---|---|---|
+| `:agent_name` | `String.t()` | Name of the agent |
+| `:model` | `String.t()` | Model identifier string |
+| `:message_count` | `non_neg_integer()` | Number of messages in context |
+| `:tool_count` | `non_neg_integer()` | Number of tools available |
+
+**`:turn`**:
+
+| Key | Type | Description |
+|---|---|---|
+| `:agent_name` | `String.t()` | Name of the agent |
+| `:message_count` | `non_neg_integer()` | Number of new messages in this turn |
+
+**`:conversation_save`**:
+
+| Key | Type | Description |
+|---|---|---|
+| `:agent_name` | `String.t()` | Name of the agent |
+| `:message_count` | `non_neg_integer()` | Total messages being saved |
+
+**`:agent`** (pre/post, via `cast/3`):
+
+| Key | Type | Description |
+|---|---|---|
+| `:agent_name` | `String.t()` | Name of the agent |
+| `:definition` | `Definition.t()` | The agent's definition struct |
