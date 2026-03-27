@@ -226,10 +226,9 @@ defmodule SkillKit.Agent.Server do
       tool_count: length(tools)
     }
 
-    case Hooks.call(catalog(state), :llm_request, llm_context, fn ->
-           result = stream(state, tools)
-           {result, llm_context}
-         end) do
+    llm_result = hooked_llm_request(state, tools, llm_context)
+
+    case llm_result do
       {:deny, reason} ->
         notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
         state
@@ -244,6 +243,13 @@ defmodule SkillKit.Agent.Server do
         notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
         state
     end
+  end
+
+  defp hooked_llm_request(state, tools, llm_context) do
+    Hooks.call(catalog(state), :llm_request, llm_context, fn ->
+      result = stream(state, tools)
+      {result, llm_context}
+    end)
   end
 
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
@@ -286,15 +292,12 @@ defmodule SkillKit.Agent.Server do
       agent_name: state.agent_name
     }
 
-    case Hooks.call(catalog(state), :tool_use, hook_context, fn ->
-           do_execute_command(id, tool, input, tool_context, hook_context)
-         end) do
-      {:deny, reason} ->
-        %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+    result =
+      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+        do_execute_command(id, tool, input, tool_context, hook_context)
+      end)
 
-      result ->
-        result
-    end
+    unwrap_tool_result(id, result)
   end
 
   defp do_execute_command(id, tool, input, tool_context, hook_context) do
@@ -369,6 +372,19 @@ defmodule SkillKit.Agent.Server do
   defp ensure_non_empty(str) when is_binary(str), do: str
   defp ensure_non_empty(nil), do: "(no output)"
 
+  defp unwrap_tool_result(id, {:deny, reason}) do
+    %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+  end
+
+  defp unwrap_tool_result(_id, result), do: result
+
+  defp unwrap_stateful_result(id, {:deny, reason}, state) do
+    result = %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+    {result, state}
+  end
+
+  defp unwrap_stateful_result(_id, result, _state), do: result
+
   defp activate_skill(%ToolCall{id: id, input: input}, state) do
     skill_name = Map.get(input, "name", "")
     arguments = Map.get(input, "arguments", "")
@@ -406,21 +422,12 @@ defmodule SkillKit.Agent.Server do
       scope: state.scope
     }
 
-    case Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
-           do_activate_skill(id, skill, skill_name, arguments, state, hook_context)
-         end) do
-      {:deny, reason} ->
-        result = %ToolResult{
-          tool_call_id: id,
-          content: "Denied: #{reason}",
-          is_error: true
-        }
+    result =
+      Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
+        do_activate_skill(id, skill, skill_name, arguments, state, hook_context)
+      end)
 
-        {result, state}
-
-      {result, updated_state} ->
-        {result, updated_state}
-    end
+    unwrap_stateful_result(id, result, state)
   end
 
   defp do_activate_skill(id, skill, skill_name, arguments, state, hook_context) do
@@ -456,15 +463,12 @@ defmodule SkillKit.Agent.Server do
       agent_name: state.agent_name
     }
 
-    case Hooks.call(catalog(state), :tool_use, hook_context, fn ->
-           do_execute_module_skill(id, skill, input, state, hook_context)
-         end) do
-      {:deny, reason} ->
-        %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
+    result =
+      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+        do_execute_module_skill(id, skill, input, state, hook_context)
+      end)
 
-      result ->
-        result
-    end
+    unwrap_tool_result(id, result)
   end
 
   defp do_execute_module_skill(id, skill, input, state, hook_context) do
@@ -525,22 +529,13 @@ defmodule SkillKit.Agent.Server do
       depth: state.depth
     }
 
-    case Hooks.call(catalog(state), :subagent, hook_context, fn ->
-           result = do_spawn_subagent(id, name, task, agent_def, state)
-           {result, Map.put(hook_context, :result, result)}
-         end) do
-      {:deny, reason} ->
-        result = %ToolResult{
-          tool_call_id: id,
-          content: "Denied: #{reason}",
-          is_error: true
-        }
+    result =
+      Hooks.call(catalog(state), :subagent, hook_context, fn ->
+        spawn_result = do_spawn_subagent(id, name, task, agent_def, state)
+        {spawn_result, Map.put(hook_context, :result, spawn_result)}
+      end)
 
-        {result, state}
-
-      {result, updated_state} ->
-        {result, updated_state}
-    end
+    unwrap_stateful_result(id, result, state)
   end
 
   defp do_spawn_subagent(id, name, task, agent_def, state) do
@@ -714,8 +709,9 @@ defmodule SkillKit.Agent.Server do
     load_context = %{agent_name: agent_name}
 
     try do
-      result = hooked_load(catalog, load_context, mod, agent_name, config)
-      unwrap_load_result(result)
+      catalog
+      |> hooked_load(load_context, mod, agent_name, config)
+      |> unwrap_load_result()
     catch
       :exit, _reason -> do_load_conversation(mod, agent_name, config)
     end
