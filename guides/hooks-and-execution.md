@@ -78,23 +78,24 @@ their return values are discarded.
 `SkillKit.Hooks.call/4` drives a gated boundary:
 
 ```elixir
-context = %{tool: MyTool, input: %{"query" => "hello"}, agent_name: "my-agent"}
+@spec call(GenServer.server(), atom(), map(), (-> {term(), map()})) :: term()
 
-result =
-  Hooks.call(catalog, :tool_use, context, fn ->
-    output = MyTool.run(context.input)
-    {output, Map.put(context, :result, output)}
-  end)
-
-# result is one of:
-# - the output from your function (hooks allowed it)
-# - {:deny, reason}   (a pre-hook blocked it)
-# - {:pending, state}  (a pre-hook suspended it)
+# Wraps a boundary in a telemetry span.
+# Fires :pre_<boundary> hooks before func, :post_<boundary> after.
+# Returns the func result, {:deny, reason}, or {:pending, state}.
+#
+# func must return {result, post_context} where post_context is the
+# context map enriched with the outcome — passed to post-event hooks.
+# By convention, post_context is the original context with :result added.
+Hooks.call(catalog, :tool_use, context, fn ->
+  result = do_work()
+  {result, Map.put(context, :result, result)}
+end)
 ```
 
-The boundary name is used directly for the telemetry span (`:tool_use`
-becomes `[:skill_kit, :tool_use, :start/:stop]`). The pre-event and
-post-event names are derived from it.
+The boundary name drives both the telemetry span (`:tool_use` becomes
+`[:skill_kit, :tool_use, :start/:stop]`) and the hook event names
+(`:pre_tool_use` / `:post_tool_use`).
 
 `SkillKit.Hooks.cast/3` fires a single hook event without gating:
 
