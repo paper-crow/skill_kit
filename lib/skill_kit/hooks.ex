@@ -86,7 +86,7 @@ defmodule SkillKit.Hooks do
   end
 
   defp invoke_handler({mod, config}, context) when is_map(config) do
-    mod.execute(config, context)
+    apply(mod, :execute, [config, context])
   end
 
   defp invoke_handler(fun, context) when is_function(fun, 1), do: fun.(context)
