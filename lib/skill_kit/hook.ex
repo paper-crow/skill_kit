@@ -40,5 +40,6 @@ defmodule SkillKit.Hook do
           handler: handler() | nil
         }
 
+  @enforce_keys [:event, :handler]
   defstruct [:event, :matcher, :handler]
 end

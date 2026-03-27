@@ -81,7 +81,8 @@ defmodule SkillKit.Agent.Server do
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
 
-    messages = load_conversation(conversation_store, agent_name)
+    agent_catalog = {:via, Registry, {registry, {agent_name, :catalog}}}
+    messages = load_conversation(conversation_store, agent_name, agent_catalog)
 
     state = %__MODULE__{
       agent_name: agent_name,
@@ -707,9 +708,25 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp load_conversation(nil, _agent_name), do: []
+  defp load_conversation(nil, _agent_name, _catalog), do: []
 
-  defp load_conversation({mod, config}, agent_name) do
+  defp load_conversation({mod, config}, agent_name, catalog) do
+    load_context = %{agent_name: agent_name}
+
+    try do
+      case Hooks.call(catalog, :conversation_load, load_context, fn ->
+             result = do_load_conversation(mod, agent_name, config)
+             {result, Map.put(load_context, :messages, result)}
+           end) do
+        {:deny, _reason} -> []
+        messages -> messages
+      end
+    catch
+      :exit, _reason -> do_load_conversation(mod, agent_name, config)
+    end
+  end
+
+  defp do_load_conversation(mod, agent_name, config) do
     case apply(mod, :load, [agent_name, config]) do
       {:ok, msgs} -> msgs
       {:error, _} -> []

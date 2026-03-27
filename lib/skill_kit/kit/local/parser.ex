@@ -56,6 +56,8 @@ defmodule SkillKit.Kit.Local.Parser do
       }}
   """
 
+  require Logger
+
   alias SkillKit.Hook
   alias SkillKit.Skill
 
@@ -222,21 +224,29 @@ defmodule SkillKit.Kit.Local.Parser do
   defp compile_matcher(pattern), do: Regex.compile!(pattern)
 
   @spec build_hook_handler(list(), map()) :: Hook.handler()
-  defp build_hook_handler([%{"type" => type} = config | _rest], hook_handlers) do
+  defp build_hook_handler([config], hook_handlers) do
+    resolve_handler(config, hook_handlers)
+  end
+
+  defp build_hook_handler([config | _rest], hook_handlers) do
+    Logger.warning("Multiple handlers per matcher entry not supported; using first")
+    resolve_handler(config, hook_handlers)
+  end
+
+  defp build_hook_handler(_other, _hook_handlers) do
+    fn _context -> :ok end
+  end
+
+  defp resolve_handler(%{"type" => type} = config, hook_handlers) do
     case Map.fetch(hook_handlers, type) do
       {:ok, handler_mod} ->
         handler_config = Map.drop(config, ["type"])
         {handler_mod, handler_config}
 
       :error ->
-        require Logger
         Logger.warning("Unknown hook handler type: #{type}")
         fn _context -> :ok end
     end
-  end
-
-  defp build_hook_handler(_other, _hook_handlers) do
-    fn _context -> :ok end
   end
 
   # Fetches a required string field from the YAML map.

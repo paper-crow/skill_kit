@@ -5,17 +5,15 @@ defmodule SkillKit.HookTest do
 
   describe "Hook struct" do
     test "has event, matcher, and handler fields" do
-      hook = %Hook{}
+      hook = %Hook{event: :pre_tool_use, handler: fn _ctx -> :ok end}
       assert Map.has_key?(hook, :event)
       assert Map.has_key?(hook, :matcher)
       assert Map.has_key?(hook, :handler)
     end
 
-    test "all fields default to nil" do
-      hook = %Hook{}
-      assert is_nil(hook.event)
+    test "matcher defaults to nil" do
+      hook = %Hook{event: :pre_tool_use, handler: fn _ctx -> :ok end}
       assert is_nil(hook.matcher)
-      assert is_nil(hook.handler)
     end
 
     test "can be constructed with function handler" do
