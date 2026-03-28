@@ -140,6 +140,7 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:chat_messages, messages)
       |> assign(:streaming_text, nil)
       |> refresh_files()
+      |> reload_current_document()
 
     {:noreply, socket}
   end
@@ -169,6 +170,11 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:chat_messages, messages)
       |> assign(:streaming_text, nil)
 
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(_unknown, socket) do
     {:noreply, socket}
   end
 
@@ -256,6 +262,17 @@ defmodule SkillKit.Web.EditorLive do
 
   defp format_message(message, nil), do: message
   defp format_message(message, path), do: "[Viewing: #{path}]\n#{message}"
+
+  defp reload_current_document(%{assigns: %{current_path: nil}} = socket), do: socket
+
+  defp reload_current_document(socket) do
+    full_path = Path.join(socket.assigns.docs_root, socket.assigns.current_path)
+
+    case File.read(full_path) do
+      {:ok, content} -> assign(socket, :content, content)
+      {:error, _} -> socket
+    end
+  end
 
   defp refresh_files(socket) do
     files = list_files(socket.assigns.docs_root)
