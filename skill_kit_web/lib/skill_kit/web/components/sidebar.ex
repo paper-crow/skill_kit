@@ -24,6 +24,14 @@ defmodule SkillKit.Web.Components.Sidebar do
         panel={:build}
         active={@active == :build}
       />
+      <a
+        href="/debug"
+        target="_blank"
+        title="Telemetry Debug"
+        class="w-8 h-8 rounded-lg flex items-center justify-center text-sm text-editor-text-faint hover:text-editor-text-muted hover:bg-editor-accent-faint/50 transition-colors"
+      >
+        <span class="sr-only">Debug</span> ⚡
+      </a>
       <div class="mt-auto mb-4">
         <.icon_button
           icon="app"

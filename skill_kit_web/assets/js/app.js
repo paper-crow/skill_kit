@@ -1,9 +1,11 @@
 import { Socket } from "phoenix";
 import { LiveSocket } from "phoenix_live_view";
+import AutoScroll from "./hooks/auto_scroll";
 import MarkdownEditor from "./hooks/markdown_editor";
 import Theme from "./hooks/theme";
 
 const hooks = {
+  AutoScroll,
   MarkdownEditor,
   Theme,
 };

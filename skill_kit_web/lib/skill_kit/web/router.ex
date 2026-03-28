@@ -16,6 +16,7 @@ defmodule SkillKit.Web.Router do
     pipe_through(:browser)
 
     live("/", EditorLive, :index)
+    live("/debug", DebugLive, :index)
     live("/:path", EditorLive, :show)
   end
 
