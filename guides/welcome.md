@@ -14,25 +14,25 @@ SkillKit creates intelligent agents that can:
 
 ## Key Features
 
-### 🏗️ **Robust Architecture**
+### **Robust Architecture**
 Each agent runs as an isolated OTP supervision tree with its own Registry, ensuring fault tolerance and process isolation.
 
-### 🔧 **Flexible Tool System**
+### **Flexible Tool System**
 - Load skills from filesystem or in-memory providers
 - Execute tools with proper authorization
 - Support for hooks at execution boundaries
 - Extensible through behavior-based providers
 
-### 🤖 **Intelligent Agent Lifecycle**
+### **Intelligent Agent Lifecycle**
 - Source-driven or definition-driven agent startup
 - Buffered message processing with size and time thresholds
 - Synchronous LLM loops with streaming responses
 - Clean shutdown and resource management
 
-### 🌊 **Streaming & Events**
+### **Streaming & Events**
 Real-time streaming of LLM responses with structured events (`%Event.Delta{}`, `%Event.ToolCallStart{}`, etc.) back to caller processes.
 
-### 🎯 **Subagent Delegation**
+### **Subagent Delegation**
 Agents can spawn child agents for specialized tasks, with depth controls and parent-child communication through Registry lookups.
 
 ## Core Components

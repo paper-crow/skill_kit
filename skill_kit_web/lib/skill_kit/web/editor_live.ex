@@ -432,11 +432,16 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   defp format_duration(%{duration: duration}) when is_integer(duration) do
-    ms = System.convert_time_unit(duration, :native, :millisecond)
-    "#{ms}ms"
+    microseconds = System.convert_time_unit(duration, :native, :microsecond)
+    humanize_duration(microseconds)
   end
 
   defp format_duration(_), do: nil
+
+  defp humanize_duration(us) when us < 1_000, do: "#{us}us"
+  defp humanize_duration(us) when us < 1_000_000, do: "#{Float.round(us / 1_000, 1)}ms"
+  defp humanize_duration(us) when us < 60_000_000, do: "#{Float.round(us / 1_000_000, 2)}s"
+  defp humanize_duration(us), do: "#{Float.round(us / 60_000_000, 1)}min"
 
   defp format_detail(event_name, measurements, metadata) do
     parts = event_specific_detail(event_name, measurements, metadata)

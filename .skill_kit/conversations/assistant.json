@@ -628,5 +628,62 @@
     "agent": null,
     "content": "I've updated the welcome.md document with a comprehensive recap of the SkillKit application. The updated document includes:\n\n- **Clear introduction** explaining what SkillKit is\n- **Key capabilities** of the agents you're building\n- **Major features** with emojis for visual appeal\n- **Core components** overview\n- **Simple getting started example** showing the three-step API pattern\n\nThe recap emphasizes the unique aspects of your framework:\n- The robust OTP-based architecture\n- The streaming, event-driven communication model\n- The flexible tool and skill system\n- The subagent delegation capabilities\n- The fault-tolerant design principles\n\nThis gives anyone reading the welcome document a solid understanding of what SkillKit does and why it's valuable for building LLM agent systems.",
     "tool_calls": []
+  },
+  {
+    "role": "user",
+    "agent": null,
+    "content": "[Viewing: welcome.md]\ncan you remove the emojis from this doc"
+  },
+  {
+    "role": "assistant",
+    "agent": null,
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "toolu_01HHF2QPx6tPtGEqSGdM9U7Z",
+        "input": {
+          "arguments": "welcome.md",
+          "name": "docs:update"
+        },
+        "name": "activate_skill"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "agent": null,
+    "content": "Update an existing document by replacing its content. The file must already exist. Provide the relative path and the new content.\n\nInput: `{\"path\": \"guides/setup.md\", \"content\": \"# Updated Setup Guide\\n\\nRevised content...\"}`\n\nARGUMENTS: welcome.md",
+    "is_error": false,
+    "tool_call_id": "toolu_01HHF2QPx6tPtGEqSGdM9U7Z"
+  },
+  {
+    "role": "assistant",
+    "agent": null,
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "toolu_01S7FBuuynrMvgpwxbk5TQeD",
+        "input": {
+          "content": "# Welcome to SkillKit\n\nSkillKit is an **Elixir framework for building LLM agent systems** that combines the power of large language models with robust, fault-tolerant architecture using OTP (Open Telecom Platform) principles.\n\n## What We're Building\n\nSkillKit creates intelligent agents that can:\n\n- **Process messages asynchronously** through a buffered mailbox system\n- **Execute tools and skills** with proper authorization and scope management\n- **Delegate work to subagents** for complex, multi-step tasks\n- **Stream real-time responses** back to caller processes\n- **Recover gracefully** from failures using Elixir's supervision trees\n\n## Key Features\n\n### **Robust Architecture**\nEach agent runs as an isolated OTP supervision tree with its own Registry, ensuring fault tolerance and process isolation.\n\n### **Flexible Tool System**\n- Load skills from filesystem or in-memory providers\n- Execute tools with proper authorization\n- Support for hooks at execution boundaries\n- Extensible through behavior-based providers\n\n### **Intelligent Agent Lifecycle**\n- Source-driven or definition-driven agent startup\n- Buffered message processing with size and time thresholds\n- Synchronous LLM loops with streaming responses\n- Clean shutdown and resource management\n\n### **Streaming & Events**\nReal-time streaming of LLM responses with structured events (`%Event.Delta{}`, `%Event.ToolCallStart{}`, etc.) back to caller processes.\n\n### **Subagent Delegation**\nAgents can spawn child agents for specialized tasks, with depth controls and parent-child communication through Registry lookups.\n\n## Core Components\n\n- **Agent.Server**: Drives the LLM loop and tool execution\n- **Agent.Mailbox**: Buffers and batches incoming messages\n- **Catalog**: Aggregates skills from providers and manages tool definitions\n- **Registry**: Process discovery within each agent's supervision tree\n- **SubagentSupervisor**: Dynamic supervision of child agents\n\n## Getting Started\n\nSkillKit follows a simple three-step pattern:\n\n```elixir\n# 1. Start an agent\n{:ok, agent} = SkillKit.start_agent(\n  skills: [{SkillKit.Kit.Local, dir: \".skills\"}],\n  caller: self(),\n  scope: my_scope\n)\n\n# 2. Send messages\n:ok = SkillKit.send_message(agent, \"Hello, how can you help me?\")\n\n# 3. Clean up\n:ok = SkillKit.stop_agent(agent)\n```\n\nThis framework enables building sophisticated AI agents that are both powerful and reliable, leveraging Elixir's strengths in concurrent, fault-tolerant systems.",
+          "path": "welcome.md"
+        },
+        "name": "update"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "agent": null,
+    "content": "Updated welcome.md",
+    "is_error": false,
+    "tool_call_id": "toolu_01S7FBuuynrMvgpwxbk5TQeD"
+  },
+  {
+    "role": "assistant",
+    "agent": null,
+    "content": "Done! I've removed all the emojis from the welcome.md document. The section headings now use clean text without any decorative icons:\n\n- **Robust Architecture** (was 🏗️)\n- **Flexible Tool System** (was 🔧) \n- **Intelligent Agent Lifecycle** (was 🤖)\n- **Streaming & Events** (was 🌊)\n- **Subagent Delegation** (was 🎯)\n\nThe document maintains all the same content and structure while following the style guidelines of no emojis in documentation.",
+    "tool_calls": []
   }
 ]
