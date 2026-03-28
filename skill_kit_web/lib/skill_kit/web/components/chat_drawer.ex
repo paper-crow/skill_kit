@@ -8,7 +8,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
   def chat_drawer(assigns) do
     ~H"""
     <div class={[
-      "h-full w-80 shrink-0 bg-editor-bg-alt border-l border-editor-border",
+      "h-full w-[420px] shrink-0 bg-editor-bg-alt border-l border-editor-border",
       "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
@@ -23,20 +23,39 @@ defmodule SkillKit.Web.Components.ChatDrawer do
         <.streaming_message :if={@streaming_text} text={@streaming_text} />
       </div>
 
-      <div class="border-t border-editor-border px-3 py-2">
-        <form phx-submit="send_chat_message" class="flex gap-2">
-          <input
-            type="text"
+      <div class="px-3 py-3">
+        <form phx-submit="send_chat_message" class="relative">
+          <textarea
             name="message"
-            placeholder="Message"
+            placeholder="Type your message..."
+            rows="3"
             autocomplete="off"
-            class="flex-1 bg-editor-bg border border-editor-border rounded px-2 py-1 text-sm text-editor-text placeholder-editor-text-faint focus:outline-none focus:border-editor-accent"
+            phx-keydown="chat_keydown"
+            phx-key="Enter"
+            class="w-full bg-editor-bg border border-editor-border rounded-xl px-4 py-3 pr-14
+                   text-sm text-editor-text placeholder-editor-text-faint
+                   focus:outline-none focus:border-editor-accent-muted
+                   resize-none"
           />
           <button
             type="submit"
-            class="text-xs text-editor-accent-muted hover:text-editor-accent transition-colors"
+            class="absolute bottom-3 right-3 w-8 h-8 rounded-full
+                   bg-editor-accent text-white
+                   flex items-center justify-center
+                   hover:opacity-90 transition-opacity"
           >
-            Send
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              class="w-4 h-4"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
+                clip-rule="evenodd"
+              />
+            </svg>
           </button>
         </form>
       </div>

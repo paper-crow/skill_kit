@@ -52,6 +52,6 @@ defmodule SkillKit.Web.Components.ChatDrawerTest do
         open: true
       )
 
-    assert html =~ "Message"
+    assert html =~ "Type your message"
   end
 end

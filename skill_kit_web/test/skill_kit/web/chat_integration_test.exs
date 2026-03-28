@@ -17,7 +17,7 @@ defmodule SkillKit.Web.ChatIntegrationTest do
     view |> element(~s{button[phx-value-panel="chat"][title="Chat"]}) |> render_click()
     html = render(view)
     assert html =~ "Chat"
-    assert html =~ "Message"
+    assert html =~ "Type your message"
   end
 
   test "sending a message adds it to chat", %{conn: conn} do

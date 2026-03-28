@@ -170,6 +170,13 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
+  def handle_event("chat_keydown", _params, socket) do
+    # Enter key submits via the form's phx-submit; this is a no-op handler
+    # to prevent LiveView from complaining about unhandled events
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("toggle_debug_pause", _params, socket) do
     {:noreply, assign(socket, :debug_paused, !socket.assigns.debug_paused)}
   end
