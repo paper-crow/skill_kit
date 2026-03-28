@@ -13,10 +13,11 @@ defmodule SkillKit.Web.EditorLiveTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "renders editor with document list showing titles", %{conn: conn} do
+  test "renders editor with document list and chat", %{conn: conn} do
     {:ok, _view, html} = live(conn, "/")
     assert html =~ "Welcome"
     assert html =~ "Features"
+    assert html =~ "Type your message"
   end
 
   test "opens a different document", %{conn: conn} do
@@ -25,9 +26,9 @@ defmodule SkillKit.Web.EditorLiveTest do
     assert render(view) =~ "Welcome"
   end
 
-  test "toggles document tree drawer", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
-    view |> element(~s{button[phx-value-panel="docs"]}) |> render_click()
-    assert render(view) =~ "Documents"
+  test "document tree is always visible", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/")
+    assert html =~ "Welcome"
+    assert html =~ "Features"
   end
 end

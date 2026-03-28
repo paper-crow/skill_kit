@@ -152,12 +152,12 @@ flowchart TD
     classDef start fill:#e8f5e8
     classDef decision fill:#fff3cd
     classDef process fill:#e1f5fe
-    classDef end fill:#f8d7da
+    classDef terminal fill:#f8d7da
     
     class A start
     class D decision
     class B,C,G,H,I,J,K,L process
-    class E,F end
+    class E,F terminal
 ```
 
 The Server calls `Catalog.classify/3` before each tool execution. Local tools

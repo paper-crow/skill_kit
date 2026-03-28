@@ -16,12 +16,10 @@ defmodule SkillKit.Web.ChatSmokeTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "full flow: browse doc, open chat, send message", %{conn: conn} do
+  test "full flow: browse doc, send message", %{conn: conn} do
     {:ok, view, html} = live(conn, "/")
     assert html =~ "Welcome"
-
-    view |> element(~s{button[phx-value-panel="chat"][title="Chat"]}) |> render_click()
-    assert render(view) =~ "Chat"
+    assert html =~ "Type your message"
 
     view |> form("form", %{message: "Hello agent"}) |> render_submit()
     assert render(view) =~ "Hello agent"

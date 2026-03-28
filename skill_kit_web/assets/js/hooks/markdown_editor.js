@@ -3,6 +3,23 @@ const MarkdownEditor = {
     this.highlightCode();
     this.renderMermaid();
 
+    // Scroll to top when switching documents
+    this.handleEvent("scroll_to_top", () => {
+      this.el.closest(".overflow-y-auto")?.scrollTo({ top: 0 });
+    });
+
+    // Listen for scroll-to-heading events from the server
+    this.handleEvent("scroll_to_heading", ({ heading }) => {
+      // Find the h2 element whose text matches (h2 = ## headings in our rendering)
+      const headings = this.el.querySelectorAll("h2, h3, h4");
+      for (const el of headings) {
+        if (el.textContent.trim() === heading) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          break;
+        }
+      }
+    });
+
     // Track text selection for inline threads (Plan 3)
     document.addEventListener("mouseup", () => {
       const selection = window.getSelection();

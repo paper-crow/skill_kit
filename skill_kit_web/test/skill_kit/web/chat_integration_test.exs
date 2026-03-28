@@ -12,17 +12,13 @@ defmodule SkillKit.Web.ChatIntegrationTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "chat drawer opens and shows input", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
-    view |> element(~s{button[phx-value-panel="chat"][title="Chat"]}) |> render_click()
-    html = render(view)
-    assert html =~ "Chat"
+  test "chat is always visible with input", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/")
     assert html =~ "Type your message"
   end
 
   test "sending a message adds it to chat", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
-    view |> element(~s{button[phx-value-panel="chat"][title="Chat"]}) |> render_click()
     view |> form("form", %{message: "What is this project about?"}) |> render_submit()
     html = render(view)
     assert html =~ "What is this project about?"

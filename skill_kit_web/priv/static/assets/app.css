@@ -930,6 +930,14 @@ hue-6-2: #e6c07b
   margin-top: auto;
 }
 
+.ml-3 {
+  margin-left: 0.75rem;
+}
+
+.mb-0\.5 {
+  margin-bottom: 0.125rem;
+}
+
 .block {
   display: block;
 }
@@ -1503,6 +1511,10 @@ hue-6-2: #e6c07b
 
 .hover\:text-white\/60:hover {
   color: rgb(255 255 255 / 0.6);
+}
+
+.hover\:text-editor-accent-muted:hover {
+  color: var(--editor-accent-muted);
 }
 
 .hover\:opacity-90:hover {

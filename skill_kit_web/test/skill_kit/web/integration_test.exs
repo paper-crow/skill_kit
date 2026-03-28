@@ -16,15 +16,10 @@ defmodule SkillKit.Web.IntegrationTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "full editor workflow: open, browse, switch documents", %{conn: conn} do
-    {:ok, view, html} = live(conn, "/")
+  test "full editor workflow: open and browse documents", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/")
     assert html =~ "Welcome"
     assert html =~ "What are you building?"
-
-    view |> element(~s{button[phx-value-panel="docs"]}) |> render_click()
-    assert render(view) =~ "welcome.md"
-
-    view |> element(~s{button[phx-value-panel="docs"]}) |> render_click()
   end
 
   test "DocumentKit lists project files" do

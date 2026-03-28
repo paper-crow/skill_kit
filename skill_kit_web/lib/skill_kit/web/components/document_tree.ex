@@ -6,83 +6,80 @@ defmodule SkillKit.Web.Components.DocumentTree do
   attr(:open, :boolean, default: false)
 
   def document_tree(assigns) do
-    assigns = assign(assigns, :tree, build_tree(assigns.files))
-
     ~H"""
     <div class={[
       "h-full w-64 shrink-0 bg-editor-bg-alt border-r border-editor-border",
       "flex flex-col",
-      if(@open, do: "", else: "hidden")
+      unless(@open, do: "hidden")
     ]}>
-      <div class="flex items-center justify-between px-3 py-2 border-b border-editor-border">
-        <span class="text-xs font-medium text-editor-accent-muted uppercase tracking-wide">
-          Documents
-        </span>
+      <nav class="flex-1 overflow-y-auto py-3">
+        <.doc_entry
+          :for={file <- @files}
+          file={file}
+          active={file.path == @current_path}
+        />
+      </nav>
+      <div class="px-3 py-2 border-t border-editor-border flex items-center gap-2">
         <button
-          phx-click="new_document"
-          class="w-5 h-5 rounded flex items-center justify-center text-editor-accent-muted hover:text-editor-accent hover:bg-editor-accent-faint/50 transition-colors"
-          title="New document"
+          phx-click="toggle_drawer"
+          phx-value-panel="build"
+          class="text-editor-text-faint hover:text-editor-accent-muted text-sm transition-colors"
+          title="Telemetry"
         >
-          +
+          &#9881;
+        </button>
+        <button
+          id="theme-toggle"
+          phx-hook="Theme"
+          class="text-editor-text-faint hover:text-editor-accent-muted text-sm transition-colors"
+          title="Toggle theme"
+        >
+          <span class="dark:hidden">&#9790;</span>
+          <span class="hidden dark:inline">&#9728;</span>
         </button>
       </div>
-      <div class="flex-1 overflow-y-auto py-2">
-        <.tree_node
-          :for={node <- @tree}
-          node={node}
-          current_path={@current_path}
-        />
-      </div>
     </div>
     """
   end
 
-  attr(:node, :map, required: true)
-  attr(:current_path, :string, default: nil)
+  attr(:file, :map, required: true)
+  attr(:active, :boolean, default: false)
 
-  defp tree_node(%{node: %{type: :directory}} = assigns) do
+  defp doc_entry(assigns) do
+    headings = Map.get(assigns.file, :headings, [])
+    assigns = assign(assigns, :headings, headings)
+
     ~H"""
-    <div class="mb-1">
-      <div class="px-3 py-0.5 text-xs font-medium text-editor-accent-muted uppercase tracking-wide">
-        {@node.name}
+    <div class="mb-0.5">
+      <button
+        phx-click="open_document"
+        phx-value-path={@file.path}
+        class={[
+          "w-full text-left px-3 py-1 text-sm font-medium truncate transition-colors",
+          if(@active,
+            do: "text-editor-accent",
+            else: "text-editor-text-muted hover:text-editor-text"
+          )
+        ]}
+      >
+        {@file.title}
+      </button>
+      <div :if={@active and @headings != []} class="ml-3 border-l border-editor-divider">
+        <button
+          :for={heading <- @headings}
+          phx-click="scroll_to_heading"
+          phx-value-heading={heading}
+          class="block w-full text-left px-3 py-0.5 text-xs text-editor-text-faint hover:text-editor-accent-muted truncate transition-colors"
+        >
+          {heading}
+        </button>
       </div>
-      <.tree_node
-        :for={child <- @node.children}
-        node={child}
-        current_path={@current_path}
-      />
     </div>
-    """
-  end
-
-  defp tree_node(%{node: %{type: :file}} = assigns) do
-    ~H"""
-    <button
-      phx-click="open_document"
-      phx-value-path={@node.path}
-      class={[
-        "w-full text-left px-4 py-0.5 text-sm truncate transition-colors",
-        if(@node.path == @current_path,
-          do: "text-editor-accent bg-editor-accent-faint",
-          else: "text-editor-text-muted hover:text-editor-text hover:bg-editor-accent-faint/50"
-        )
-      ]}
-    >
-      {@node.title}
-    </button>
     """
   end
 
   @doc """
   Converts a flat list of file entries into a nested tree structure.
-
-  Each input entry is `%{path: String.t(), title: String.t()}`.
-
-  Each output node is either:
-  - `%{type: :directory, name: String.t(), children: [node]}`
-  - `%{type: :file, name: String.t(), title: String.t(), path: String.t()}`
-
-  Files in the root directory appear before subdirectories in the returned list.
   """
   def build_tree(entries) do
     grouped = Enum.group_by(entries, &entry_prefix/1)

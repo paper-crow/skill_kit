@@ -78,13 +78,12 @@ defmodule SkillKit.Web.EditorLive do
   def render(assigns) do
     ~H"""
     <div class="relative flex h-full w-full">
-      <Sidebar.sidebar active={@active_drawer} />
+      <DocumentTree.document_tree
+        files={@files}
+        current_path={@current_path}
+        open={true}
+      />
       <div class="flex-1 flex overflow-hidden">
-        <DocumentTree.document_tree
-          files={@files}
-          current_path={@current_path}
-          open={@active_drawer == :docs}
-        />
         <EditorSurface.editor_surface
           content={@content}
           path={@current_path}
@@ -102,9 +101,6 @@ defmodule SkillKit.Web.EditorLive do
         paused={@debug_paused}
         open={@active_drawer == :build}
       />
-      <div class="absolute bottom-2 left-2 z-20">
-        <ThemeToggle.theme_toggle />
-      </div>
     </div>
     """
   end
@@ -126,6 +122,7 @@ defmodule SkillKit.Web.EditorLive do
       socket
       |> assign(:current_path, path)
       |> assign(:content, content)
+      |> push_event("scroll_to_top", %{})
 
     {:noreply, socket}
   end
@@ -168,6 +165,11 @@ defmodule SkillKit.Web.EditorLive do
   @impl true
   def handle_event("text_selected", _params, socket) do
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("scroll_to_heading", %{"heading" => heading}, socket) do
+    {:noreply, push_event(socket, "scroll_to_heading", %{heading: heading})}
   end
 
   @max_mermaid_retries 2
@@ -528,14 +530,33 @@ defmodule SkillKit.Web.EditorLive do
 
   defp file_entry(root, full_path) do
     path = Path.relative_to(full_path, root)
-    title = extract_title(full_path, path)
-    %{path: path, title: title}
+    {title, headings} = extract_headings(full_path, path)
+    %{path: path, title: title, headings: headings}
   end
 
-  defp extract_title(full_path, path) do
-    case File.open(full_path, [:read], &IO.read(&1, :line)) do
-      {:ok, "# " <> heading} -> String.trim(heading)
-      _other -> Path.basename(path)
+  defp extract_headings(full_path, path) do
+    case File.read(full_path) do
+      {:ok, content} -> parse_headings(content, path)
+      {:error, _} -> {Path.basename(path), []}
+    end
+  end
+
+  defp parse_headings(content, path) do
+    lines = String.split(content, "\n")
+    title = find_title(lines, path)
+
+    headings =
+      lines
+      |> Enum.filter(&String.starts_with?(&1, "## "))
+      |> Enum.map(fn "## " <> text -> String.trim(text) end)
+
+    {title, headings}
+  end
+
+  defp find_title(lines, path) do
+    case Enum.find(lines, &String.starts_with?(&1, "# ")) do
+      "# " <> heading -> String.trim(heading)
+      nil -> Path.basename(path)
     end
   end
 
