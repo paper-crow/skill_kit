@@ -1507,6 +1507,18 @@ hue-6-2: #e6c07b
   outline-offset: 2px;
 }
 
+.data-\[status\=active\]\:text-editor-accent[data-status="active"] {
+  color: var(--editor-accent);
+}
+
+.data-\[status\=inactive\]\:text-editor-text-muted[data-status="inactive"] {
+  color: var(--editor-text-muted);
+}
+
+.data-\[status\=inactive\]\:hover\:text-editor-text:hover[data-status="inactive"] {
+  color: var(--editor-text);
+}
+
 .dark\:inline:is(.dark *) {
   display: inline;
 }

@@ -54,13 +54,8 @@ defmodule SkillKit.Web.Components.DocumentTree do
       <button
         phx-click="open_document"
         phx-value-path={@file.path}
-        class={[
-          "w-full text-left px-3 py-1.5 text-base font-medium truncate transition-colors",
-          if(@active,
-            do: "text-editor-accent",
-            else: "text-editor-text-muted hover:text-editor-text"
-          )
-        ]}
+        data-status={if @active, do: "active", else: "inactive"}
+        class="w-full text-left px-3 py-1.5 text-base font-medium truncate transition-colors data-[status=active]:text-editor-accent data-[status=inactive]:text-editor-text-muted data-[status=inactive]:hover:text-editor-text"
       >
         {@file.title}
       </button>
