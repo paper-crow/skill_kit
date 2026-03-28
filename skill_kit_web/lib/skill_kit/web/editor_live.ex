@@ -2,10 +2,14 @@ defmodule SkillKit.Web.EditorLive do
   use Phoenix.LiveView,
     layout: {SkillKit.Web.Layouts, :app}
 
+  alias SkillKit.Agent.Definition
+  alias SkillKit.Web.Components.ChatDrawer
   alias SkillKit.Web.Components.DocumentTree
   alias SkillKit.Web.Components.EditorSurface
   alias SkillKit.Web.Components.Sidebar
   alias SkillKit.Web.Components.ThemeToggle
+  alias SkillKit.Web.ConversationStore
+  alias SkillKit.Web.EditorScope
 
   @impl true
   def mount(_params, _session, socket) do
@@ -21,6 +25,11 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:current_path, current_path)
       |> assign(:content, content)
       |> assign(:active_drawer, nil)
+      |> assign(:chat_messages, [])
+      |> assign(:streaming_text, nil)
+      |> assign(:agent_ref, nil)
+
+    socket = maybe_start_agent(socket)
 
     {:ok, socket}
   end
@@ -40,6 +49,11 @@ defmodule SkillKit.Web.EditorLive do
           content={@content}
           path={@current_path}
           threads={[]}
+        />
+        <ChatDrawer.chat_drawer
+          messages={@chat_messages}
+          streaming_text={@streaming_text}
+          open={@active_drawer == :chat}
         />
       </div>
       <div class="absolute bottom-2 left-2 z-20">
@@ -84,8 +98,81 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
+  def handle_event("send_chat_message", %{"message" => message}, socket)
+      when message != "" do
+    user_msg = %{role: :user, content: message}
+    messages = socket.assigns.chat_messages ++ [user_msg]
+    socket = assign(socket, :chat_messages, messages)
+
+    case socket.assigns.agent_ref do
+      nil ->
+        {:noreply, socket}
+
+      agent_ref ->
+        SkillKit.send_message(agent_ref, message)
+        {:noreply, socket}
+    end
+  end
+
+  @impl true
+  def handle_event("send_chat_message", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_event("text_selected", _params, socket) do
     {:noreply, socket}
+  end
+
+  defp maybe_start_agent(socket) do
+    if connected?(socket) do
+      handle_agent_start(socket)
+    else
+      socket
+    end
+  end
+
+  defp handle_agent_start(socket) do
+    case start_agent(socket.assigns.docs_root) do
+      {:ok, agent_ref} ->
+        assign(socket, :agent_ref, agent_ref)
+
+      {:error, reason} ->
+        error_msg = %{
+          role: :assistant,
+          content:
+            "Could not start agent: #{inspect(reason)}. Chat is unavailable, but you can still browse documents."
+        }
+
+        socket
+        |> assign(:chat_messages, [error_msg])
+        |> assign(:agent_ref, nil)
+    end
+  end
+
+  defp start_agent(docs_root) do
+    agent_path = Application.app_dir(:skill_kit_web, "priv/agents/assistant.md")
+    project_root = SkillKitWeb.project_root()
+
+    conversations_dir = Path.join(project_root, ".skill_kit/conversations")
+
+    scope = %EditorScope{
+      project_root: project_root,
+      docs_root: docs_root
+    }
+
+    case Definition.parse(agent_path) do
+      {:ok, definition} ->
+        SkillKit.start_agent(definition,
+          caller: self(),
+          skills: [{SkillKit.Web.DocumentKit, []}],
+          scope: scope,
+          conversation_store: {ConversationStore, dir: conversations_dir}
+        )
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp list_files(root) do
