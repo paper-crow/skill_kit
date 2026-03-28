@@ -60,14 +60,13 @@ defmodule SkillKit.Web.Components.DocumentTree do
         {@file.title}
       </button>
       <div :if={@active and @headings != []} class="ml-3 border-l border-editor-divider">
-        <button
+        <a
           :for={heading <- @headings}
-          phx-click="scroll_to_heading"
-          phx-value-heading={heading}
+          href={"##{slugify(heading)}"}
           class="block w-full text-left px-3 py-0.5 text-sm text-editor-text-faint hover:text-editor-accent-muted truncate transition-colors"
         >
           {heading}
-        </button>
+        </a>
       </div>
     </div>
     """
@@ -101,5 +100,13 @@ defmodule SkillKit.Web.Components.DocumentTree do
   defp dir_node({dir, entries}) do
     children = Enum.map(entries, &file_node/1)
     %{type: :directory, name: dir, children: children}
+  end
+
+  defp slugify(text) do
+    text
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9\s-]/, "")
+    |> String.replace(~r/\s+/, "-")
+    |> String.trim("-")
   end
 end

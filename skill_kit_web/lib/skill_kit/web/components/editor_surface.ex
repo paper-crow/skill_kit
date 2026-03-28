@@ -18,7 +18,7 @@ defmodule SkillKit.Web.Components.EditorSurface do
 
     ~H"""
     <div class="flex-1 flex flex-col overflow-hidden">
-      <div class="flex-1 overflow-y-auto">
+      <div class="flex-1 overflow-y-auto scroll-smooth">
         <div
           id="editor-surface"
           class="max-w-editor mx-auto px-8 py-10 prose-editor"
@@ -35,9 +35,27 @@ defmodule SkillKit.Web.Components.EditorSurface do
   defp render_markdown(content) do
     options = %Earmark.Options{code_class_prefix: "language-"}
 
-    case Earmark.as_html(content, options) do
-      {:ok, html, _warnings} -> html
-      {:error, html, _errors} -> html
-    end
+    content
+    |> Earmark.as_html(options)
+    |> add_heading_ids()
+  end
+
+  defp add_heading_ids({status, html, messages}) when status in [:ok, :error] do
+    Regex.replace(~r/<(h[2-4])>(.*?)<\/\1>/s, html, fn _match, tag, text ->
+      id = slugify(strip_html(text))
+      ~s(<#{tag} id="#{id}">#{text}</#{tag}>)
+    end)
+  end
+
+  defp slugify(text) do
+    text
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9\s-]/, "")
+    |> String.replace(~r/\s+/, "-")
+    |> String.trim("-")
+  end
+
+  defp strip_html(text) do
+    Regex.replace(~r/<[^>]+>/, text, "")
   end
 end

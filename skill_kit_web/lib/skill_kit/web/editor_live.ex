@@ -177,11 +177,6 @@ defmodule SkillKit.Web.EditorLive do
     {:noreply, socket}
   end
 
-  @impl true
-  def handle_event("scroll_to_heading", %{"heading" => heading}, socket) do
-    {:noreply, push_event(socket, "scroll_to_heading", %{heading: heading})}
-  end
-
   @max_mermaid_retries 2
 
   @impl true
