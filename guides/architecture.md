@@ -134,18 +134,18 @@ loops until the model returns a response with no tools:
 
 ```mermaid
 flowchart TD
-    A[Server receives<br/>{:mailbox_flush, messages}] --> B[Call Catalog.tool_definitions/2]
+    A[Server receives<br/>mailbox flush messages] --> B[Call Catalog.tool_definitions/2]
     B --> C[Call LLM, stream response to caller]
     C --> D{Tool calls<br/>present?}
     
-    D -->|No| E[Send %AssistantMessage{}<br/>to caller]
+    D -->|No| E[Send AssistantMessage<br/>to caller]
     E --> F[Done]
     
     D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]
     G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]
     H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]
     I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]
-    J --> K[Collect results as<br/>%ToolResult{} structs]
+    J --> K[Collect results as<br/>ToolResult structs]
     K --> L[Append results to<br/>message history]
     L --> B
     

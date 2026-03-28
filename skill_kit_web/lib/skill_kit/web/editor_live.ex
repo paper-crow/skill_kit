@@ -67,6 +67,7 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:events, [])
       |> assign(:event_count, 0)
       |> assign(:debug_paused, false)
+      |> assign(:mermaid_retries, %{})
 
     socket = maybe_start_agent(socket)
 
@@ -169,25 +170,40 @@ defmodule SkillKit.Web.EditorLive do
     {:noreply, socket}
   end
 
+  @max_mermaid_retries 2
+
   @impl true
   def handle_event("mermaid_error", params, socket) do
-    case socket.assigns.agent_ref do
-      nil ->
-        {:noreply, socket}
+    retries = Map.get(socket.assigns, :mermaid_retries, %{})
+    path = params["path"]
+    count = Map.get(retries, path, 0)
 
-      agent_ref ->
-        error_message = build_mermaid_error_message(params)
+    if count >= @max_mermaid_retries or is_nil(socket.assigns.agent_ref) do
+      msg = %{
+        role: :assistant,
+        content:
+          "Mermaid diagram in #{path} still has errors after #{count} attempts. Please fix manually."
+      }
 
-        system_msg = %{
-          role: :assistant,
-          content: "Mermaid diagram has a syntax error. Attempting to fix..."
-        }
+      {:noreply, assign(socket, :chat_messages, socket.assigns.chat_messages ++ [msg])}
+    else
+      error_message = build_mermaid_error_message(params)
 
-        messages = socket.assigns.chat_messages ++ [system_msg]
+      system_msg = %{
+        role: :assistant,
+        content: "Mermaid diagram has a syntax error. Attempting to fix..."
+      }
 
-        SkillKit.send_message(agent_ref, error_message)
+      messages = socket.assigns.chat_messages ++ [system_msg]
 
-        {:noreply, assign(socket, :chat_messages, messages)}
+      SkillKit.send_message(socket.assigns.agent_ref, error_message)
+
+      socket =
+        socket
+        |> assign(:chat_messages, messages)
+        |> assign(:mermaid_retries, Map.put(retries, path, count + 1))
+
+      {:noreply, socket}
     end
   end
 

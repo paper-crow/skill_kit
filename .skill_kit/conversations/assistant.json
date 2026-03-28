@@ -322,5 +322,107 @@
     "content": "Hello! I'm here to help with your documentation. You're currently viewing the architecture.md document. \n\nWhat would you like to work on? I can help you with any documentation tasks like updating content, creating new documents, searching for information, or analyzing document structure.",
     "agent": null,
     "tool_calls": []
+  },
+  {
+    "role": "user",
+    "content": "A mermaid diagram in architecture.md has a syntax error. Please fix it using docs:update.\n\nError: Parse error on line 2:\n...Server receives<br/>{:mailbox_flush, mes\n-----------------------^\nExpecting 'SQE', 'DOUBLECIRCLEEND', 'PE', '-)', 'STADIUMEND', 'SUBROUTINEEND', 'PIPE', 'CYLINDEREND', 'DIAMOND_STOP', 'TAGEND', 'TRAPEND', 'INVTRAPEND', 'UNICODE_TEXT', 'TEXT', 'TAGSTART', got 'DIAMOND_START'\n\nThe broken mermaid source:\n```\nflowchart TD\n    A[Server receives<br/>{:mailbox_flush, messages}] --> B[Call Catalog.tool_definitions/2]\n    B --> C[Call LLM, stream response to caller]\n    C --> D{Tool calls<br/>present?}\n    \n    D -->|No| E[Send %AssistantMessage{}<br/>to caller]\n    E --> F[Done]\n    \n    D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]\n    G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]\n    H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]\n    I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]\n    J --> K[Collect results as<br/>%ToolResult{} structs]\n    K --> L[Append results to<br/>message history]\n    L --> B\n    \n    classDef start fill:#e8f5e8\n    classDef decision fill:#fff3cd\n    classDef process fill:#e1f5fe\n    classDef end fill:#f8d7da\n    \n    class A start\n    class D decision\n    class B,C,G,H,I,J,K,L process\n    class E,F end\n```\n\nRead the document with docs:read, fix the mermaid block, and update it with docs:update.\n",
+    "agent": null
+  },
+  {
+    "role": "assistant",
+    "content": "I'll read the document first to see the current content, then fix the Mermaid syntax error.",
+    "agent": null,
+    "tool_calls": [
+      {
+        "id": "toolu_01K3gFqh1ZaZpUeosHYcSrQs",
+        "input": {
+          "arguments": "architecture.md",
+          "name": "docs:read"
+        },
+        "name": "activate_skill"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "content": "Read a document's full content by its relative file path. Returns the raw markdown content.\n\nInput: `{\"path\": \"guides/setup.md\"}`\n\nARGUMENTS: architecture.md",
+    "agent": null,
+    "tool_call_id": "toolu_01K3gFqh1ZaZpUeosHYcSrQs",
+    "is_error": false
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "agent": null,
+    "tool_calls": [
+      {
+        "id": "toolu_014VTcQH1U1RzpJJGHkGP6rH",
+        "input": {
+          "path": "architecture.md"
+        },
+        "name": "read"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "content": "# Architecture Overview\n\nSkillKit is an Elixir framework for building LLM agent systems. Each agent is\nan isolated OTP supervision tree that buffers messages, drives an LLM loop,\nexecutes tools, and streams events back to the caller process.\n\n## Agent Lifecycle\n\nThe public API follows a three-step pattern:\n\n```elixir\n# Source-driven: discovers root agent from providers\n{:ok, agent} = SkillKit.start_agent(\n  skills: [{SkillKit.Kit.Local, dir: \".skills\"}],\n  caller: self(),\n  scope: my_scope\n)\n\n# Or definition-driven: pass an agent definition directly\n{:ok, agent} = SkillKit.start_agent(definition, skills: [...], caller: self())\n\n:ok = SkillKit.send_message(agent, \"Hello\")\n# ... receive events in caller process ...\n:ok = SkillKit.stop_agent(agent)\n```\n\nThe source-driven form resolves the agent identity from the first argument,\nthen delegates to the definition-driven form.\n\n`start_agent` builds an `AgentRef` — an opaque struct holding the agent name,\na unique Registry name, and the supervisor PID. `send_message/2` routes to the\nMailbox via Registry lookup. `stop_agent/1` calls `Supervisor.stop/1` on the\nroot supervisor, tearing down the entire tree.\n\n## Supervision Tree\n\nEach agent owns its own Registry and two isolated children under a top-level\n`:one_for_one` supervisor:\n\n```mermaid\ngraph TD\n    A[SkillKit.Agent<br/>:one_for_one] --> B[Registry<br/>process discovery]\n    A --> C[SkillKit.Catalog<br/>aggregates providers]\n    A --> D[Agent.Core<br/>:rest_for_one]\n    \n    D --> E[Agent.Mailbox<br/>message buffering]\n    D --> F[Agent.Server<br/>LLM loop + tool execution]\n    D --> G[Agent.SubagentSupervisor<br/>DynamicSupervisor]\n    \n    G -.-> H[Subagent 1]\n    G -.-> I[Subagent 2]\n    G -.-> J[Subagent N]\n    \n    classDef supervisor fill:#e1f5fe\n    classDef worker fill:#f3e5f5\n    classDef dynamic fill:#fff3e0\n    \n    class A,D,G supervisor\n    class B,C,E,F worker\n    class H,I,J dynamic\n```\n\n```\nSkillKit.Agent (one_for_one)\n├── Registry              (process discovery for this agent)\n├── SkillKit.Catalog      (aggregates providers, builds tool defs, classifies calls)\n└── Agent.Core            (rest_for_one)\n    ├── Agent.Mailbox         (message buffering)\n    ├── Agent.Server          (LLM loop + tool execution)\n    └── Agent.SubagentSupervisor  (DynamicSupervisor)\n```\n\n**Catalog** is isolated from **Core** intentionally: a provider crash does not\nrestart the conversation. Within Core, `:rest_for_one` ordering ensures that if\nMailbox crashes, Server and SubagentSupervisor both restart (a Server without a\nMailbox is useless); if Server crashes, SubagentSupervisor also restarts\n(orphaned subagents should not continue running).\n\nMailbox resolves Server via Registry lookup at flush time rather than at init,\nwhich avoids start-order coupling within the `:rest_for_one` chain.\n\n## Catalog\n\n`SkillKit.Catalog` is a GenServer that aggregates kits from one or more\nproviders and exposes everything the Server needs: tool definitions, tool call\nclassification, skill lookup, agent lookup, hooks, and tool config.\n\n**Always fresh.** Every call to the Catalog invokes `list_kits/1` on each\nprovider — there is no internal caching. This ensures the catalog always\nreflects the current state of providers, which matters for dynamic sources like\n`Kit.Memory`.\n\nProviders implement two callbacks:\n\n- `list_kits/1` — return all kits available for the given config\n- `get_kit/2` — return a single kit by name\n\nThe Catalog unpacks kits into skills, agents, and hooks; filters skills by\nauthorization scope; builds `Tool` structs for the LLM; and classifies\neach incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,\n`:subagent`, or `{:module_skill, skill}`.\n\n## Message Flow\n\n```\ncaller process\n    |\n    | SkillKit.send_message/2\n    v\nAgent.Mailbox  (buffers until size threshold or flush interval)\n    |\n    | {:mailbox_flush, messages}\n    v\nAgent.Server   (handle_info drives the synchronous LLM loop)\n    |\n    | SkillKit.LLM.stream/2\n    v\nLLM Provider   (HTTP stream)\n    |\n    | Delta chunks decoded as they arrive\n    v\ncaller process  <-- %Event.Delta{}, %Event.ToolCallStart{}, etc.\n```\n\nThe Mailbox batches messages by size or time before forwarding, decoupling\n`send_message/2` (which is a `GenServer.cast`) from LLM call timing. The Server\ndrives the entire turn synchronously inside a single `handle_info` callback —\nthere is no concurrent LLM call state to manage.\n\n## Tool Execution Loop\n\nAfter receiving a streamed LLM response, the Server checks for tool calls and\nloops until the model returns a response with no tools:\n\n```mermaid\nflowchart TD\n    A[Server receives<br/>{:mailbox_flush, messages}] --> B[Call Catalog.tool_definitions/2]\n    B --> C[Call LLM, stream response to caller]\n    C --> D{Tool calls<br/>present?}\n    \n    D -->|No| E[Send %AssistantMessage{}<br/>to caller]\n    E --> F[Done]\n    \n    D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]\n    G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]\n    H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]\n    I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]\n    J --> K[Collect results as<br/>%ToolResult{} structs]\n    K --> L[Append results to<br/>message history]\n    L --> B\n    \n    classDef start fill:#e8f5e8\n    classDef decision fill:#fff3cd\n    classDef process fill:#e1f5fe\n    classDef end fill:#f8d7da\n    \n    class A start\n    class D decision\n    class B,C,G,H,I,J,K,L process\n    class E,F end\n```\n\nThe Server calls `Catalog.classify/3` before each tool execution. Local tools\nare dispatched to the configured Tool module. The loop continues until\nthe LLM responds with no tool calls or a halt condition is reached.\n\n## Subagents\n\nAn agent can delegate work to a child agent by invoking a subagent tool call.\nThe Server looks up the child's `Agent.Definition` via `Catalog.get_agent/2`,\nspawns the child under its `SubagentSupervisor`, monitors the child supervisor\nPID, and continues its own turn. When the child calls `report_result` or\nterminates, it delivers its result back to the parent Server via the parent's\nRegistry. The parent resumes with a synthesised tool result in its message\nhistory.\n\nDelegation depth is enforced by comparing `depth` against\n`definition.max_agent_depth`. Subagents start with `depth + 1` and have no\ndirect caller process — they communicate only through the parent Registry.\n\n## Key Module Boundaries\n\n| Concern | Where to look |\n|---|---|\n| LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |\n| Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |\n| In-memory kit provider | `SkillKit.Kit.Memory` |\n| Tool aggregation + classification | `SkillKit.Catalog` |\n| Hook dispatch at boundaries | `SkillKit.Hooks` |\n| Tool execution + hooks | `SkillKit.Tool` behaviour |\n| Authorization + scope | `SkillKit.Authorization` |\n| Observability | `SkillKit.Telemetry` |\n\nSee the dedicated guide pages for each of these boundaries for configuration\ndetails and extension points.",
+    "agent": null,
+    "tool_call_id": "toolu_014VTcQH1U1RzpJJGHkGP6rH",
+    "is_error": false
+  },
+  {
+    "role": "assistant",
+    "content": "I can see the issue. The problem is with the special characters in the node text. The `{:mailbox_flush, messages}` contains curly braces which are conflicting with Mermaid's diamond syntax. I'll fix this by removing the problematic characters and simplifying the text.",
+    "agent": null,
+    "tool_calls": [
+      {
+        "id": "toolu_01AUhWvJxeypv6BiMS55cGNm",
+        "input": {
+          "arguments": "architecture.md",
+          "name": "docs:update"
+        },
+        "name": "activate_skill"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "content": "Update an existing document by replacing its content. The file must already exist. Provide the relative path and the new content.\n\nInput: `{\"path\": \"guides/setup.md\", \"content\": \"# Updated Setup Guide\\n\\nRevised content...\"}`\n\nARGUMENTS: architecture.md",
+    "agent": null,
+    "tool_call_id": "toolu_01AUhWvJxeypv6BiMS55cGNm",
+    "is_error": false
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "agent": null,
+    "tool_calls": [
+      {
+        "id": "toolu_01EiFdTQcCbT7RS7fcuCn1P7",
+        "input": {
+          "content": "# Architecture Overview\n\nSkillKit is an Elixir framework for building LLM agent systems. Each agent is\nan isolated OTP supervision tree that buffers messages, drives an LLM loop,\nexecutes tools, and streams events back to the caller process.\n\n## Agent Lifecycle\n\nThe public API follows a three-step pattern:\n\n```elixir\n# Source-driven: discovers root agent from providers\n{:ok, agent} = SkillKit.start_agent(\n  skills: [{SkillKit.Kit.Local, dir: \".skills\"}],\n  caller: self(),\n  scope: my_scope\n)\n\n# Or definition-driven: pass an agent definition directly\n{:ok, agent} = SkillKit.start_agent(definition, skills: [...], caller: self())\n\n:ok = SkillKit.send_message(agent, \"Hello\")\n# ... receive events in caller process ...\n:ok = SkillKit.stop_agent(agent)\n```\n\nThe source-driven form resolves the agent identity from the first argument,\nthen delegates to the definition-driven form.\n\n`start_agent` builds an `AgentRef` — an opaque struct holding the agent name,\na unique Registry name, and the supervisor PID. `send_message/2` routes to the\nMailbox via Registry lookup. `stop_agent/1` calls `Supervisor.stop/1` on the\nroot supervisor, tearing down the entire tree.\n\n## Supervision Tree\n\nEach agent owns its own Registry and two isolated children under a top-level\n`:one_for_one` supervisor:\n\n```mermaid\ngraph TD\n    A[SkillKit.Agent<br/>:one_for_one] --> B[Registry<br/>process discovery]\n    A --> C[SkillKit.Catalog<br/>aggregates providers]\n    A --> D[Agent.Core<br/>:rest_for_one]\n    \n    D --> E[Agent.Mailbox<br/>message buffering]\n    D --> F[Agent.Server<br/>LLM loop + tool execution]\n    D --> G[Agent.SubagentSupervisor<br/>DynamicSupervisor]\n    \n    G -.-> H[Subagent 1]\n    G -.-> I[Subagent 2]\n    G -.-> J[Subagent N]\n    \n    classDef supervisor fill:#e1f5fe\n    classDef worker fill:#f3e5f5\n    classDef dynamic fill:#fff3e0\n    \n    class A,D,G supervisor\n    class B,C,E,F worker\n    class H,I,J dynamic\n```\n\n```\nSkillKit.Agent (one_for_one)\n├── Registry              (process discovery for this agent)\n├── SkillKit.Catalog      (aggregates providers, builds tool defs, classifies calls)\n└── Agent.Core            (rest_for_one)\n    ├── Agent.Mailbox         (message buffering)\n    ├── Agent.Server          (LLM loop + tool execution)\n    └── Agent.SubagentSupervisor  (DynamicSupervisor)\n```\n\n**Catalog** is isolated from **Core** intentionally: a provider crash does not\nrestart the conversation. Within Core, `:rest_for_one` ordering ensures that if\nMailbox crashes, Server and SubagentSupervisor both restart (a Server without a\nMailbox is useless); if Server crashes, SubagentSupervisor also restarts\n(orphaned subagents should not continue running).\n\nMailbox resolves Server via Registry lookup at flush time rather than at init,\nwhich avoids start-order coupling within the `:rest_for_one` chain.\n\n## Catalog\n\n`SkillKit.Catalog` is a GenServer that aggregates kits from one or more\nproviders and exposes everything the Server needs: tool definitions, tool call\nclassification, skill lookup, agent lookup, hooks, and tool config.\n\n**Always fresh.** Every call to the Catalog invokes `list_kits/1` on each\nprovider — there is no internal caching. This ensures the catalog always\nreflects the current state of providers, which matters for dynamic sources like\n`Kit.Memory`.\n\nProviders implement two callbacks:\n\n- `list_kits/1` — return all kits available for the given config\n- `get_kit/2` — return a single kit by name\n\nThe Catalog unpacks kits into skills, agents, and hooks; filters skills by\nauthorization scope; builds `Tool` structs for the LLM; and classifies\neach incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,\n`:subagent`, or `{:module_skill, skill}`.\n\n## Message Flow\n\n```\ncaller process\n    |\n    | SkillKit.send_message/2\n    v\nAgent.Mailbox  (buffers until size threshold or flush interval)\n    |\n    | {:mailbox_flush, messages}\n    v\nAgent.Server   (handle_info drives the synchronous LLM loop)\n    |\n    | SkillKit.LLM.stream/2\n    v\nLLM Provider   (HTTP stream)\n    |\n    | Delta chunks decoded as they arrive\n    v\ncaller process  <-- %Event.Delta{}, %Event.ToolCallStart{}, etc.\n```\n\nThe Mailbox batches messages by size or time before forwarding, decoupling\n`send_message/2` (which is a `GenServer.cast`) from LLM call timing. The Server\ndrives the entire turn synchronously inside a single `handle_info` callback —\nthere is no concurrent LLM call state to manage.\n\n## Tool Execution Loop\n\nAfter receiving a streamed LLM response, the Server checks for tool calls and\nloops until the model returns a response with no tools:\n\n```mermaid\nflowchart TD\n    A[Server receives<br/>mailbox flush messages] --> B[Call Catalog.tool_definitions/2]\n    B --> C[Call LLM, stream response to caller]\n    C --> D{Tool calls<br/>present?}\n    \n    D -->|No| E[Send AssistantMessage<br/>to caller]\n    E --> F[Done]\n    \n    D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]\n    G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]\n    H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]\n    I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]\n    J --> K[Collect results as<br/>ToolResult structs]\n    K --> L[Append results to<br/>message history]\n    L --> B\n    \n    classDef start fill:#e8f5e8\n    classDef decision fill:#fff3cd\n    classDef process fill:#e1f5fe\n    classDef end fill:#f8d7da\n    \n    class A start\n    class D decision\n    class B,C,G,H,I,J,K,L process\n    class E,F end\n```\n\nThe Server calls `Catalog.classify/3` before each tool execution. Local tools\nare dispatched to the configured Tool module. The loop continues until\nthe LLM responds with no tool calls or a halt condition is reached.\n\n## Subagents\n\nAn agent can delegate work to a child agent by invoking a subagent tool call.\nThe Server looks up the child's `Agent.Definition` via `Catalog.get_agent/2`,\nspawns the child under its `SubagentSupervisor`, monitors the child supervisor\nPID, and continues its own turn. When the child calls `report_result` or\nterminates, it delivers its result back to the parent Server via the parent's\nRegistry. The parent resumes with a synthesised tool result in its message\nhistory.\n\nDelegation depth is enforced by comparing `depth` against\n`definition.max_agent_depth`. Subagents start with `depth + 1` and have no\ndirect caller process — they communicate only through the parent Registry.\n\n## Key Module Boundaries\n\n| Concern | Where to look |\n|---|---|\n| LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |\n| Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |\n| In-memory kit provider | `SkillKit.Kit.Memory` |\n| Tool aggregation + classification | `SkillKit.Catalog` |\n| Hook dispatch at boundaries | `SkillKit.Hooks` |\n| Tool execution + hooks | `SkillKit.Tool` behaviour |\n| Authorization + scope | `SkillKit.Authorization` |\n| Observability | `SkillKit.Telemetry` |\n\nSee the dedicated guide pages for each of these boundaries for configuration\ndetails and extension points.",
+          "path": "architecture.md"
+        },
+        "name": "update"
+      }
+    ]
+  },
+  {
+    "name": null,
+    "role": "tool_result",
+    "content": "Updated architecture.md",
+    "agent": null,
+    "tool_call_id": "toolu_01EiFdTQcCbT7RS7fcuCn1P7",
+    "is_error": false
+  },
+  {
+    "role": "assistant",
+    "content": "I've fixed the Mermaid syntax error by removing the problematic special characters:\n\n1. **Node A**: Changed from `{:mailbox_flush, messages}` to `mailbox flush messages` to remove curly braces\n2. **Node E**: Changed from `%AssistantMessage{}` to `AssistantMessage` to remove % and braces  \n3. **Node K**: Changed from `%ToolResult{}` to `ToolResult structs` to remove % and braces\n\nThe flowchart should now render properly while maintaining the same logical flow and meaning. The problematic characters were conflicting with Mermaid's syntax parser, but the simplified text still conveys the same information clearly.",
+    "agent": null,
+    "tool_calls": []
   }
 ]
