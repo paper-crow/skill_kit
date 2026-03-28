@@ -3,6 +3,7 @@ import { LiveSocket } from "phoenix_live_view";
 import hljs from "highlight.js";
 import mermaid from "mermaid";
 import AutoScroll from "./hooks/auto_scroll";
+import ChatScroll from "./hooks/chat_scroll";
 import MarkdownEditor from "./hooks/markdown_editor";
 import Theme from "./hooks/theme";
 
@@ -26,6 +27,7 @@ mermaid.initialize({
 
 const hooks = {
   AutoScroll,
+  ChatScroll,
   MarkdownEditor,
   Theme,
 };

@@ -12,7 +12,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
       "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
-      <div class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+      <div id="chat-messages" phx-hook="ChatScroll" class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         <.message :for={msg <- @messages} role={msg.role} content={msg.content} />
         <.streaming_message :if={@streaming_text} text={@streaming_text} />
       </div>
@@ -64,7 +64,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
     assigns = assign(assigns, :html, render_markdown(assigns.content))
 
     ~H"""
-    <div>
+    <div data-role="assistant">
       <div class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
       <div class="prose-chat text-[15px] text-editor-text-muted">
         {Phoenix.HTML.raw(@html)}
@@ -75,7 +75,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
 
   defp message(%{role: :user} = assigns) do
     ~H"""
-    <div>
+    <div data-role="user">
       <div class="text-sm font-medium text-editor-text-faint mb-1.5">You</div>
       <div class="text-[15px] text-editor-text-muted">{@content}</div>
     </div>
