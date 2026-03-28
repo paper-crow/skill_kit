@@ -88,4 +88,13 @@
   .prose-editor img {
     @apply rounded my-4 max-w-full;
   }
+
+  /* Chat prose styling — compact Earmark output for chat messages */
+  .prose-chat p { @apply mb-2 last:mb-0; }
+  .prose-chat code { @apply font-mono text-xs bg-editor-accent-faint px-1 py-0.5 rounded; }
+  .prose-chat pre { @apply bg-editor-accent-faint rounded p-3 my-2 overflow-x-auto; }
+  .prose-chat pre code { @apply bg-transparent px-0 py-0 text-xs; }
+  .prose-chat ul { @apply list-disc pl-4 mb-2; }
+  .prose-chat ol { @apply list-decimal pl-4 mb-2; }
+  .prose-chat li { @apply text-sm leading-relaxed; }
 }
