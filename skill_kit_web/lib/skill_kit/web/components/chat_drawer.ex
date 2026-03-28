@@ -8,17 +8,11 @@ defmodule SkillKit.Web.Components.ChatDrawer do
   def chat_drawer(assigns) do
     ~H"""
     <div class={[
-      "h-full w-[420px] shrink-0 bg-editor-bg-alt border-l border-editor-border",
+      "h-full w-[420px] shrink-0 bg-editor-bg border-l border-editor-divider",
       "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
-      <div class="px-3 py-2 border-b border-editor-border">
-        <span class="text-xs font-medium text-editor-accent-muted uppercase tracking-wide">
-          Chat
-        </span>
-      </div>
-
-      <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+      <div class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         <.message :for={msg <- @messages} role={msg.role} content={msg.content} />
         <.streaming_message :if={@streaming_text} text={@streaming_text} />
       </div>
