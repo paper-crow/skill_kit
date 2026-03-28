@@ -55,7 +55,7 @@ defmodule SkillKit.Web.Components.DocumentTree do
         phx-click="open_document"
         phx-value-path={@file.path}
         class={[
-          "w-full text-left px-3 py-1 text-sm font-medium truncate transition-colors",
+          "w-full text-left px-3 py-1.5 text-base font-medium truncate transition-colors",
           if(@active,
             do: "text-editor-accent",
             else: "text-editor-text-muted hover:text-editor-text"
@@ -69,7 +69,7 @@ defmodule SkillKit.Web.Components.DocumentTree do
           :for={heading <- @headings}
           phx-click="scroll_to_heading"
           phx-value-heading={heading}
-          class="block w-full text-left px-3 py-0.5 text-xs text-editor-text-faint hover:text-editor-accent-muted truncate transition-colors"
+          class="block w-full text-left px-3 py-0.5 text-sm text-editor-text-faint hover:text-editor-accent-muted truncate transition-colors"
         >
           {heading}
         </button>
