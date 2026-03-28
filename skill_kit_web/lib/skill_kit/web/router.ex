@@ -16,7 +16,7 @@ defmodule SkillKit.Web.Router do
     pipe_through(:browser)
 
     live("/", EditorLive, :index)
-    live("/:path", EditorLive, :show)
+    live("/*path", EditorLive, :show)
   end
 
   def init(opts), do: opts

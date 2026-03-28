@@ -46,11 +46,12 @@ defmodule SkillKit.Web.EditorLive do
   ]
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     docs_root = SkillKitWeb.docs_root()
     File.mkdir_p!(docs_root)
     files = list_files(docs_root)
-    {current_path, content} = open_first_file(docs_root, files)
+    requested_path = path_from_params(params)
+    {current_path, content} = open_document(docs_root, files, requested_path)
 
     socket =
       socket
@@ -70,6 +71,26 @@ defmodule SkillKit.Web.EditorLive do
     socket = maybe_start_agent(socket)
 
     {:ok, socket}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    requested_path = path_from_params(params)
+
+    if requested_path && requested_path != socket.assigns.current_path do
+      root = socket.assigns.docs_root
+      {current_path, content} = open_document(root, socket.assigns.files, requested_path)
+
+      socket =
+        socket
+        |> assign(:current_path, current_path)
+        |> assign(:content, content)
+        |> push_event("scroll_to_top", %{})
+
+      {:noreply, socket}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -112,17 +133,7 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("open_document", %{"path" => path}, socket) do
-    root = socket.assigns.docs_root
-    full_path = Path.join(root, path)
-    content = File.read!(full_path)
-
-    socket =
-      socket
-      |> assign(:current_path, path)
-      |> assign(:content, content)
-      |> push_event("scroll_to_top", %{})
-
-    {:noreply, socket}
+    {:noreply, push_patch(socket, to: "/#{path}")}
   end
 
   @impl true
@@ -563,9 +574,27 @@ defmodule SkillKit.Web.EditorLive do
     end
   end
 
-  defp open_first_file(_root, []), do: {nil, nil}
+  defp path_from_params(%{"path" => path_parts}) when is_list(path_parts) do
+    Enum.join(path_parts, "/")
+  end
 
-  defp open_first_file(root, [%{path: path} | _rest]) do
+  defp path_from_params(_), do: nil
+
+  defp open_document(_root, [], _requested), do: {nil, nil}
+
+  defp open_document(root, files, nil) do
+    open_file(root, hd(files).path)
+  end
+
+  defp open_document(root, files, requested) do
+    if Enum.any?(files, &(&1.path == requested)) do
+      open_file(root, requested)
+    else
+      open_file(root, hd(files).path)
+    end
+  end
+
+  defp open_file(root, path) do
     content = File.read!(Path.join(root, path))
     {path, content}
   end
