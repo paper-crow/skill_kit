@@ -76,7 +76,7 @@ defmodule SkillKit.Web.EditorLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="flex h-full w-full">
+    <div class="relative flex h-full w-full">
       <Sidebar.sidebar active={@active_drawer} />
       <div class="flex-1 flex overflow-hidden">
         <DocumentTree.document_tree
@@ -94,13 +94,13 @@ defmodule SkillKit.Web.EditorLive do
           streaming_text={@streaming_text}
           open={true}
         />
-        <DebugPanel.debug_panel
-          events={@events}
-          event_count={@event_count}
-          paused={@debug_paused}
-          open={@active_drawer == :build}
-        />
       </div>
+      <DebugPanel.debug_panel
+        events={@events}
+        event_count={@event_count}
+        paused={@debug_paused}
+        open={@active_drawer == :build}
+      />
       <div class="absolute bottom-2 left-2 z-20">
         <ThemeToggle.theme_toggle />
       </div>

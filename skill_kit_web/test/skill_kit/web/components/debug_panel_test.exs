@@ -14,7 +14,7 @@ defmodule SkillKit.Web.Components.DebugPanelTest do
         open: true
       )
 
-    assert html =~ "Waiting for telemetry events"
+    assert html =~ "Waiting for events"
     assert html =~ "0 events"
   end
 
@@ -65,7 +65,7 @@ defmodule SkillKit.Web.Components.DebugPanelTest do
     assert html =~ "model=claude-sonnet-4-20250514"
   end
 
-  test "hidden when not open" do
+  test "not rendered when not open" do
     html =
       render_component(&DebugPanel.debug_panel/1,
         events: [],
@@ -74,7 +74,7 @@ defmodule SkillKit.Web.Components.DebugPanelTest do
         open: false
       )
 
-    assert html =~ "hidden"
+    refute html =~ "Telemetry"
   end
 
   test "shows paused indicator" do
