@@ -6,42 +6,10 @@
     <meta name="csrf-token" content={Phoenix.Controller.get_csrf_token()} />
     <title>SkillKit Editor</title>
     <link phx-track-static rel="stylesheet" href="/assets/app.css" />
-    <link
-      rel="stylesheet"
-      id="hljs-dark"
-      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css"
-    />
-    <link
-      rel="stylesheet"
-      id="hljs-light"
-      href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css"
-      disabled
-    />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js">
-    </script>
     <script>
       if (localStorage.getItem("skill_kit_theme") === "light") {
         document.documentElement.classList.remove("dark");
-        document.getElementById("hljs-dark")?.setAttribute("disabled", "");
-        document.getElementById("hljs-light")?.removeAttribute("disabled");
       }
-    </script>
-    <script type="module">
-      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-        themeVariables: {
-          darkMode: document.documentElement.classList.contains('dark'),
-          primaryColor: 'rgba(140, 160, 210, 0.3)',
-          primaryTextColor: 'var(--editor-text)',
-          primaryBorderColor: 'rgba(140, 160, 210, 0.4)',
-          lineColor: 'var(--editor-text-muted)',
-          secondaryColor: 'rgba(140, 160, 210, 0.1)',
-          tertiaryColor: 'rgba(140, 160, 210, 0.05)',
-        }
-      });
-      window.mermaid = mermaid;
     </script>
     <script defer phx-track-static type="text/javascript" src="/assets/app.js">
     </script>

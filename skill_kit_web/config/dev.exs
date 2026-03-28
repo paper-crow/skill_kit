@@ -29,9 +29,12 @@ config :skill_kit_web, :docs_root, Path.expand("../../guides", __DIR__)
 config :esbuild,
   version: "0.24.2",
   skill_kit_web: [
-    args: ~w(js/app.js --bundle --target=es2020 --outdir=../priv/static/assets),
+    args: ~w(js/app.js --bundle --target=es2020 --outdir=../priv/static/assets --loader:.css=css),
     cd: Path.expand("../assets", __DIR__),
-    env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
+    env: %{
+      "NODE_PATH" =>
+        Path.expand("../deps", __DIR__) <> ":" <> Path.expand("../assets/node_modules", __DIR__)
+    }
   ]
 
 config :tailwind,

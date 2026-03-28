@@ -61,7 +61,11 @@ defmodule SkillKitWeb.MixProject do
       ],
       setup: ["deps.get", "assets.setup", "assets.build"],
       dev: "run --no-halt",
-      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
+      "assets.setup": [
+        "cmd --cd assets npm install",
+        "tailwind.install --if-missing",
+        "esbuild.install --if-missing"
+      ],
       "assets.build": ["tailwind skill_kit_web", "esbuild skill_kit_web"]
     ]
   end
