@@ -133,7 +133,8 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("open_document", %{"path" => path}, socket) do
-    {:noreply, push_patch(socket, to: "/#{path}")}
+    url_path = String.trim_trailing(path, ".md")
+    {:noreply, push_patch(socket, to: "/#{url_path}")}
   end
 
   @impl true
@@ -575,7 +576,13 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   defp path_from_params(%{"path" => path_parts}) when is_list(path_parts) do
-    Enum.join(path_parts, "/")
+    joined = Enum.join(path_parts, "/")
+
+    if String.ends_with?(joined, ".md") do
+      joined
+    else
+      joined <> ".md"
+    end
   end
 
   defp path_from_params(_), do: nil
