@@ -124,6 +124,54 @@ defmodule SkillKit.Web.EditorLive do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_info(%SkillKit.Event.Delta{text: text}, socket) do
+    current = socket.assigns.streaming_text || ""
+    {:noreply, assign(socket, :streaming_text, current <> text)}
+  end
+
+  @impl true
+  def handle_info(%SkillKit.Types.AssistantMessage{content: content}, socket) do
+    message = %{role: :assistant, content: content}
+    messages = socket.assigns.chat_messages ++ [message]
+
+    socket =
+      socket
+      |> assign(:chat_messages, messages)
+      |> assign(:streaming_text, nil)
+      |> refresh_files()
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(%SkillKit.Event.ToolCallStart{}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(%SkillKit.Event.ToolCallComplete{}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(%SkillKit.Types.ToolResult{}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(%SkillKit.Event.Error{reason: reason}, socket) do
+    message = %{role: :assistant, content: "Error: #{inspect(reason)}"}
+    messages = socket.assigns.chat_messages ++ [message]
+
+    socket =
+      socket
+      |> assign(:chat_messages, messages)
+      |> assign(:streaming_text, nil)
+
+    {:noreply, socket}
+  end
+
   defp maybe_start_agent(socket) do
     if connected?(socket) do
       handle_agent_start(socket)
@@ -205,4 +253,9 @@ defmodule SkillKit.Web.EditorLive do
 
   defp toggle_drawer(current, panel) when current == panel, do: nil
   defp toggle_drawer(_current, panel), do: panel
+
+  defp refresh_files(socket) do
+    files = list_files(socket.assigns.docs_root)
+    assign(socket, :files, files)
+  end
 end
