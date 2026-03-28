@@ -109,7 +109,8 @@ defmodule SkillKit.Web.EditorLive do
         {:noreply, socket}
 
       agent_ref ->
-        SkillKit.send_message(agent_ref, message)
+        context_message = build_context_message(message, socket.assigns)
+        SkillKit.send_message(agent_ref, context_message)
         {:noreply, socket}
     end
   end
@@ -253,6 +254,20 @@ defmodule SkillKit.Web.EditorLive do
 
   defp toggle_drawer(current, panel) when current == panel, do: nil
   defp toggle_drawer(_current, panel), do: panel
+
+  defp build_context_message(message, %{current_path: nil}), do: message
+
+  defp build_context_message(message, %{current_path: path, content: content}) do
+    """
+    [Currently viewing: #{path}]
+
+    <document path="#{path}">
+    #{content}
+    </document>
+
+    #{message}
+    """
+  end
 
   defp refresh_files(socket) do
     files = list_files(socket.assigns.docs_root)

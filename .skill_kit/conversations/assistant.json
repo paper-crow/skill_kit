@@ -1,0 +1,23 @@
+[
+  {
+    "role": "user",
+    "agent": null,
+    "content": "hello"
+  },
+  {
+    "role": "user",
+    "agent": null,
+    "content": "hi"
+  },
+  {
+    "role": "user",
+    "agent": null,
+    "content": "hello"
+  },
+  {
+    "role": "assistant",
+    "agent": null,
+    "content": "Hello! I'm your project assistant for this SkillKit application. I'm here to help you with documentation tasks like:\n\n- Creating new markdown documents\n- Reading and updating existing documentation\n- Searching through your docs\n- Analyzing document structure and organization\n- Reviewing document history\n\nWhat would you like to work on today? You can ask me to list your current documents, search for specific content, or help you create new documentation.",
+    "tool_calls": []
+  }
+]
