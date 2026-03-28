@@ -170,6 +170,28 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
+  def handle_event("mermaid_error", params, socket) do
+    case socket.assigns.agent_ref do
+      nil ->
+        {:noreply, socket}
+
+      agent_ref ->
+        error_message = build_mermaid_error_message(params)
+
+        system_msg = %{
+          role: :assistant,
+          content: "Mermaid diagram has a syntax error. Attempting to fix..."
+        }
+
+        messages = socket.assigns.chat_messages ++ [system_msg]
+
+        SkillKit.send_message(agent_ref, error_message)
+
+        {:noreply, assign(socket, :chat_messages, messages)}
+    end
+  end
+
+  @impl true
   def handle_event("chat_keydown", _params, socket) do
     # Enter key submits via the form's phx-submit; this is a no-op handler
     # to prevent LiveView from complaining about unhandled events
@@ -513,6 +535,21 @@ defmodule SkillKit.Web.EditorLive do
 
   defp format_message(message, nil), do: message
   defp format_message(message, path), do: "[Viewing: #{path}]\n#{message}"
+
+  defp build_mermaid_error_message(%{"error" => error, "source" => source, "path" => path}) do
+    """
+    A mermaid diagram in #{path} has a syntax error. Please fix it using docs:update.
+
+    Error: #{error}
+
+    The broken mermaid source:
+    ```
+    #{source}
+    ```
+
+    Read the document with docs:read, fix the mermaid block, and update it with docs:update.
+    """
+  end
 
   defp reload_current_document(%{assigns: %{current_path: nil}} = socket), do: socket
 

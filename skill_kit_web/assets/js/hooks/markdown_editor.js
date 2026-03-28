@@ -55,8 +55,24 @@ const MarkdownEditor = {
         wrapper.innerHTML = svg;
         pre.replaceWith(wrapper);
       } catch (e) {
-        // Leave the code block as-is if mermaid can't parse it
         pre.dataset.mermaidRendered = "error";
+
+        // Show a styled error inline instead of the mermaid bomb
+        const errorMsg = e.message || e.toString();
+        const wrapper = document.createElement("div");
+        wrapper.className =
+          "my-4 rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-sm";
+        wrapper.innerHTML =
+          `<div class="text-red-400 font-medium mb-1">Mermaid syntax error</div>` +
+          `<pre class="text-red-300/60 text-xs whitespace-pre-wrap">${errorMsg.replace(/</g, "&lt;")}</pre>`;
+        pre.replaceWith(wrapper);
+
+        // Send error back to the agent so it can fix the diagram
+        this.pushEvent("mermaid_error", {
+          error: errorMsg,
+          source: source,
+          path: this.el.dataset.path,
+        });
       }
     }
   },
