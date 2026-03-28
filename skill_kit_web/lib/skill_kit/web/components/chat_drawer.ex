@@ -71,8 +71,8 @@ defmodule SkillKit.Web.Components.ChatDrawer do
 
     ~H"""
     <div>
-      <div class="text-xs font-medium text-editor-accent mb-1">Assistant</div>
-      <div class="prose-chat text-sm text-editor-text-muted">
+      <div class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
+      <div class="prose-chat text-[15px] text-editor-text-muted">
         {Phoenix.HTML.raw(@html)}
       </div>
     </div>
@@ -82,8 +82,8 @@ defmodule SkillKit.Web.Components.ChatDrawer do
   defp message(%{role: :user} = assigns) do
     ~H"""
     <div>
-      <div class="text-xs font-medium text-editor-text-faint mb-1">You</div>
-      <div class="text-sm text-editor-text-muted">{@content}</div>
+      <div class="text-sm font-medium text-editor-text-faint mb-1.5">You</div>
+      <div class="text-[15px] text-editor-text-muted">{@content}</div>
     </div>
     """
   end
@@ -95,8 +95,8 @@ defmodule SkillKit.Web.Components.ChatDrawer do
 
     ~H"""
     <div>
-      <div class="text-xs font-medium text-editor-accent mb-1">Assistant</div>
-      <div class="prose-chat text-sm text-editor-text-muted">
+      <div class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
+      <div class="prose-chat text-[15px] text-editor-text-muted">
         {Phoenix.HTML.raw(@html)}<span class="inline-block w-1.5 h-3.5 bg-editor-accent animate-pulse ml-0.5 align-text-bottom" />
       </div>
     </div>

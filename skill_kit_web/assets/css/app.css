@@ -7,23 +7,23 @@
 @layer components {
   /* Editor prose styling — applied to Earmark HTML output */
   .prose-editor h1 {
-    @apply font-heading text-2xl tracking-tight mb-6 text-editor-text;
+    @apply font-heading text-3xl tracking-tight mb-6 text-editor-text;
   }
 
   .prose-editor h2 {
-    @apply text-[11px] font-semibold text-editor-accent-muted uppercase tracking-widest mt-10 mb-4;
+    @apply text-xs font-semibold text-editor-accent-muted uppercase tracking-widest mt-10 mb-4;
   }
 
   .prose-editor h3 {
-    @apply font-heading text-lg mb-3 mt-6 text-editor-text;
+    @apply font-heading text-xl mb-3 mt-6 text-editor-text;
   }
 
   .prose-editor h4 {
-    @apply font-heading text-base mb-2 mt-4 text-editor-text;
+    @apply font-heading text-lg mb-2 mt-4 text-editor-text;
   }
 
   .prose-editor p {
-    @apply text-sm text-editor-text-muted leading-[1.9] mb-4;
+    @apply text-base text-editor-text-muted leading-[1.9] mb-4;
   }
 
   .prose-editor strong {
@@ -39,7 +39,7 @@
   }
 
   .prose-editor code {
-    @apply font-mono text-xs bg-editor-accent-faint px-1.5 py-0.5 rounded text-editor-text;
+    @apply font-mono text-sm bg-editor-accent-faint px-1.5 py-0.5 rounded text-editor-text;
   }
 
   .prose-editor pre {
@@ -47,7 +47,7 @@
   }
 
   .prose-editor pre code {
-    @apply bg-transparent px-0 py-0 text-sm;
+    @apply bg-transparent px-0 py-0 text-[15px];
   }
 
   .prose-editor ul {
@@ -59,7 +59,7 @@
   }
 
   .prose-editor li {
-    @apply text-sm text-editor-text-muted leading-[1.9];
+    @apply text-base text-editor-text-muted leading-[1.9];
   }
 
   .prose-editor hr {
@@ -67,15 +67,15 @@
   }
 
   .prose-editor blockquote {
-    @apply border-l-2 border-editor-accent-muted pl-4 my-4 italic text-editor-text-faint;
+    @apply border-l-2 border-editor-accent-muted pl-4 my-4 italic text-editor-text-faint text-base;
   }
 
   .prose-editor table {
-    @apply w-full text-sm my-4 border-collapse;
+    @apply w-full text-base my-4 border-collapse;
   }
 
   .prose-editor thead th {
-    @apply text-left text-editor-accent-muted text-xs font-semibold uppercase tracking-wider
+    @apply text-left text-editor-accent-muted text-sm font-semibold uppercase tracking-wider
            pb-2 border-b border-editor-border;
   }
 
@@ -93,10 +93,10 @@
 
   /* Chat prose styling — compact Earmark output for chat messages */
   .prose-chat p { @apply mb-2 last:mb-0; }
-  .prose-chat code { @apply font-mono text-xs bg-editor-accent-faint px-1 py-0.5 rounded; }
+  .prose-chat code { @apply font-mono text-sm bg-editor-accent-faint px-1 py-0.5 rounded; }
   .prose-chat pre { @apply bg-editor-accent-faint rounded p-3 my-2 overflow-x-auto; }
-  .prose-chat pre code { @apply bg-transparent px-0 py-0 text-xs; }
+  .prose-chat pre code { @apply bg-transparent px-0 py-0 text-sm; }
   .prose-chat ul { @apply list-disc pl-4 mb-2; }
   .prose-chat ol { @apply list-decimal pl-4 mb-2; }
-  .prose-chat li { @apply text-sm leading-relaxed; }
+  .prose-chat li { @apply leading-relaxed; }
 }
