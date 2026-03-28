@@ -26,6 +26,23 @@
         document.getElementById("hljs-light")?.removeAttribute("disabled");
       }
     </script>
+    <script type="module">
+      import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+        themeVariables: {
+          darkMode: document.documentElement.classList.contains('dark'),
+          primaryColor: 'rgba(140, 160, 210, 0.3)',
+          primaryTextColor: 'var(--editor-text)',
+          primaryBorderColor: 'rgba(140, 160, 210, 0.4)',
+          lineColor: 'var(--editor-text-muted)',
+          secondaryColor: 'rgba(140, 160, 210, 0.1)',
+          tertiaryColor: 'rgba(140, 160, 210, 0.05)',
+        }
+      });
+      window.mermaid = mermaid;
+    </script>
     <script defer phx-track-static type="text/javascript" src="/assets/app.js">
     </script>
   </head>

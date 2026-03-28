@@ -1,7 +1,7 @@
-// skill_kit_web/assets/js/hooks/markdown_editor.js
 const MarkdownEditor = {
   mounted() {
     this.highlightCode();
+    this.renderMermaid();
 
     // Track text selection for inline threads (Plan 3)
     document.addEventListener("mouseup", () => {
@@ -24,13 +24,40 @@ const MarkdownEditor = {
 
   updated() {
     this.highlightCode();
+    this.renderMermaid();
   },
 
   highlightCode() {
     if (typeof hljs !== "undefined") {
       this.el.querySelectorAll("pre code").forEach((block) => {
-        hljs.highlightElement(block);
+        if (!block.classList.contains("language-mermaid")) {
+          hljs.highlightElement(block);
+        }
       });
+    }
+  },
+
+  async renderMermaid() {
+    if (typeof window.mermaid === "undefined") return;
+
+    const blocks = this.el.querySelectorAll("code.language-mermaid");
+    for (const block of blocks) {
+      const pre = block.parentElement;
+      if (pre.dataset.mermaidRendered) continue;
+
+      const source = block.textContent;
+      const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      try {
+        const { svg } = await window.mermaid.render(id, source);
+        const wrapper = document.createElement("div");
+        wrapper.className = "mermaid-diagram my-4 flex justify-center";
+        wrapper.innerHTML = svg;
+        pre.replaceWith(wrapper);
+      } catch (e) {
+        // Leave the code block as-is if mermaid can't parse it
+        pre.dataset.mermaidRendered = "error";
+      }
     }
   },
 };

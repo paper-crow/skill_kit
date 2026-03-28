@@ -37,6 +37,29 @@ root supervisor, tearing down the entire tree.
 Each agent owns its own Registry and two isolated children under a top-level
 `:one_for_one` supervisor:
 
+```mermaid
+graph TD
+    A[SkillKit.Agent<br/>:one_for_one] --> B[Registry<br/>process discovery]
+    A --> C[SkillKit.Catalog<br/>aggregates providers]
+    A --> D[Agent.Core<br/>:rest_for_one]
+    
+    D --> E[Agent.Mailbox<br/>message buffering]
+    D --> F[Agent.Server<br/>LLM loop + tool execution]
+    D --> G[Agent.SubagentSupervisor<br/>DynamicSupervisor]
+    
+    G -.-> H[Subagent 1]
+    G -.-> I[Subagent 2]
+    G -.-> J[Subagent N]
+    
+    classDef supervisor fill:#e1f5fe
+    classDef worker fill:#f3e5f5
+    classDef dynamic fill:#fff3e0
+    
+    class A,D,G supervisor
+    class B,C,E,F worker
+    class H,I,J dynamic
+```
+
 ```
 SkillKit.Agent (one_for_one)
 ├── Registry              (process discovery for this agent)
