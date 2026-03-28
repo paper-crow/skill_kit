@@ -92,7 +92,7 @@ defmodule SkillKit.Web.EditorLive do
         <ChatDrawer.chat_drawer
           messages={@chat_messages}
           streaming_text={@streaming_text}
-          open={@active_drawer == :chat}
+          open={true}
         />
         <DebugPanel.debug_panel
           events={@events}

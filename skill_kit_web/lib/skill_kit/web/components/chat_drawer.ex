@@ -12,18 +12,10 @@ defmodule SkillKit.Web.Components.ChatDrawer do
       "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
-      <div class="flex items-center justify-between px-3 py-2 border-b border-editor-border">
+      <div class="px-3 py-2 border-b border-editor-border">
         <span class="text-xs font-medium text-editor-accent-muted uppercase tracking-wide">
           Chat
         </span>
-        <button
-          phx-click="toggle_drawer"
-          phx-value-panel="chat"
-          class="w-5 h-5 rounded flex items-center justify-center text-editor-accent-muted hover:text-editor-accent hover:bg-editor-accent-faint/50 transition-colors"
-          title="Close chat"
-        >
-          &times;
-        </button>
       </div>
 
       <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">

@@ -132,21 +132,32 @@ there is no concurrent LLM call state to manage.
 After receiving a streamed LLM response, the Server checks for tool calls and
 loops until the model returns a response with no tools:
 
-```
-Server receives {:mailbox_flush, messages}
-  │
-  └─► call Catalog.tool_definitions/2, then call LLM, stream response to caller
-        │
-        ├─ if no tool calls → send %AssistantMessage{} to caller, done
-        │
-        └─ if tool calls present:
-               │
-               ├─ classify each call via Catalog.classify/3
-               ├─ dispatch pre-boundary hooks via Hooks.call/4
-               ├─ execute local tools via ToolExecution (authorized by Scope)
-               ├─ dispatch post-boundary hooks via Hooks.cast/3
-               ├─ collect results as %ToolResult{} structs
-               └─ append results to message history, loop ↑
+```mermaid
+flowchart TD
+    A[Server receives<br/>{:mailbox_flush, messages}] --> B[Call Catalog.tool_definitions/2]
+    B --> C[Call LLM, stream response to caller]
+    C --> D{Tool calls<br/>present?}
+    
+    D -->|No| E[Send %AssistantMessage{}<br/>to caller]
+    E --> F[Done]
+    
+    D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]
+    G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]
+    H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]
+    I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]
+    J --> K[Collect results as<br/>%ToolResult{} structs]
+    K --> L[Append results to<br/>message history]
+    L --> B
+    
+    classDef start fill:#e8f5e8
+    classDef decision fill:#fff3cd
+    classDef process fill:#e1f5fe
+    classDef end fill:#f8d7da
+    
+    class A start
+    class D decision
+    class B,C,G,H,I,J,K,L process
+    class E,F end
 ```
 
 The Server calls `Catalog.classify/3` before each tool execution. Local tools
