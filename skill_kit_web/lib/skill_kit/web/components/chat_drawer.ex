@@ -8,7 +8,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
   def chat_drawer(assigns) do
     ~H"""
     <div class={[
-      "h-full w-[420px] shrink-0 bg-editor-bg border-l border-editor-divider",
+      "h-full w-[520px] shrink-0 bg-editor-bg border-l border-editor-divider",
       "flex flex-col",
       if(@open, do: "", else: "hidden")
     ]}>
@@ -27,7 +27,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
             phx-keydown="chat_keydown"
             phx-key="Enter"
             class="w-full bg-editor-bg border border-editor-border rounded-xl px-4 py-3 pr-14
-                   text-sm text-editor-text placeholder-editor-text-faint
+                   text-base text-editor-text placeholder-editor-text-faint
                    focus:outline-none focus:border-editor-accent-muted
                    resize-none"
           />

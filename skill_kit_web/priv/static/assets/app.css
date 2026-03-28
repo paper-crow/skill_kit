@@ -1014,6 +1014,10 @@ hue-6-2: #e6c07b
   width: 100vw;
 }
 
+.w-\[520px\] {
+  width: 520px;
+}
+
 .max-w-editor {
   max-width: 780px;
 }
@@ -1335,6 +1339,11 @@ hue-6-2: #e6c07b
 
 .text-\[15px\] {
   font-size: 15px;
+}
+
+.text-base {
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 
 .font-medium {
