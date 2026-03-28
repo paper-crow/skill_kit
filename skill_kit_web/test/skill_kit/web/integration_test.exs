@@ -38,7 +38,7 @@ defmodule SkillKit.Web.IntegrationTest do
       skill: %Skill{name: "docs:read"},
       tool: SkillKit.Web.DocumentKit.Tool,
       input: %{"path" => "welcome.md"},
-      context: %{project_root: @tmp_dir},
+      context: %{docs_root: @tmp_dir},
       status: :running
     }
 

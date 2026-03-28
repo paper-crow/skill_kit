@@ -27,7 +27,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
 
   @impl true
   def execute(%SkillKit.ToolExecution{skill: skill, input: input, context: context}) do
-    root = Map.get(context, :project_root, File.cwd!())
+    root = Map.get(context, :docs_root, SkillKitWeb.docs_root())
     dispatch(skill.name, input, root)
   end
 

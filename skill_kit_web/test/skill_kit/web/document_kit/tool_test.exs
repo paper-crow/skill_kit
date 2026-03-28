@@ -11,7 +11,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
     File.rm_rf!(@tmp_dir)
     File.mkdir_p!(@tmp_dir)
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
-    {:ok, project_root: @tmp_dir}
+    {:ok, docs_root: @tmp_dir}
   end
 
   defp build_execution(skill_name, input, root) do
@@ -19,13 +19,13 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       skill: %Skill{name: skill_name},
       tool: Tool,
       input: input,
-      context: %{project_root: root},
+      context: %{docs_root: root},
       status: :running
     }
   end
 
   describe "docs:create" do
-    test "writes a new file", %{project_root: root} do
+    test "writes a new file", %{docs_root: root} do
       execution =
         build_execution("docs:create", %{"path" => "guide.md", "content" => "# Hello"}, root)
 
@@ -33,7 +33,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert File.read!(Path.join(root, "guide.md")) == "# Hello"
     end
 
-    test "creates intermediate directories", %{project_root: root} do
+    test "creates intermediate directories", %{docs_root: root} do
       execution =
         build_execution(
           "docs:create",
@@ -45,7 +45,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert File.read!(Path.join(root, "guides/deep/new.md")) == "# Deep"
     end
 
-    test "fails if file already exists", %{project_root: root} do
+    test "fails if file already exists", %{docs_root: root} do
       File.write!(Path.join(root, "existing.md"), "content")
 
       execution =
@@ -56,14 +56,14 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "docs:read" do
-    test "returns file content", %{project_root: root} do
+    test "returns file content", %{docs_root: root} do
       File.write!(Path.join(root, "doc.md"), "# Test Doc\n\nContent here.")
       execution = build_execution("docs:read", %{"path" => "doc.md"}, root)
 
       assert {:ok, "# Test Doc\n\nContent here."} = Tool.execute(execution)
     end
 
-    test "fails for missing file", %{project_root: root} do
+    test "fails for missing file", %{docs_root: root} do
       execution = build_execution("docs:read", %{"path" => "nope.md"}, root)
 
       assert {:error, _} = Tool.execute(execution)
@@ -71,7 +71,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "docs:update" do
-    test "replaces file content", %{project_root: root} do
+    test "replaces file content", %{docs_root: root} do
       File.write!(Path.join(root, "doc.md"), "old content")
 
       execution =
@@ -81,7 +81,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert File.read!(Path.join(root, "doc.md")) == "new content"
     end
 
-    test "fails if file does not exist", %{project_root: root} do
+    test "fails if file does not exist", %{docs_root: root} do
       execution =
         build_execution("docs:update", %{"path" => "missing.md", "content" => "new"}, root)
 
@@ -90,7 +90,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "docs:list" do
-    test "returns all markdown files", %{project_root: root} do
+    test "returns all markdown files", %{docs_root: root} do
       File.mkdir_p!(Path.join(root, "guides"))
       File.write!(Path.join(root, "readme.md"), "# Readme")
       File.write!(Path.join(root, "guides/auth.md"), "# Auth")
@@ -104,14 +104,14 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       refute "not_md.txt" in files
     end
 
-    test "returns empty list when no markdown files", %{project_root: root} do
+    test "returns empty list when no markdown files", %{docs_root: root} do
       execution = build_execution("docs:list", %{}, root)
       assert {:ok, []} = Tool.execute(execution)
     end
   end
 
   describe "docs:search" do
-    test "finds matching content", %{project_root: root} do
+    test "finds matching content", %{docs_root: root} do
       File.write!(Path.join(root, "doc.md"), "# Auth\n\nUsers authenticate via email.")
       execution = build_execution("docs:search", %{"query" => "authenticate"}, root)
 
@@ -120,7 +120,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert hd(results).path == "doc.md"
     end
 
-    test "returns empty list when no matches", %{project_root: root} do
+    test "returns empty list when no matches", %{docs_root: root} do
       File.write!(Path.join(root, "doc.md"), "# Hello\n\nWorld.")
       execution = build_execution("docs:search", %{"query" => "nonexistent"}, root)
 
@@ -129,7 +129,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "docs:structure" do
-    test "returns heading structure", %{project_root: root} do
+    test "returns heading structure", %{docs_root: root} do
       content = "# Title\n\n## Section 1\n\nText.\n\n### Subsection\n\n## Section 2\n"
       File.write!(Path.join(root, "doc.md"), content)
       execution = build_execution("docs:structure", %{"path" => "doc.md"}, root)
@@ -141,7 +141,7 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "docs:history" do
-    test "returns git log for a file", %{project_root: root} do
+    test "returns git log for a file", %{docs_root: root} do
       # Initialize a git repo so we can test history
       System.cmd("git", ["init"], cd: root)
       System.cmd("git", ["config", "user.email", "test@test.com"], cd: root)
@@ -159,13 +159,13 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
   end
 
   describe "path traversal prevention" do
-    test "prevents reading outside project root", %{project_root: root} do
+    test "prevents reading outside project root", %{docs_root: root} do
       execution = build_execution("docs:read", %{"path" => "../../../etc/passwd"}, root)
 
       assert {:error, _} = Tool.execute(execution)
     end
 
-    test "prevents creating outside project root", %{project_root: root} do
+    test "prevents creating outside project root", %{docs_root: root} do
       execution =
         build_execution("docs:create", %{"path" => "../escape.md", "content" => "bad"}, root)
 
