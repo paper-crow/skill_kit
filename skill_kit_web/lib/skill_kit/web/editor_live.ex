@@ -28,6 +28,7 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:chat_messages, [])
       |> assign(:streaming_text, nil)
       |> assign(:agent_ref, nil)
+      |> assign(:last_context_path, nil)
 
     socket = maybe_start_agent(socket)
 
@@ -109,9 +110,9 @@ defmodule SkillKit.Web.EditorLive do
         {:noreply, socket}
 
       agent_ref ->
-        context_message = build_context_message(message, socket.assigns)
-        SkillKit.send_message(agent_ref, context_message)
-        {:noreply, socket}
+        full_message = with_document_context(message, socket.assigns)
+        SkillKit.send_message(agent_ref, full_message)
+        {:noreply, assign(socket, :last_context_path, socket.assigns.current_path)}
     end
   end
 
@@ -255,18 +256,22 @@ defmodule SkillKit.Web.EditorLive do
   defp toggle_drawer(current, panel) when current == panel, do: nil
   defp toggle_drawer(_current, panel), do: panel
 
-  defp build_context_message(message, %{current_path: nil}), do: message
+  defp with_document_context(message, %{current_path: nil}), do: message
 
-  defp build_context_message(message, %{current_path: path, content: content}) do
-    """
-    [Currently viewing: #{path}]
+  defp with_document_context(message, assigns) do
+    if assigns.current_path == assigns[:last_context_path] do
+      message
+    else
+      """
+      <context>
+      <document path="#{assigns.current_path}">
+      #{assigns.content}
+      </document>
+      </context>
 
-    <document path="#{path}">
-    #{content}
-    </document>
-
-    #{message}
-    """
+      #{message}
+      """
+    end
   end
 
   defp refresh_files(socket) do
