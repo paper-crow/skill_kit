@@ -873,16 +873,8 @@ hue-6-2: #e6c07b
   bottom: 3rem;
 }
 
-.bottom-2 {
-  bottom: 0.5rem;
-}
-
 .bottom-3 {
   bottom: 0.75rem;
-}
-
-.left-2 {
-  left: 0.5rem;
 }
 
 .right-3 {
@@ -891,10 +883,6 @@ hue-6-2: #e6c07b
 
 .right-4 {
   right: 1rem;
-}
-
-.z-20 {
-  z-index: 20;
 }
 
 .z-30 {
@@ -906,8 +894,8 @@ hue-6-2: #e6c07b
   margin-right: auto;
 }
 
-.mb-1 {
-  margin-bottom: 0.25rem;
+.mb-0\.5 {
+  margin-bottom: 0.125rem;
 }
 
 .mb-1\.5 {
@@ -926,16 +914,12 @@ hue-6-2: #e6c07b
   margin-left: 0.25rem;
 }
 
-.mt-auto {
-  margin-top: auto;
-}
-
 .ml-3 {
   margin-left: 0.75rem;
 }
 
-.mb-0\.5 {
-  margin-bottom: 0.125rem;
+.mt-auto {
+  margin-top: auto;
 }
 
 .block {
@@ -1360,10 +1344,6 @@ hue-6-2: #e6c07b
   text-transform: uppercase;
 }
 
-.tracking-wide {
-  letter-spacing: 0.025em;
-}
-
 .tracking-widest {
   letter-spacing: 0.1em;
 }
@@ -1409,10 +1389,6 @@ hue-6-2: #e6c07b
 
 .text-editor-accent {
   color: var(--editor-accent);
-}
-
-.text-editor-accent-muted {
-  color: var(--editor-accent-muted);
 }
 
 .text-editor-text {
@@ -1493,8 +1469,8 @@ hue-6-2: #e6c07b
   background-color: rgb(255 255 255 / 0.03);
 }
 
-.hover\:text-editor-accent:hover {
-  color: var(--editor-accent);
+.hover\:text-editor-accent-muted:hover {
+  color: var(--editor-accent-muted);
 }
 
 .hover\:text-editor-text:hover {
@@ -1511,10 +1487,6 @@ hue-6-2: #e6c07b
 
 .hover\:text-white\/60:hover {
   color: rgb(255 255 255 / 0.6);
-}
-
-.hover\:text-editor-accent-muted:hover {
-  color: var(--editor-accent-muted);
 }
 
 .hover\:opacity-90:hover {

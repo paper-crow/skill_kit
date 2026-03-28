@@ -7,8 +7,6 @@ defmodule SkillKit.Web.EditorLive do
   alias SkillKit.Web.Components.DebugPanel
   alias SkillKit.Web.Components.DocumentTree
   alias SkillKit.Web.Components.EditorSurface
-  alias SkillKit.Web.Components.Sidebar
-  alias SkillKit.Web.Components.ThemeToggle
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
