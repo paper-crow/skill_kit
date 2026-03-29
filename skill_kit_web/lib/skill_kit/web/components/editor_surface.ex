@@ -40,7 +40,7 @@ defmodule SkillKit.Web.Components.EditorSurface do
     |> add_heading_ids()
   end
 
-  defp add_heading_ids({status, html, messages}) when status in [:ok, :error] do
+  defp add_heading_ids({status, html, _messages}) when status in [:ok, :error] do
     Regex.replace(~r/<(h[2-4])>(.*?)<\/\1>/s, html, fn _match, tag, text ->
       id = slugify(strip_html(text))
       ~s(<#{tag} id="#{id}">#{text}</#{tag}>)
