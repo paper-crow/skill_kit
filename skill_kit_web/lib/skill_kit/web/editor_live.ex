@@ -7,6 +7,8 @@ defmodule SkillKit.Web.EditorLive do
   alias SkillKit.Web.Components.DebugPanel
   alias SkillKit.Web.Components.DocumentTree
   alias SkillKit.Web.Components.EditorSurface
+  alias SkillKit.Web.Components.InlineThread
+  alias SkillKit.Web.Components.SelectionToolbar
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
@@ -67,6 +69,9 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:event_count, 0)
       |> assign(:debug_paused, false)
       |> assign(:mermaid_retries, %{})
+      |> assign(:selection, nil)
+      |> assign(:inline_thread, nil)
+      |> assign(:pending_diff, nil)
 
     socket = maybe_start_agent(socket)
 
@@ -111,9 +116,12 @@ defmodule SkillKit.Web.EditorLive do
         <ChatDrawer.chat_drawer
           messages={@chat_messages}
           streaming_text={@streaming_text}
+          pending_diff={@pending_diff}
           open={true}
         />
       </div>
+      <SelectionToolbar.selection_toolbar selection={@selection} />
+      <InlineThread.inline_thread thread={@inline_thread} />
       <DebugPanel.debug_panel
         events={@events}
         event_count={@event_count}
@@ -173,7 +181,77 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
-  def handle_event("text_selected", _params, socket) do
+  def handle_event("text_selected", %{"text" => text, "top" => top, "left" => left}, socket) do
+    selection = %{text: text, top: top, left: left}
+    {:noreply, assign(socket, :selection, selection)}
+  end
+
+  @impl true
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply, assign(socket, :selection, nil)}
+  end
+
+  @impl true
+  def handle_event("open_inline_thread", _params, socket) do
+    thread = build_inline_thread(socket.assigns.selection)
+
+    socket =
+      socket
+      |> assign(:inline_thread, thread)
+      |> assign(:selection, nil)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("send_thread_message", %{"message" => message}, socket)
+      when message != "" do
+    thread = socket.assigns.inline_thread
+    user_msg = %{role: :user, content: message}
+    updated_thread = %{thread | messages: thread.messages ++ [user_msg]}
+
+    case socket.assigns.agent_ref do
+      nil ->
+        {:noreply, assign(socket, :inline_thread, updated_thread)}
+
+      agent_ref ->
+        context_message = build_thread_message(message, thread, socket.assigns.current_path)
+        SkillKit.send_message(agent_ref, context_message)
+        {:noreply, assign(socket, :inline_thread, updated_thread)}
+    end
+  end
+
+  @impl true
+  def handle_event("send_thread_message", _params, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("close_inline_thread", _params, socket) do
+    {:noreply, assign(socket, inline_thread: nil, selection: nil)}
+  end
+
+  @impl true
+  def handle_event("accept_diff", _params, socket) do
+    socket =
+      socket
+      |> assign(:pending_diff, nil)
+      |> reload_current_document()
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("reject_diff", _params, socket) do
+    diff = socket.assigns.pending_diff
+    full_path = Path.join(socket.assigns.docs_root, diff.path)
+    File.write!(full_path, diff.old_content)
+
+    socket =
+      socket
+      |> assign(:pending_diff, nil)
+      |> assign(:content, diff.old_content)
+
     {:noreply, socket}
   end
 
@@ -256,23 +334,26 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_info(%SkillKit.Event.Delta{text: text}, socket) do
-    current = socket.assigns.streaming_text || ""
-    {:noreply, assign(socket, :streaming_text, current <> text)}
+    if socket.assigns.inline_thread do
+      thread = socket.assigns.inline_thread
+      current = thread.streaming_text || ""
+      updated = %{thread | streaming_text: current <> text}
+      {:noreply, assign(socket, :inline_thread, updated)}
+    else
+      current = socket.assigns.streaming_text || ""
+      {:noreply, assign(socket, :streaming_text, current <> text)}
+    end
   end
 
   @impl true
   def handle_info(%SkillKit.Types.AssistantMessage{content: content}, socket) do
-    message = %{role: :assistant, content: content}
-    messages = socket.assigns.chat_messages ++ [message]
-
-    socket =
-      socket
-      |> assign(:chat_messages, messages)
-      |> assign(:streaming_text, nil)
-      |> refresh_files()
-      |> reload_current_document()
-
-    {:noreply, socket}
+    if socket.assigns.inline_thread do
+      socket = route_assistant_to_thread(socket, content)
+      {:noreply, socket}
+    else
+      socket = route_assistant_to_chat(socket, content)
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -606,6 +687,61 @@ defmodule SkillKit.Web.EditorLive do
 
   defp format_message(message, nil), do: message
   defp format_message(message, path), do: "[Viewing: #{path}]\n#{message}"
+
+  defp build_inline_thread(selection) do
+    %{
+      selection_text: selection.text,
+      messages: [],
+      streaming_text: nil,
+      top: selection.top,
+      left: selection.left
+    }
+  end
+
+  defp build_thread_message(message, thread, path) do
+    "[Viewing: #{path}]\n[Selected text: \"#{thread.selection_text}\"]\n\n#{message}"
+  end
+
+  defp route_assistant_to_thread(socket, content) do
+    thread = socket.assigns.inline_thread
+    msg = %{role: :assistant, content: content}
+    updated = %{thread | messages: thread.messages ++ [msg], streaming_text: nil}
+
+    socket
+    |> assign(:inline_thread, updated)
+    |> maybe_detect_diff()
+    |> refresh_files()
+    |> reload_current_document()
+  end
+
+  defp route_assistant_to_chat(socket, content) do
+    message = %{role: :assistant, content: content}
+    messages = socket.assigns.chat_messages ++ [message]
+
+    socket
+    |> assign(:chat_messages, messages)
+    |> assign(:streaming_text, nil)
+    |> maybe_detect_diff()
+    |> refresh_files()
+    |> reload_current_document()
+  end
+
+  defp maybe_detect_diff(%{assigns: %{current_path: nil}} = socket), do: socket
+
+  defp maybe_detect_diff(socket) do
+    path = socket.assigns.current_path
+    old_content = socket.assigns.content
+    full_path = Path.join(socket.assigns.docs_root, path)
+
+    case File.read(full_path) do
+      {:ok, new_content} when new_content != old_content ->
+        diff = %{path: path, old_content: old_content, new_content: new_content}
+        assign(socket, :pending_diff, diff)
+
+      _ ->
+        socket
+    end
+  end
 
   defp build_mermaid_error_message(%{"error" => error, "source" => source, "path" => path}) do
     """

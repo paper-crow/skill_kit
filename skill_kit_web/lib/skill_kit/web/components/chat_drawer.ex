@@ -1,8 +1,11 @@
 defmodule SkillKit.Web.Components.ChatDrawer do
   use Phoenix.Component
 
+  alias SkillKit.Web.Components.DiffBlock
+
   attr(:messages, :list, required: true)
   attr(:streaming_text, :string, default: nil)
+  attr(:pending_diff, :map, default: nil)
   attr(:open, :boolean, default: false)
 
   def chat_drawer(assigns) do
@@ -13,6 +16,7 @@ defmodule SkillKit.Web.Components.ChatDrawer do
       if(@open, do: "", else: "hidden")
     ]}>
       <div id="chat-messages" phx-hook="ChatScroll" class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        <DiffBlock.diff_block :if={@pending_diff} diff={@pending_diff} />
         <.message :for={msg <- @messages} role={msg.role} content={msg.content} />
         <.streaming_message :if={@streaming_text} text={@streaming_text} />
       </div>

@@ -20,6 +20,14 @@ const MarkdownEditor = {
       }
     });
 
+    // Clear selection when clicking without selecting text
+    this.el.addEventListener("click", () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed) {
+        this.pushEvent("clear_selection", {});
+      }
+    });
+
     // Track text selection for inline threads (Plan 3)
     document.addEventListener("mouseup", () => {
       const selection = window.getSelection();
