@@ -12,18 +12,10 @@ defmodule SkillKit.Web.Components.InlineThread do
     <div
       id="inline-thread"
       phx-hook="InlineThread"
+      phx-click-away="dismiss_inline_thread"
       class="fixed z-50 w-96 bg-editor-bg border border-editor-border rounded-xl shadow-2xl flex flex-col max-h-[500px] min-h-[200px]"
       style={"top: #{@thread.top}px; left: #{@thread.right + 12}px;"}
     >
-      <div class="px-3 py-1.5 border-b border-editor-divider flex items-center justify-end">
-        <button
-          phx-click="close_inline_thread"
-          class="text-editor-text-faint hover:text-editor-text-muted text-lg leading-none"
-        >
-          &times;
-        </button>
-      </div>
-
       <div class="flex-1 overflow-y-auto px-3 py-3 space-y-3">
         <div :for={msg <- @thread.messages}>
           <div :if={msg.role == :assistant} class="text-xs font-medium text-editor-accent mb-1">
@@ -48,8 +40,10 @@ defmodule SkillKit.Web.Components.InlineThread do
           <input
             type="text"
             name="message"
+            value={@thread[:draft] || ""}
             placeholder="Reply..."
             autocomplete="off"
+            phx-change="update_thread_draft"
             class="w-full bg-transparent text-sm text-editor-text placeholder-editor-text-faint focus:outline-none"
           />
         </form>

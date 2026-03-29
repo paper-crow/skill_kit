@@ -71,6 +71,7 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:mermaid_retries, %{})
       |> assign(:selection, nil)
       |> assign(:inline_thread, nil)
+      |> assign(:suspended_thread, nil)
       |> assign(:pending_diff, nil)
 
     socket = maybe_start_agent(socket)
@@ -182,14 +183,15 @@ defmodule SkillKit.Web.EditorLive do
   @impl true
   def handle_event("text_selected", %{"text" => text, "top" => top, "right" => right}, socket) do
     selection = %{text: text, top: top, right: right}
-    thread = build_inline_thread(selection)
+    thread = restore_or_create_thread(selection, socket.assigns.suspended_thread)
 
     socket =
       socket
       |> assign(:selection, nil)
       |> assign(:inline_thread, thread)
+      |> assign(:suspended_thread, nil)
 
-    {:noreply, socket}
+    {:noreply, push_event(socket, "maintain_selection", %{})}
   end
 
   @impl true
@@ -199,7 +201,32 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, assign(socket, selection: nil, inline_thread: nil)}
+    # Only clear selection state, not the thread (thread is closed via dismiss)
+    {:noreply, assign(socket, :selection, nil)}
+  end
+
+  @impl true
+  def handle_event("dismiss_inline_thread", _params, socket) do
+    thread = socket.assigns.inline_thread
+    suspended = suspend_thread(thread)
+
+    socket =
+      socket
+      |> assign(:inline_thread, nil)
+      |> assign(:suspended_thread, suspended)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("update_thread_draft", %{"message" => draft}, socket) do
+    thread = socket.assigns.inline_thread
+
+    if thread do
+      {:noreply, assign(socket, :inline_thread, Map.put(thread, :draft, draft))}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -239,7 +266,7 @@ defmodule SkillKit.Web.EditorLive do
 
   @impl true
   def handle_event("close_inline_thread", _params, socket) do
-    {:noreply, assign(socket, inline_thread: nil, selection: nil)}
+    {:noreply, assign(socket, inline_thread: nil, suspended_thread: nil)}
   end
 
   @impl true
@@ -704,9 +731,32 @@ defmodule SkillKit.Web.EditorLive do
       selection_text: selection.text,
       messages: [],
       streaming_text: nil,
+      draft: nil,
       top: selection.top,
       right: selection.right
     }
+  end
+
+  defp restore_or_create_thread(selection, nil), do: build_inline_thread(selection)
+
+  defp restore_or_create_thread(selection, suspended) do
+    if suspended.selection_text == selection.text do
+      %{suspended | top: selection.top, right: selection.right}
+    else
+      build_inline_thread(selection)
+    end
+  end
+
+  defp suspend_thread(nil), do: nil
+
+  defp suspend_thread(thread) do
+    has_content = thread.draft not in [nil, ""] or thread.messages != []
+
+    if has_content do
+      thread
+    else
+      nil
+    end
   end
 
   defp build_thread_message(message, thread, path) do

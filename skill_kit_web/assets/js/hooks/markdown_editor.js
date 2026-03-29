@@ -28,12 +28,29 @@ const MarkdownEditor = {
       }
     });
 
-    // Track text selection for inline threads (Plan 3)
-    document.addEventListener("mouseup", () => {
+    // Save current selection range so we can restore it
+    this._savedRange = null;
+
+    // Maintain selection when thread opens (prevents browser from clearing it)
+    this.handleEvent("maintain_selection", () => {
+      if (this._savedRange) {
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(this._savedRange);
+      }
+    });
+
+    // Track text selection for inline threads
+    document.addEventListener("mouseup", (e) => {
+      // Ignore clicks inside the inline thread popover
+      const thread = document.getElementById("inline-thread");
+      if (thread && thread.contains(e.target)) return;
+
       const selection = window.getSelection();
       if (selection.rangeCount > 0 && !selection.isCollapsed) {
         const range = selection.getRangeAt(0);
         if (this.el.contains(range.commonAncestorContainer)) {
+          this._savedRange = range.cloneRange();
           const text = selection.toString();
           const rect = range.getBoundingClientRect();
           this.pushEvent("text_selected", {

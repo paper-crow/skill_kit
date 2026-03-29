@@ -22,11 +22,10 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     })
 
     html = render(view)
-    assert html =~ "Some content"
     assert html =~ "Reply"
   end
 
-  test "closing inline thread clears state", %{conn: conn} do
+  test "dismiss saves thread as suspended when draft exists", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
 
     render_hook(view, "text_selected", %{
@@ -35,10 +34,26 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
       "right" => 500
     })
 
-    view |> element(~s{button[phx-click="close_inline_thread"]}) |> render_click()
+    assert render(view) =~ "Reply"
+
+    # Simulate typing a draft
+    render_hook(view, "update_thread_draft", %{"message" => "half typed"})
+
+    # Dismiss the thread (click away)
+    render_hook(view, "dismiss_inline_thread", %{})
+
+    refute render(view) =~ "Reply"
+
+    # Re-select same text — should restore the draft
+    render_hook(view, "text_selected", %{
+      "text" => "Some content",
+      "top" => 200,
+      "right" => 500
+    })
 
     html = render(view)
-    refute html =~ "Reply"
+    assert html =~ "Reply"
+    assert html =~ "half typed"
   end
 
   test "sending thread message adds it to thread", %{conn: conn} do
@@ -58,7 +73,7 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     assert html =~ "What about this?"
   end
 
-  test "clear selection closes thread", %{conn: conn} do
+  test "esc closes thread and clears draft", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
 
     render_hook(view, "text_selected", %{
@@ -69,7 +84,8 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
 
     assert render(view) =~ "Reply"
 
-    render_hook(view, "clear_selection", %{})
+    # close_inline_thread clears draft and suspended
+    render_hook(view, "close_inline_thread", %{})
 
     refute render(view) =~ "Reply"
   end
