@@ -5,6 +5,7 @@ import mermaid from "mermaid";
 import AutoScroll from "./hooks/auto_scroll";
 import ChatScroll from "./hooks/chat_scroll";
 import MarkdownEditor from "./hooks/markdown_editor";
+import InlineThread from "./hooks/inline_thread";
 import Theme from "./hooks/theme";
 
 // Make available to hooks
@@ -28,6 +29,7 @@ mermaid.initialize({
 const hooks = {
   AutoScroll,
   ChatScroll,
+  InlineThread,
   MarkdownEditor,
   Theme,
 };
