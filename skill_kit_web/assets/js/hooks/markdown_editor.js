@@ -39,7 +39,7 @@ const MarkdownEditor = {
           this.pushEvent("text_selected", {
             text: text,
             top: rect.top,
-            left: rect.left,
+            right: rect.right,
             width: rect.width,
           });
         }

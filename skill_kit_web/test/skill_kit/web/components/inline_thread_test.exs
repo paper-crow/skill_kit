@@ -12,7 +12,7 @@ defmodule SkillKit.Web.Components.InlineThreadTest do
       ],
       streaming_text: nil,
       top: 200,
-      left: 300
+      right: 300
     }
 
     html = render_component(&InlineThread.inline_thread/1, thread: thread)
@@ -27,7 +27,7 @@ defmodule SkillKit.Web.Components.InlineThreadTest do
       messages: [],
       streaming_text: nil,
       top: 100,
-      left: 200
+      right: 200
     }
 
     html = render_component(&InlineThread.inline_thread/1, thread: thread)
@@ -45,7 +45,7 @@ defmodule SkillKit.Web.Components.InlineThreadTest do
       messages: [],
       streaming_text: "I think",
       top: 100,
-      left: 200
+      right: 200
     }
 
     html = render_component(&InlineThread.inline_thread/1, thread: thread)

@@ -12,33 +12,17 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "text selection shows toolbar", %{conn: conn} do
+  test "text selection opens thread immediately", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
 
     render_hook(view, "text_selected", %{
       "text" => "Some content",
       "top" => 200,
-      "left" => 300
+      "right" => 500
     })
-
-    html = render(view)
-    assert html =~ "Ask agent"
-  end
-
-  test "opening inline thread shows thread popover", %{conn: conn} do
-    {:ok, view, _html} = live(conn, "/")
-
-    render_hook(view, "text_selected", %{
-      "text" => "Some content",
-      "top" => 200,
-      "left" => 300
-    })
-
-    view |> element(~s{button[phx-click="open_inline_thread"]}) |> render_click()
 
     html = render(view)
     assert html =~ "Some content"
-    refute html =~ "Ask agent"
     assert html =~ "Reply"
   end
 
@@ -48,10 +32,9 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     render_hook(view, "text_selected", %{
       "text" => "Some content",
       "top" => 200,
-      "left" => 300
+      "right" => 500
     })
 
-    view |> element(~s{button[phx-click="open_inline_thread"]}) |> render_click()
     view |> element(~s{button[phx-click="close_inline_thread"]}) |> render_click()
 
     html = render(view)
@@ -64,10 +47,8 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     render_hook(view, "text_selected", %{
       "text" => "Some content",
       "top" => 200,
-      "left" => 300
+      "right" => 500
     })
-
-    view |> element(~s{button[phx-click="open_inline_thread"]}) |> render_click()
 
     view
     |> form(~s{form[phx-submit="send_thread_message"]}, %{message: "What about this?"})
@@ -77,19 +58,19 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
     assert html =~ "What about this?"
   end
 
-  test "clear selection removes toolbar", %{conn: conn} do
+  test "clear selection closes thread", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/")
 
     render_hook(view, "text_selected", %{
       "text" => "Some content",
       "top" => 200,
-      "left" => 300
+      "right" => 500
     })
 
-    assert render(view) =~ "Ask agent"
+    assert render(view) =~ "Reply"
 
     render_hook(view, "clear_selection", %{})
 
-    refute render(view) =~ "Ask agent"
+    refute render(view) =~ "Reply"
   end
 end

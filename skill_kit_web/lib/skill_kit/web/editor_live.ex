@@ -8,7 +8,7 @@ defmodule SkillKit.Web.EditorLive do
   alias SkillKit.Web.Components.DocumentTree
   alias SkillKit.Web.Components.EditorSurface
   alias SkillKit.Web.Components.InlineThread
-  alias SkillKit.Web.Components.SelectionToolbar
+
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
@@ -120,7 +120,6 @@ defmodule SkillKit.Web.EditorLive do
           open={true}
         />
       </div>
-      <SelectionToolbar.selection_toolbar selection={@selection} />
       <InlineThread.inline_thread thread={@inline_thread} />
       <DebugPanel.debug_panel
         events={@events}
@@ -181,14 +180,26 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
-  def handle_event("text_selected", %{"text" => text, "top" => top, "left" => left}, socket) do
-    selection = %{text: text, top: top, left: left}
-    {:noreply, assign(socket, :selection, selection)}
+  def handle_event("text_selected", %{"text" => text, "top" => top, "right" => right}, socket) do
+    selection = %{text: text, top: top, right: right}
+    thread = build_inline_thread(selection)
+
+    socket =
+      socket
+      |> assign(:selection, nil)
+      |> assign(:inline_thread, thread)
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("text_selected", _params, socket) do
+    {:noreply, socket}
   end
 
   @impl true
   def handle_event("clear_selection", _params, socket) do
-    {:noreply, assign(socket, :selection, nil)}
+    {:noreply, assign(socket, selection: nil, inline_thread: nil)}
   end
 
   @impl true
@@ -694,7 +705,7 @@ defmodule SkillKit.Web.EditorLive do
       messages: [],
       streaming_text: nil,
       top: selection.top,
-      left: selection.left
+      right: selection.right
     }
   end
 

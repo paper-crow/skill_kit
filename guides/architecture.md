@@ -21,7 +21,6 @@ The public API follows a three-step pattern:
 
 :ok = SkillKit.send_message(agent, "Hello")
 # ... receive events in caller process ...
-:ok = SkillKit.stop_agent(agent)
 ```
 
 The source-driven form resolves the agent identity from the first argument,

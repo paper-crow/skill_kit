@@ -13,7 +13,7 @@ defmodule SkillKit.Web.Components.InlineThread do
       id="inline-thread"
       phx-hook="InlineThread"
       class="fixed z-50 w-80 bg-editor-bg border border-editor-border rounded-xl shadow-2xl flex flex-col max-h-96"
-      style={"top: #{@thread.top}px; left: #{@thread.left + 20}px;"}
+      style={"top: #{@thread.top}px; left: #{@thread.right + 12}px;"}
     >
       <div class="px-3 py-2 border-b border-editor-divider flex items-start justify-between gap-2">
         <p class="text-sm text-editor-text-faint italic truncate flex-1">
