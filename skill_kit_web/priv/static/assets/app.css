@@ -1007,6 +1007,14 @@ hue-6-2: #e6c07b
   max-height: 24rem;
 }
 
+.max-h-\[500px\] {
+  max-height: 500px;
+}
+
+.min-h-\[200px\] {
+  min-height: 200px;
+}
+
 .w-1 {
   width: 0.25rem;
 }
@@ -1055,6 +1063,10 @@ hue-6-2: #e6c07b
   width: 100vw;
 }
 
+.w-96 {
+  width: 24rem;
+}
+
 .max-w-editor {
   max-width: 780px;
 }
@@ -1099,6 +1111,10 @@ hue-6-2: #e6c07b
 
 .items-baseline {
   align-items: baseline;
+}
+
+.justify-end {
+  justify-content: flex-end;
 }
 
 .justify-center {

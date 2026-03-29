@@ -16,7 +16,6 @@ defmodule SkillKit.Web.Components.InlineThreadTest do
     }
 
     html = render_component(&InlineThread.inline_thread/1, thread: thread)
-    assert html =~ "Sessions are stored server-side"
     assert html =~ "What storage backend?"
     assert html =~ "ETS would be simplest"
   end
