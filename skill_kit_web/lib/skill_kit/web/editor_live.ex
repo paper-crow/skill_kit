@@ -191,7 +191,7 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:inline_thread, thread)
       |> assign(:suspended_thread, nil)
 
-    {:noreply, push_event(socket, "maintain_selection", %{})}
+    {:noreply, socket}
   end
 
   @impl true

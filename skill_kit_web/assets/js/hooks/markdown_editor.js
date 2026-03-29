@@ -24,21 +24,13 @@ const MarkdownEditor = {
     this.el.addEventListener("click", () => {
       const selection = window.getSelection();
       if (!selection || selection.isCollapsed) {
+        this._selectedText = null;
         this.pushEvent("clear_selection", {});
       }
     });
 
-    // Save current selection range so we can restore it
-    this._savedRange = null;
-
-    // Maintain selection when thread opens (prevents browser from clearing it)
-    this.handleEvent("maintain_selection", () => {
-      if (this._savedRange) {
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(this._savedRange);
-      }
-    });
+    // Save selection text so we can re-highlight after DOM patches
+    this._selectedText = null;
 
     // Track text selection for inline threads
     document.addEventListener("mouseup", (e) => {
@@ -50,8 +42,8 @@ const MarkdownEditor = {
       if (selection.rangeCount > 0 && !selection.isCollapsed) {
         const range = selection.getRangeAt(0);
         if (this.el.contains(range.commonAncestorContainer)) {
-          this._savedRange = range.cloneRange();
           const text = selection.toString();
+          this._selectedText = text;
           const rect = range.getBoundingClientRect();
           this.pushEvent("text_selected", {
             text: text,
@@ -67,6 +59,40 @@ const MarkdownEditor = {
   updated() {
     this.highlightCode();
     this.renderMermaid();
+    this.restoreSelection();
+  },
+
+  restoreSelection() {
+    if (!this._selectedText) return;
+
+    // Check if the inline thread is still open
+    const thread = document.getElementById("inline-thread");
+    if (!thread) {
+      this._selectedText = null;
+      return;
+    }
+
+    // Walk the text nodes to find and re-select the text
+    const treeWalker = document.createTreeWalker(
+      this.el,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    const searchText = this._selectedText;
+    let node;
+    while ((node = treeWalker.nextNode())) {
+      const idx = node.textContent.indexOf(searchText);
+      if (idx >= 0) {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + searchText.length);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    }
   },
 
   highlightCode() {
