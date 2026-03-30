@@ -130,7 +130,7 @@ defmodule SkillKit.Kit do
   end
 
   defp load_skill_files(dir, kit_name, tool_module, config) do
-    case File.ls(dir) do
+    case SkillKit.Storage.list(dir) do
       {:ok, entries} -> parse_skill_dirs(entries, dir, kit_name, tool_module, config)
       {:error, :enoent} -> {:ok, []}
     end
@@ -152,11 +152,11 @@ defmodule SkillKit.Kit do
   end
 
   defp skill_dir?(path) do
-    File.dir?(path) and File.exists?(Path.join(path, "SKILL.md"))
+    SkillKit.Storage.dir?(path) and SkillKit.Storage.exists?(Path.join(path, "SKILL.md"))
   end
 
   defp parse_skill_file(path, kit_name, tool_module, config) do
-    with {:ok, content} <- File.read(path),
+    with {:ok, content} <- SkillKit.Storage.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
          {:ok, yaml_map} <- parse_yaml(frontmatter) do
       build_kit_skill(yaml_map, body, path, kit_name, tool_module, config)
