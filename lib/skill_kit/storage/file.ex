@@ -4,6 +4,15 @@ defmodule SkillKit.Storage.File do
 
   Thin wrapper around Elixir's `File` module. This is the default
   provider for development and production.
+
+  ## Configuration
+
+      config :skill_kit, SkillKit.Storage,
+        provider: SkillKit.Storage.File
+
+  All paths are passed through to `File` unchanged — they should be
+  valid filesystem paths (absolute or relative to the application's
+  working directory).
   """
 
   @behaviour SkillKit.Storage

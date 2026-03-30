@@ -3,7 +3,40 @@ defmodule SkillKit.Storage.Memory do
   In-memory storage provider backed by an `Agent` process.
 
   Designed for testing. State is a flat map where paths are keys and
-  values are `{:file, binary()}` or `:dir`.
+  values are `{:file, binary()}` or `:dir`. Directories are inferred
+  from file paths (a `put` to `"a/b/file.txt"` makes `dir?("a/b")`
+  return `true`) and can also be created explicitly via `ensure_dir/1`.
+
+  ## Test Setup
+
+  Use `start_supervised!/1` in each test for automatic isolation — the
+  Agent dies with the test process, so no cleanup is needed:
+
+      setup do
+        start_supervised!(SkillKit.Storage.Memory)
+        :ok
+      end
+
+  Configure as the test provider:
+
+      # config/test.exs
+      config :skill_kit, SkillKit.Storage,
+        provider: SkillKit.Storage.Memory
+
+  ## Seeding Test Data
+
+      setup do
+        start_supervised!(SkillKit.Storage.Memory)
+        Storage.ensure_dir!("kits/greeting/skills/hello")
+        Storage.put!("kits/greeting/skills/hello/SKILL.md", skill_content)
+        {:ok, dir: "kits/greeting"}
+      end
+
+  ## How list/1 Works
+
+  `list/1` returns direct children only (matching `File.ls` semantics).
+  Given state `%{"a/b/c.txt" => {:file, ...}, "a/b/d/e.txt" => {:file, ...}}`,
+  `list("a/b")` returns `{:ok, ["c.txt", "d"]}`.
   """
 
   @behaviour SkillKit.Storage
