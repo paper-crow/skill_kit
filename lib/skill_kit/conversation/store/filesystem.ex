@@ -1,6 +1,6 @@
 defmodule SkillKit.Conversation.Store.Filesystem do
   @moduledoc """
-  Stores conversations as serialized Erlang terms on disk.
+  Stores conversations as serialized Erlang terms via the Storage provider.
 
   Uses `:erlang.term_to_binary/1` and `:erlang.binary_to_term/1` for
   safe serialization of message structs.
@@ -12,18 +12,20 @@ defmodule SkillKit.Conversation.Store.Filesystem do
 
   @behaviour SkillKit.Conversation.Store
 
+  alias SkillKit.Storage
+
   @impl true
   def save(conversation_id, messages, config) do
     path = conversation_path(conversation_id, config)
-    File.mkdir_p!(Path.dirname(path))
-    File.write(path, :erlang.term_to_binary(messages))
+    Storage.ensure_dir!(Path.dirname(path))
+    Storage.put(path, :erlang.term_to_binary(messages))
   end
 
   @impl true
   def load(conversation_id, config) do
     path = conversation_path(conversation_id, config)
 
-    case File.read(path) do
+    case Storage.read(path) do
       {:ok, binary} ->
         messages = :erlang.binary_to_term(binary)
         {:ok, messages}
@@ -40,7 +42,7 @@ defmodule SkillKit.Conversation.Store.Filesystem do
   def delete(conversation_id, config) do
     path = conversation_path(conversation_id, config)
 
-    case File.rm(path) do
+    case Storage.delete(path) do
       :ok -> :ok
       {:error, :enoent} -> :ok
       {:error, reason} -> {:error, reason}
