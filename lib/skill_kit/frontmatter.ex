@@ -11,18 +11,6 @@ defmodule SkillKit.Frontmatter do
   """
 
   @doc """
-  Reads a file and parses its frontmatter.
-
-  Returns `{:ok, yaml_map, body}` or `{:error, reason}`.
-  """
-  @spec parse_file(Path.t()) :: {:ok, map(), String.t()} | {:error, term()}
-  def parse_file(path) do
-    with {:ok, content} <- File.read(path) do
-      parse(content)
-    end
-  end
-
-  @doc """
   Parses a string containing YAML frontmatter and a markdown body.
 
   Returns `{:ok, yaml_map, body}` or `{:error, reason}`.

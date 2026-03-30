@@ -35,7 +35,8 @@ defmodule SkillKit.Agent.Definition do
   """
   @spec parse(Path.t()) :: {:ok, t()} | {:error, term()}
   def parse(path) do
-    with {:ok, yaml, body} <- SkillKit.Frontmatter.parse_file(path) do
+    with {:ok, content} <- SkillKit.Storage.read(path),
+         {:ok, yaml, body} <- SkillKit.Frontmatter.parse(content) do
       build(yaml, body, path)
     end
   end

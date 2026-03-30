@@ -5,6 +5,22 @@ defmodule SkillKit.Agent.DefinitionTest do
 
   @fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "agents"])
 
+  setup do
+    start_supervised!(SkillKit.Storage.Memory)
+
+    load_fixture(["valid", "project-a", "AGENT.md"])
+    load_fixture(["valid", "simple", "AGENT.md"])
+    load_fixture(["invalid", "missing-name", "AGENT.md"])
+
+    :ok
+  end
+
+  defp load_fixture(segments) do
+    path = Path.join([@fixtures_path | segments])
+    content = File.read!(path)
+    SkillKit.Storage.Memory.put(path, content)
+  end
+
   describe "parse/1" do
     test "parses a full AGENT.md with all fields" do
       path = Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"])
