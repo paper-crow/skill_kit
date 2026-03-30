@@ -45,15 +45,29 @@ defmodule SkillKit.Kit.GitHub.Cache do
   @spec remove(Ref.t(), Path.t()) :: :ok
   def remove(%Ref{} = ref, cache_dir) do
     dir = kit_dir(ref, cache_dir)
-    remove_if_exists(dir)
+    remove_and_cleanup(dir, cache_dir)
   end
 
-  defp remove_if_exists(dir) do
+  defp remove_and_cleanup(dir, cache_dir) do
     if File.dir?(dir) do
       File.rm_rf!(dir)
+      cleanup_empty_parents(Path.dirname(dir), cache_dir)
     end
 
     :ok
+  end
+
+  defp cleanup_empty_parents(dir, cache_dir) when dir == cache_dir, do: :ok
+
+  defp cleanup_empty_parents(dir, cache_dir) do
+    case File.ls(dir) do
+      {:ok, []} ->
+        File.rmdir(dir)
+        cleanup_empty_parents(Path.dirname(dir), cache_dir)
+
+      _ ->
+        :ok
+    end
   end
 
   defp decompress_and_list(tarball_data) do

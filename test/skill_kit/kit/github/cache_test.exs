@@ -105,6 +105,17 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
       {:ok, ref} = Ref.parse("owner/repo@main")
       assert :ok = Cache.remove(ref, cache_dir)
     end
+
+    test "cleans up empty parent directories", %{cache_dir: cache_dir} do
+      tarball = create_test_tarball("owner-repo-abc123", "skills/greet/SKILL.md", skill_content())
+      {:ok, ref} = Ref.parse("owner/repo@main")
+      {:ok, _} = Cache.extract(tarball, ref, cache_dir)
+
+      Cache.remove(ref, cache_dir)
+
+      refute File.dir?(Path.join([cache_dir, "owner", "repo"]))
+      refute File.dir?(Path.join([cache_dir, "owner"]))
+    end
   end
 
   defp skill_content do
