@@ -18,6 +18,7 @@ defmodule SkillKit.Kit.Local do
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
   alias SkillKit.Kit.Local.Parser
+  alias SkillKit.Storage
 
   require Logger
 
@@ -50,13 +51,13 @@ defmodule SkillKit.Kit.Local do
   defp wildcard?(dir), do: String.ends_with?(dir, "/*")
 
   defp load_wildcard(parent_dir) do
-    case File.ls(parent_dir) do
+    case Storage.list(parent_dir) do
       {:ok, entries} ->
         kits =
           entries
           |> Enum.reject(&hidden?/1)
           |> Enum.map(&Path.join(parent_dir, &1))
-          |> Enum.filter(&File.dir?/1)
+          |> Enum.filter(&Storage.dir?/1)
           |> Enum.flat_map(&load_wildcard_child/1)
 
         {:ok, kits}
@@ -86,16 +87,16 @@ defmodule SkillKit.Kit.Local do
 
   defp load_single(dir) do
     cond do
-      not File.dir?(dir) -> {:ok, []}
+      not Storage.dir?(dir) -> {:ok, []}
       valid_kit?(dir) -> {:ok, [load_kit(dir)]}
       true -> {:error, :invalid_kit}
     end
   end
 
   defp valid_kit?(dir) do
-    File.exists?(Path.join(dir, "AGENT.md")) or
-      File.dir?(Path.join(dir, "skills")) or
-      File.dir?(Path.join(dir, "agents"))
+    Storage.exists?(Path.join(dir, "AGENT.md")) or
+      Storage.dir?(Path.join(dir, "skills")) or
+      Storage.dir?(Path.join(dir, "agents"))
   end
 
   defp load_kit(dir) do
@@ -125,7 +126,7 @@ defmodule SkillKit.Kit.Local do
   defp load_skills(dir) do
     skills_dir = Path.join(dir, "skills")
 
-    if File.dir?(skills_dir) do
+    if Storage.dir?(skills_dir) do
       load_skill_dirs(skills_dir)
     else
       {[], []}
@@ -133,11 +134,11 @@ defmodule SkillKit.Kit.Local do
   end
 
   defp load_skill_dirs(skills_dir) do
-    case File.ls(skills_dir) do
+    case Storage.list(skills_dir) do
       {:ok, entries} ->
         entries
         |> Enum.map(&Path.join(skills_dir, &1))
-        |> Enum.filter(&File.dir?/1)
+        |> Enum.filter(&Storage.dir?/1)
         |> Enum.reduce({[], []}, &load_skill_dir/2)
 
       {:error, _} ->
@@ -148,7 +149,7 @@ defmodule SkillKit.Kit.Local do
   defp load_skill_dir(skill_dir, {skills, errors}) do
     skill_md = Path.join(skill_dir, "SKILL.md")
 
-    if File.exists?(skill_md) do
+    if Storage.exists?(skill_md) do
       case Parser.load_file(skill_md) do
         {:ok, skill} -> {[skill | skills], errors}
         {:error, reason} -> {skills, [{Path.basename(skill_dir), reason} | errors]}
@@ -165,11 +166,17 @@ defmodule SkillKit.Kit.Local do
   defp load_subagents(dir) do
     agents_dir = Path.join(dir, "agents")
 
-    if File.dir?(agents_dir) do
-      agents_dir
-      |> Path.join("*.md")
-      |> Path.wildcard()
-      |> Enum.reduce({[], []}, &load_agent_file/2)
+    if Storage.dir?(agents_dir) do
+      case Storage.list(agents_dir) do
+        {:ok, entries} ->
+          entries
+          |> Enum.filter(&String.ends_with?(&1, ".md"))
+          |> Enum.map(&Path.join(agents_dir, &1))
+          |> Enum.reduce({[], []}, &load_agent_file/2)
+
+        {:error, _} ->
+          {[], []}
+      end
     else
       {[], []}
     end
@@ -189,7 +196,7 @@ defmodule SkillKit.Kit.Local do
   defp load_agent(dir) do
     root_path = Path.join(dir, "AGENT.md")
 
-    if File.exists?(root_path) do
+    if Storage.exists?(root_path) do
       case Definition.parse(root_path) do
         {:ok, agent} -> {agent, []}
         {:error, reason} -> {nil, [{"AGENT.md", reason}]}

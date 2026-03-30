@@ -1,27 +1,44 @@
 defmodule SkillKit.Kit.LocalTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import ExUnit.CaptureLog
 
   alias SkillKit.Kit.Local
+  alias SkillKit.Storage
 
-  @valid_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "valid"])
-  @invalid_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "invalid"])
-  @nested_kit Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "nested"])
-  @root_agent_kit Path.join([
-                    __DIR__,
-                    "..",
-                    "..",
-                    "support",
-                    "fixtures",
-                    "skills",
-                    "with_root_agent"
-                  ])
-  @wildcard_dir Path.join([__DIR__, "..", "..", "support", "fixtures", "skills", "wildcard"])
+  @fixtures_base Path.join([__DIR__, "..", "..", "support", "fixtures", "skills"])
+
+  setup do
+    start_supervised!(Storage.Memory)
+    :ok
+  end
+
+  defp seed_fixture_tree(disk_path, storage_path) do
+    Storage.ensure_dir!(storage_path)
+
+    case File.ls(disk_path) do
+      {:ok, entries} ->
+        Enum.each(entries, fn entry ->
+          disk_entry = Path.join(disk_path, entry)
+          storage_entry = Path.join(storage_path, entry)
+
+          if File.dir?(disk_entry) do
+            seed_fixture_tree(disk_entry, storage_entry)
+          else
+            {:ok, content} = File.read(disk_entry)
+            Storage.put!(storage_entry, content)
+          end
+        end)
+
+      {:error, _} ->
+        :ok
+    end
+  end
 
   describe "load_kits/1 with dir: (single kit)" do
     test "loads skills from skills/*/SKILL.md directories" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "valid"), "kits/valid")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/valid")
       skill_names = Enum.map(kit.skills, & &1.name)
 
       assert "files:summarize" in skill_names
@@ -29,7 +46,8 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "does not recurse into skill subdirectories" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @nested_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "nested"), "kits/nested")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/nested")
       skill_names = Enum.map(kit.skills, & &1.name)
 
       assert "admin:delete-user" in skill_names
@@ -37,13 +55,15 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "detects root AGENT.md as agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "with_root_agent"), "kits/with_root_agent")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/with_root_agent")
       assert kit.agent != nil
       assert kit.agent.name == "root-agent"
     end
 
     test "loads subagents from agents/*.md" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @root_agent_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "with_root_agent"), "kits/with_root_agent")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/with_root_agent")
       agent_names = Enum.map(kit.subagents, & &1.name)
 
       assert "helper" in agent_names
@@ -51,14 +71,17 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "skips non-skill subdirectories inside skills/ silently" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "valid"), "kits/valid")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/valid")
       assert length(kit.skills) == 3
     end
 
     test "skips malformed skill files with warning" do
+      seed_fixture_tree(Path.join(@fixtures_base, "invalid"), "kits/invalid")
+
       log =
         capture_log([level: :warning], fn ->
-          assert {:ok, [kit]} = Local.load_kits(dir: @invalid_kit)
+          assert {:ok, [kit]} = Local.load_kits(dir: "kits/invalid")
           assert is_list(kit.skills)
         end)
 
@@ -67,7 +90,8 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "kit with no root AGENT.md has nil agent" do
-      assert {:ok, [kit]} = Local.load_kits(dir: @valid_kit)
+      seed_fixture_tree(Path.join(@fixtures_base, "valid"), "kits/valid")
+      assert {:ok, [kit]} = Local.load_kits(dir: "kits/valid")
       assert is_nil(kit.agent)
     end
 
@@ -76,19 +100,15 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "returns error for explicit dir that is not a valid kit" do
-      empty_dir =
-        Path.join(System.tmp_dir!(), "empty_kit_test_#{:erlang.unique_integer([:positive])}")
-
-      File.mkdir_p!(empty_dir)
-      on_exit(fn -> File.rm_rf!(empty_dir) end)
-
-      assert {:error, :invalid_kit} = Local.load_kits(dir: empty_dir)
+      Storage.ensure_dir!("kits/empty")
+      assert {:error, :invalid_kit} = Local.load_kits(dir: "kits/empty")
     end
   end
 
   describe "load_kits/1 with dir: wildcard" do
     test "loads each immediate child as a separate kit" do
-      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+      seed_fixture_tree(Path.join(@fixtures_base, "wildcard"), "kits/wildcard")
+      assert {:ok, kits} = Local.load_kits(dir: "kits/wildcard/*")
       kit_names = Enum.map(kits, & &1.name)
 
       assert "kit-a" in kit_names
@@ -96,16 +116,19 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "skips hidden directories silently" do
-      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+      seed_fixture_tree(Path.join(@fixtures_base, "wildcard"), "kits/wildcard")
+      assert {:ok, kits} = Local.load_kits(dir: "kits/wildcard/*")
       kit_names = Enum.map(kits, & &1.name)
 
       refute ".hidden-kit" in kit_names
     end
 
     test "warns and skips non-kit directories" do
+      seed_fixture_tree(Path.join(@fixtures_base, "wildcard"), "kits/wildcard")
+
       log =
         capture_log([level: :warning], fn ->
-          assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+          assert {:ok, kits} = Local.load_kits(dir: "kits/wildcard/*")
           kit_names = Enum.map(kits, & &1.name)
 
           refute "not-a-kit" in kit_names
@@ -115,7 +138,8 @@ defmodule SkillKit.Kit.LocalTest do
     end
 
     test "each kit has its own skills" do
-      assert {:ok, kits} = Local.load_kits(dir: "#{@wildcard_dir}/*")
+      seed_fixture_tree(Path.join(@fixtures_base, "wildcard"), "kits/wildcard")
+      assert {:ok, kits} = Local.load_kits(dir: "kits/wildcard/*")
 
       kit_a = Enum.find(kits, &(&1.name == "kit-a"))
       kit_b = Enum.find(kits, &(&1.name == "kit-b"))
