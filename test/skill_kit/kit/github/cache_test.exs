@@ -118,6 +118,47 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
     end
   end
 
+  describe "extract/3 path traversal protection" do
+    test "skips tarball entries with path traversal sequences", %{cache_dir: cache_dir} do
+      {:ok, ref} = Ref.parse("owner/repo@main")
+      kit_dir = Cache.kit_dir(ref, cache_dir)
+
+      # Tarball with a traversal entry that escapes the kit_dir
+      traversal_path = ~c"owner-repo-abc123/../../../etc/evil.txt"
+      normal_path = ~c"owner-repo-abc123/skills/greet/SKILL.md"
+
+      files = [
+        {traversal_path, "malicious content"},
+        {normal_path, skill_content()}
+      ]
+
+      tarball = create_tarball_from_files(files)
+      {:ok, _result_dir} = Cache.extract(tarball, ref, cache_dir)
+
+      # The traversal entry must NOT be written anywhere outside the kit_dir
+      # With ../../ etc/evil.txt from kit_dir (cache/owner/repo/main), it
+      # resolves to cache/etc/evil.txt — escaping the kit directory
+      evil_path = Path.join(cache_dir, "etc/evil.txt")
+      refute File.exists?(evil_path)
+
+      # But safe files should still be extracted
+      assert File.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
+    end
+  end
+
+  defp create_tarball_from_files(files) do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "cache_test_traversal_#{:erlang.unique_integer([:positive])}.tar"
+      )
+
+    :ok = :erl_tar.create(String.to_charlist(path), files, [])
+    tar_data = File.read!(path)
+    File.rm!(path)
+    :zlib.gzip(tar_data)
+  end
+
   defp skill_content do
     """
     ---

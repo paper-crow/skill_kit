@@ -9,6 +9,8 @@ defmodule SkillKit.Kit.GitHub.Cache do
 
   alias SkillKit.Kit.GitHub.Ref
 
+  require Logger
+
   @spec extract(binary(), Ref.t(), Path.t()) :: {:ok, Path.t()} | {:error, term()}
   def extract(tarball_data, %Ref{} = ref, cache_dir) do
     base_dir = kit_dir(ref, cache_dir)
@@ -82,9 +84,15 @@ defmodule SkillKit.Kit.GitHub.Cache do
 
   defp write_stripped_file({path, content}, base_dir) do
     stripped = strip_top_level(to_string(path))
-    dest = Path.join(base_dir, stripped)
-    File.mkdir_p!(Path.dirname(dest))
-    File.write!(dest, content)
+    dest = Path.expand(Path.join(base_dir, stripped))
+    safe_base = Path.expand(base_dir)
+
+    if String.starts_with?(dest, safe_base <> "/") do
+      File.mkdir_p!(Path.dirname(dest))
+      File.write!(dest, content)
+    else
+      Logger.warning("Skipping tarball entry with path traversal: #{path}")
+    end
   end
 
   defp strip_top_level(path) do

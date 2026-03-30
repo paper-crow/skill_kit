@@ -300,10 +300,10 @@ defmodule SkillKit.Kit.GitHub do
   defp execute_import(%SkillKit.ToolExecution{skill: skill, input: input}) do
     meta = skill.metadata
     source = Map.fetch!(input, "source")
-    cache_dir = Map.get(input, "cache_dir", meta["cache_dir"] || @default_cache_dir)
-    allowed = Map.get(input, "allowed_sources", meta["allowed_sources"] || "*")
-    token = Map.get(input, "api_token", meta["api_token"])
-    base_url = Map.get(input, "base_url")
+    cache_dir = meta["cache_dir"] || @default_cache_dir
+    allowed = meta["allowed_sources"] || "*"
+    token = meta["api_token"]
+    base_url = meta["base_url"]
 
     with {:ok, ref} <- Ref.parse(source),
          :ok <- check_allowed(ref, allowed) do
@@ -333,9 +333,7 @@ defmodule SkillKit.Kit.GitHub do
   end
 
   defp download_and_cache(ref, cache_dir, token, base_url) do
-    client_opts =
-      [token: resolve_token(token)]
-      |> maybe_add_base_url(base_url)
+    client_opts = maybe_add_base_url([token: resolve_token(token)], base_url)
 
     case Client.download_tarball(ref, client_opts) do
       {:ok, tarball} ->
@@ -391,9 +389,9 @@ defmodule SkillKit.Kit.GitHub do
   # List execution
   # -------------------------------------------------------------------
 
-  defp execute_list(%SkillKit.ToolExecution{skill: skill, input: input}) do
+  defp execute_list(%SkillKit.ToolExecution{skill: skill}) do
     meta = skill.metadata
-    cache_dir = Map.get(input, "cache_dir", meta["cache_dir"] || @default_cache_dir)
+    cache_dir = meta["cache_dir"] || @default_cache_dir
     cached = Cache.list_cached(cache_dir)
 
     if cached == [] do
@@ -418,7 +416,7 @@ defmodule SkillKit.Kit.GitHub do
   defp execute_remove(%SkillKit.ToolExecution{skill: skill, input: input}) do
     meta = skill.metadata
     source = Map.fetch!(input, "source")
-    cache_dir = Map.get(input, "cache_dir", meta["cache_dir"] || @default_cache_dir)
+    cache_dir = meta["cache_dir"] || @default_cache_dir
 
     case Ref.parse(source) do
       {:ok, ref} ->

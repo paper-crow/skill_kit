@@ -247,6 +247,65 @@ defmodule SkillKit.Kit.GitHubTest do
       assert {:error, message} = GitHub.execute(exec)
       assert message =~ "not in allowed_sources"
     end
+
+    test "ignores allowed_sources override in LLM input", %{cache_dir: cache_dir} do
+      meta = %{
+        "cache_dir" => cache_dir,
+        "allowed_sources" => "paper-crow/*",
+        "api_token" => nil
+      }
+
+      exec = %SkillKit.ToolExecution{
+        skill: %Skill{name: "github:import", tool: GitHub, metadata: meta},
+        tool: GitHub,
+        input: %{"source" => "evil-corp/malware", "allowed_sources" => "*"},
+        context: %{},
+        status: :pending
+      }
+
+      assert {:error, message} = GitHub.execute(exec)
+      assert message =~ "not in allowed_sources"
+    end
+
+    test "ignores cache_dir override in LLM input", %{cache_dir: cache_dir} do
+      bypass = Bypass.open()
+      tarball = create_test_tarball()
+
+      Bypass.expect_once(bypass, "GET", "/repos/owner/repo/tarball/main", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/gzip")
+        |> Plug.Conn.resp(200, tarball)
+      end)
+
+      attacker_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "attacker_dir_#{:erlang.unique_integer([:positive])}"
+        )
+
+      on_exit(fn -> File.rm_rf!(attacker_dir) end)
+
+      meta = %{
+        "cache_dir" => cache_dir,
+        "allowed_sources" => "*",
+        "api_token" => nil,
+        "base_url" => "http://localhost:#{bypass.port}"
+      }
+
+      exec = %SkillKit.ToolExecution{
+        skill: %Skill{name: "github:import", tool: GitHub, metadata: meta},
+        tool: GitHub,
+        input: %{"source" => "owner/repo@main", "cache_dir" => attacker_dir},
+        context: %{},
+        status: :pending
+      }
+
+      {:ok, _} = GitHub.execute(exec)
+
+      # Files should be in the operator-configured cache_dir, not attacker_dir
+      assert File.dir?(Path.join([cache_dir, "owner", "repo", "main"]))
+      refute File.dir?(attacker_dir)
+    end
   end
 
   # -------------------------------------------------------------------
@@ -329,12 +388,14 @@ defmodule SkillKit.Kit.GitHubTest do
   end
 
   defp build_execution(skill_name, input) do
-    meta = Map.take(input, ["cache_dir", "allowed_sources", "api_token"])
+    meta_keys = ["cache_dir", "allowed_sources", "api_token", "base_url"]
+    meta = Map.take(input, meta_keys)
+    llm_input = Map.drop(input, meta_keys)
 
     %SkillKit.ToolExecution{
       skill: %Skill{name: skill_name, tool: GitHub, metadata: meta},
       tool: GitHub,
-      input: input,
+      input: llm_input,
       context: %{},
       status: :pending
     }
