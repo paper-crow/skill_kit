@@ -6,3 +6,5 @@ config :skill_kit, SkillKit.LLM,
     mock: SkillKit.LLM.Mock
   ],
   default_provider: :mock
+
+config :skill_kit, SkillKit.Storage, provider: SkillKit.Storage.Memory

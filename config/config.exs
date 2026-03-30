@@ -11,4 +11,6 @@ config :skill_kit, :hook_handlers, %{
   "http" => SkillKit.Hooks.Http
 }
 
+config :skill_kit, SkillKit.Storage, provider: SkillKit.Storage.File
+
 import_config "#{config_env()}.exs"
