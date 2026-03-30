@@ -17,21 +17,20 @@ defmodule SkillKit.Kit.LocalTest do
     Storage.ensure_dir!(storage_path)
 
     case File.ls(disk_path) do
-      {:ok, entries} ->
-        Enum.each(entries, fn entry ->
-          disk_entry = Path.join(disk_path, entry)
-          storage_entry = Path.join(storage_path, entry)
+      {:ok, entries} -> Enum.each(entries, &seed_entry(disk_path, storage_path, &1))
+      {:error, _} -> :ok
+    end
+  end
 
-          if File.dir?(disk_entry) do
-            seed_fixture_tree(disk_entry, storage_entry)
-          else
-            {:ok, content} = File.read(disk_entry)
-            Storage.put!(storage_entry, content)
-          end
-        end)
+  defp seed_entry(disk_path, storage_path, entry) do
+    disk_entry = Path.join(disk_path, entry)
+    storage_entry = Path.join(storage_path, entry)
 
-      {:error, _} ->
-        :ok
+    if File.dir?(disk_entry) do
+      seed_fixture_tree(disk_entry, storage_entry)
+    else
+      {:ok, content} = File.read(disk_entry)
+      Storage.put!(storage_entry, content)
     end
   end
 

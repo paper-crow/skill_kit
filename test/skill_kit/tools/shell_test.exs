@@ -1,8 +1,14 @@
 defmodule SkillKit.Tools.ShellTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
+  alias SkillKit.Storage
   alias SkillKit.ToolExecution
   alias SkillKit.Tools.Shell
+
+  setup do
+    start_supervised!(Storage.Memory)
+    :ok
+  end
 
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do

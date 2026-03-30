@@ -1,17 +1,14 @@
 defmodule SkillKit.Kit.GitHub.IntegrationTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Catalog
   alias SkillKit.Kit.GitHub
+  alias SkillKit.Storage
 
   setup do
-    cache_dir =
-      Path.join(
-        System.tmp_dir!(),
-        "skill_kit_integration_test_#{:erlang.unique_integer([:positive])}"
-      )
+    start_supervised!(Storage.Memory)
 
-    on_exit(fn -> File.rm_rf!(cache_dir) end)
+    cache_dir = "/skill_kit_integration_test_#{:erlang.unique_integer([:positive])}"
 
     %{cache_dir: cache_dir}
   end
@@ -65,9 +62,9 @@ defmodule SkillKit.Kit.GitHub.IntegrationTest do
   defp populate_cache(cache_dir, owner, repo, ref) do
     kit_dir = Path.join([cache_dir, owner, repo, ref])
     skill_dir = Path.join([kit_dir, "skills", "greet"])
-    File.mkdir_p!(skill_dir)
+    Storage.ensure_dir!(skill_dir)
 
-    File.write!(Path.join(skill_dir, "SKILL.md"), """
+    Storage.put!(Path.join(skill_dir, "SKILL.md"), """
     ---
     name: "test:greet"
     description: "A greeting skill"

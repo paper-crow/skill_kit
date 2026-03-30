@@ -11,13 +11,23 @@ defmodule SkillKit.KitTest.TestKit do
 end
 
 defmodule SkillKit.KitTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
   alias SkillKit.Skill
+  alias SkillKit.Storage
   alias SkillKit.ToolExecution
+
+  @fixtures_disk Path.expand("../support/fixtures/test_kit/skills", __DIR__)
+  @fixtures_storage Path.join([__DIR__, "../support/fixtures/test_kit/skills"])
+
+  setup do
+    start_supervised!(Storage.Memory)
+    seed_fixture_tree(@fixtures_disk, @fixtures_storage)
+    :ok
+  end
 
   describe "use SkillKit.Kit" do
     test "load_kits/1 returns kit with skills from skills/ directory" do
@@ -98,6 +108,27 @@ defmodule SkillKit.KitTest do
 
       kit = %Kit{name: "my-kit", agent: root}
       assert kit.agent == root
+    end
+  end
+
+  defp seed_fixture_tree(disk_path, storage_path) do
+    Storage.ensure_dir!(storage_path)
+
+    case File.ls(disk_path) do
+      {:ok, entries} -> Enum.each(entries, &seed_entry(disk_path, storage_path, &1))
+      {:error, _} -> :ok
+    end
+  end
+
+  defp seed_entry(disk_path, storage_path, entry) do
+    disk_entry = Path.join(disk_path, entry)
+    storage_entry = Path.join(storage_path, entry)
+
+    if File.dir?(disk_entry) do
+      seed_fixture_tree(disk_entry, storage_entry)
+    else
+      {:ok, content} = File.read(disk_entry)
+      Storage.put!(storage_entry, content)
     end
   end
 end

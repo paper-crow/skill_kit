@@ -1,17 +1,14 @@
 defmodule SkillKit.Kit.GitHubTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Kit.GitHub
   alias SkillKit.Skill
+  alias SkillKit.Storage
 
   setup do
-    cache_dir =
-      Path.join(
-        System.tmp_dir!(),
-        "skill_kit_github_test_#{:erlang.unique_integer([:positive])}"
-      )
+    start_supervised!(Storage.Memory)
 
-    on_exit(fn -> File.rm_rf!(cache_dir) end)
+    cache_dir = "/skill_kit_github_test_#{:erlang.unique_integer([:positive])}"
 
     %{cache_dir: cache_dir}
   end
@@ -277,13 +274,7 @@ defmodule SkillKit.Kit.GitHubTest do
         |> Plug.Conn.resp(200, tarball)
       end)
 
-      attacker_dir =
-        Path.join(
-          System.tmp_dir!(),
-          "attacker_dir_#{:erlang.unique_integer([:positive])}"
-        )
-
-      on_exit(fn -> File.rm_rf!(attacker_dir) end)
+      attacker_dir = "/attacker_dir_#{:erlang.unique_integer([:positive])}"
 
       meta = %{
         "cache_dir" => cache_dir,
@@ -303,8 +294,8 @@ defmodule SkillKit.Kit.GitHubTest do
       {:ok, _} = GitHub.execute(exec)
 
       # Files should be in the operator-configured cache_dir, not attacker_dir
-      assert File.dir?(Path.join([cache_dir, "owner", "repo", "main"]))
-      refute File.dir?(attacker_dir)
+      assert Storage.dir?(Path.join([cache_dir, "owner", "repo", "main"]))
+      refute Storage.dir?(attacker_dir)
     end
   end
 
@@ -365,7 +356,7 @@ defmodule SkillKit.Kit.GitHubTest do
       assert {:ok, result} = GitHub.execute(execution)
       assert result =~ "Removed"
 
-      refute File.dir?(Path.join([cache_dir, "owner", "repo", "main"]))
+      refute Storage.dir?(Path.join([cache_dir, "owner", "repo", "main"]))
     end
   end
 
@@ -376,9 +367,9 @@ defmodule SkillKit.Kit.GitHubTest do
   defp populate_cache(cache_dir, owner, repo, ref) do
     kit_dir = Path.join([cache_dir, owner, repo, ref])
     skill_dir = Path.join([kit_dir, "skills", "greet"])
-    File.mkdir_p!(skill_dir)
+    Storage.ensure_dir!(skill_dir)
 
-    File.write!(Path.join(skill_dir, "SKILL.md"), """
+    Storage.put!(Path.join(skill_dir, "SKILL.md"), """
     ---
     name: "test:greet"
     description: "A greeting skill"
