@@ -233,7 +233,6 @@ tree, message flow, and module boundaries.
 - [Architecture](guides/architecture.md) — supervision tree, message flow, module boundaries
 - [Skill Format](guides/skill-format.md) — `SKILL.md` file format, frontmatter, template tokens, Agent Skills spec compatibility
 - [Providers](guides/providers.md) — writing and registering kit providers (`Kit.Local`, `Kit.GitHub`, `Kit.Memory`, custom)
-- [GitHub Import](guides/github-import.md) — importing skills from GitHub repos at runtime, reference format, allowed sources, cache
 - [Hooks and Execution](guides/hooks-and-execution.md) — boundary model, hook struct, return contract, handler behaviour, built-in handlers, context maps
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter

@@ -102,8 +102,8 @@ provider ships built-in skills so agents can import repos mid-conversation.
 }
 ```
 
-See the [GitHub Import guide](github-import.md) for configuration, reference
-format, allowed sources patterns, and cache behaviour.
+See the `SkillKit.Kit.GitHub` moduledoc for reference format, allowed sources
+patterns, cache behaviour, and built-in skill details.
 
 ---
 
