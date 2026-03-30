@@ -31,3 +31,4 @@ skill_kit-*.tar
 CLAUDE.local.md
 .env
 .memory/
+/.superpowers
