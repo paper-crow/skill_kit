@@ -1,12 +1,13 @@
 defmodule SkillKit.Agent.DefinitionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Agent.Definition
+  alias SkillKit.Storage
 
   @fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "agents"])
 
   setup do
-    start_supervised!(SkillKit.Storage.Memory)
+    start_supervised!(Storage.Memory)
 
     load_fixture(["valid", "project-a", "AGENT.md"])
     load_fixture(["valid", "simple", "AGENT.md"])
@@ -18,7 +19,7 @@ defmodule SkillKit.Agent.DefinitionTest do
   defp load_fixture(segments) do
     path = Path.join([@fixtures_path | segments])
     content = File.read!(path)
-    SkillKit.Storage.Memory.put(path, content)
+    Storage.Memory.put(path, content)
   end
 
   describe "parse/1" do
