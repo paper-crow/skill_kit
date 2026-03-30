@@ -792,6 +792,8 @@ hue-6-2: #e6c07b
   border-radius: 0.25rem;
 }
 
+/* Inline thread selection highlight */
+
 /* Chat prose styling — compact Earmark output for chat messages */
 
 .prose-chat p {
@@ -1003,10 +1005,6 @@ hue-6-2: #e6c07b
   height: 100vh;
 }
 
-.max-h-96 {
-  max-height: 24rem;
-}
-
 .max-h-\[500px\] {
   max-height: 500px;
 }
@@ -1043,8 +1041,8 @@ hue-6-2: #e6c07b
   width: 2rem;
 }
 
-.w-80 {
-  width: 20rem;
+.w-96 {
+  width: 24rem;
 }
 
 .w-\[520px\] {
@@ -1061,10 +1059,6 @@ hue-6-2: #e6c07b
 
 .w-screen {
   width: 100vw;
-}
-
-.w-96 {
-  width: 24rem;
 }
 
 .max-w-editor {
@@ -1101,20 +1095,12 @@ hue-6-2: #e6c07b
   flex-direction: column;
 }
 
-.items-start {
-  align-items: flex-start;
-}
-
 .items-center {
   align-items: center;
 }
 
 .items-baseline {
   align-items: baseline;
-}
-
-.justify-end {
-  justify-content: flex-end;
 }
 
 .justify-center {
@@ -1428,11 +1414,6 @@ hue-6-2: #e6c07b
   line-height: 1.5rem;
 }
 
-.text-lg {
-  font-size: 1.125rem;
-  line-height: 1.75rem;
-}
-
 .text-sm {
   font-size: 0.875rem;
   line-height: 1.25rem;
@@ -1453,14 +1434,6 @@ hue-6-2: #e6c07b
 
 .uppercase {
   text-transform: uppercase;
-}
-
-.italic {
-  font-style: italic;
-}
-
-.leading-none {
-  line-height: 1;
 }
 
 .leading-relaxed {

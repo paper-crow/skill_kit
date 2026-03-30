@@ -63,6 +63,13 @@ const MarkdownEditor = {
   },
 
   restoreSelection() {
+    // Clear any previous highlight marks
+    this.el.querySelectorAll("mark.inline-thread-highlight").forEach((mark) => {
+      const parent = mark.parentNode;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    });
+
     if (!this._selectedText) return;
 
     // Check if the inline thread is still open
@@ -72,7 +79,7 @@ const MarkdownEditor = {
       return;
     }
 
-    // Walk the text nodes to find and re-select the text
+    // Walk the text nodes to find and highlight with a <mark> element
     const treeWalker = document.createTreeWalker(
       this.el,
       NodeFilter.SHOW_TEXT,
@@ -87,9 +94,9 @@ const MarkdownEditor = {
         const range = document.createRange();
         range.setStart(node, idx);
         range.setEnd(node, idx + searchText.length);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
+        const mark = document.createElement("mark");
+        mark.className = "inline-thread-highlight";
+        range.surroundContents(mark);
         return;
       }
     }
