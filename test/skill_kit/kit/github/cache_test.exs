@@ -1,15 +1,13 @@
 defmodule SkillKit.Kit.GitHub.CacheTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Kit.GitHub.Cache
   alias SkillKit.Kit.GitHub.Ref
+  alias SkillKit.Storage
 
   setup do
-    cache_dir =
-      Path.join(System.tmp_dir!(), "skill_kit_cache_test_#{:erlang.unique_integer([:positive])}")
-
-    on_exit(fn -> File.rm_rf!(cache_dir) end)
-
+    start_supervised!(SkillKit.Storage.Memory)
+    cache_dir = "/test_cache_#{:erlang.unique_integer([:positive])}"
     %{cache_dir: cache_dir}
   end
 
@@ -19,8 +17,8 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
       {:ok, ref} = Ref.parse("owner/repo@main")
 
       assert {:ok, kit_dir} = Cache.extract(tarball, ref, cache_dir)
-      assert File.dir?(kit_dir)
-      assert File.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
+      assert Storage.dir?(kit_dir)
+      assert Storage.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
     end
 
     test "strips the top-level GitHub directory prefix", %{cache_dir: cache_dir} do
@@ -29,7 +27,7 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
 
       {:ok, kit_dir} = Cache.extract(tarball, ref, cache_dir)
 
-      refute File.dir?(Path.join(kit_dir, "owner-repo-abc123"))
+      refute Storage.dir?(Path.join(kit_dir, "owner-repo-abc123"))
     end
 
     test "uses path subdirectory when ref has path", %{cache_dir: cache_dir} do
@@ -44,7 +42,7 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
 
       {:ok, kit_dir} = Cache.extract(tarball, ref, cache_dir)
       assert String.ends_with?(kit_dir, "packages/nlp")
-      assert File.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
+      assert Storage.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
     end
   end
 
@@ -113,8 +111,8 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
 
       Cache.remove(ref, cache_dir)
 
-      refute File.dir?(Path.join([cache_dir, "owner", "repo"]))
-      refute File.dir?(Path.join([cache_dir, "owner"]))
+      refute Storage.dir?(Path.join([cache_dir, "owner", "repo"]))
+      refute Storage.dir?(Path.join([cache_dir, "owner"]))
     end
   end
 
@@ -139,10 +137,10 @@ defmodule SkillKit.Kit.GitHub.CacheTest do
       # With ../../ etc/evil.txt from kit_dir (cache/owner/repo/main), it
       # resolves to cache/etc/evil.txt — escaping the kit directory
       evil_path = Path.join(cache_dir, "etc/evil.txt")
-      refute File.exists?(evil_path)
+      refute Storage.exists?(evil_path)
 
       # But safe files should still be extracted
-      assert File.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
+      assert Storage.exists?(Path.join([kit_dir, "skills", "greet", "SKILL.md"]))
     end
   end
 

@@ -8,13 +8,14 @@ defmodule SkillKit.Kit.GitHub.Cache do
   """
 
   alias SkillKit.Kit.GitHub.Ref
+  alias SkillKit.Storage
 
   require Logger
 
   @spec extract(binary(), Ref.t(), Path.t()) :: {:ok, Path.t()} | {:error, term()}
   def extract(tarball_data, %Ref{} = ref, cache_dir) do
     base_dir = kit_dir(ref, cache_dir)
-    File.mkdir_p!(base_dir)
+    Storage.ensure_dir!(base_dir)
 
     with {:ok, files} <- decompress_and_list(tarball_data),
          :ok <- write_stripped_files(files, base_dir) do
@@ -25,7 +26,7 @@ defmodule SkillKit.Kit.GitHub.Cache do
   @spec exists?(Ref.t(), Path.t()) :: boolean()
   def exists?(%Ref{} = ref, cache_dir) do
     dir = kit_dir(ref, cache_dir)
-    File.dir?(dir)
+    Storage.dir?(dir)
   end
 
   @spec kit_dir(Ref.t(), Path.t()) :: Path.t()
@@ -35,7 +36,7 @@ defmodule SkillKit.Kit.GitHub.Cache do
 
   @spec list_cached(Path.t()) :: [%{owner: String.t(), repo: String.t(), ref: String.t()}]
   def list_cached(cache_dir) do
-    case File.ls(cache_dir) do
+    case Storage.list(cache_dir) do
       {:ok, owners} ->
         Enum.flat_map(owners, &list_owner_repos(cache_dir, &1))
 
@@ -51,8 +52,8 @@ defmodule SkillKit.Kit.GitHub.Cache do
   end
 
   defp remove_and_cleanup(dir, cache_dir) do
-    if File.dir?(dir) do
-      File.rm_rf!(dir)
+    if Storage.dir?(dir) do
+      Storage.delete_all!(dir)
       cleanup_empty_parents(Path.dirname(dir), cache_dir)
     end
 
@@ -62,9 +63,9 @@ defmodule SkillKit.Kit.GitHub.Cache do
   defp cleanup_empty_parents(dir, cache_dir) when dir == cache_dir, do: :ok
 
   defp cleanup_empty_parents(dir, cache_dir) do
-    case File.ls(dir) do
+    case Storage.list(dir) do
       {:ok, []} ->
-        File.rmdir(dir)
+        Storage.delete_dir(dir)
         cleanup_empty_parents(Path.dirname(dir), cache_dir)
 
       _ ->
@@ -88,8 +89,8 @@ defmodule SkillKit.Kit.GitHub.Cache do
     safe_base = Path.expand(base_dir)
 
     if String.starts_with?(dest, safe_base <> "/") do
-      File.mkdir_p!(Path.dirname(dest))
-      File.write!(dest, content)
+      Storage.ensure_dir!(Path.dirname(dest))
+      Storage.put!(dest, content)
     else
       Logger.warning("Skipping tarball entry with path traversal: #{path}")
     end
@@ -108,7 +109,7 @@ defmodule SkillKit.Kit.GitHub.Cache do
   defp list_owner_repos(cache_dir, owner) do
     owner_dir = Path.join(cache_dir, owner)
 
-    case File.ls(owner_dir) do
+    case Storage.list(owner_dir) do
       {:ok, repos} ->
         Enum.flat_map(repos, &list_repo_refs(cache_dir, owner, &1))
 
@@ -120,10 +121,10 @@ defmodule SkillKit.Kit.GitHub.Cache do
   defp list_repo_refs(cache_dir, owner, repo) do
     repo_dir = Path.join([cache_dir, owner, repo])
 
-    case File.ls(repo_dir) do
+    case Storage.list(repo_dir) do
       {:ok, refs} ->
         refs
-        |> Enum.filter(&File.dir?(Path.join(repo_dir, &1)))
+        |> Enum.filter(&Storage.dir?(Path.join(repo_dir, &1)))
         |> Enum.map(&%{owner: owner, repo: repo, ref: &1})
 
       {:error, _} ->
