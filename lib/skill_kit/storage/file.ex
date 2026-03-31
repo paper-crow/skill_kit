@@ -27,7 +27,12 @@ defmodule SkillKit.Storage.File do
   def delete(path), do: File.rm(path)
 
   @impl true
-  def delete_all(path), do: File.rm_rf(path)
+  def delete_all(path) do
+    case File.rm_rf(path) do
+      {:ok, files} -> {:ok, files}
+      {:error, reason, _file} -> {:error, reason}
+    end
+  end
 
   @impl true
   def list(path), do: File.ls(path)
