@@ -60,7 +60,17 @@ defmodule SkillKit.Web.OnboardingLive do
         <div :if={@error} class="font-heading text-2xl text-editor-text leading-snug mb-2">
           {@error}
         </div>
-        <div :if={!@error}>
+        <div :if={!@error and @waiting} class="animate-onboarding-fade-in">
+          <div class="flex items-center gap-3">
+            <div class="flex gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse" />
+              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:150ms]" />
+              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:300ms]" />
+            </div>
+            <span class="text-[15px] text-editor-text-faint">{@waiting_text}</span>
+          </div>
+        </div>
+        <div :if={!@error and !@waiting}>
           <h1 class="font-heading text-[28px] text-editor-text leading-snug mb-2">
             <.animated_words
               :if={@animate_question}
@@ -75,7 +85,12 @@ defmodule SkillKit.Web.OnboardingLive do
               "text-[15px] text-editor-text-faint leading-relaxed mb-9",
               if(@animate_question, do: "animate-onboarding-fade-in opacity-0", else: "")
             ]}
-            style={if(@animate_question, do: "animation-delay: #{word_count(@question) * 40 + 100}ms", else: "")}
+            style={
+              if(@animate_question,
+                do: "animation-delay: #{word_count(@question) * 40 + 100}ms",
+                else: ""
+              )
+            }
           >
             {@subtext}
           </p>
@@ -84,7 +99,12 @@ defmodule SkillKit.Web.OnboardingLive do
               "mt-9",
               if(@animate_question, do: "animate-onboarding-fade-in opacity-0", else: "")
             ]}
-            style={if(@animate_question, do: "animation-delay: #{word_count(@question) * 40 + 200}ms", else: "")}
+            style={
+              if(@animate_question,
+                do: "animation-delay: #{word_count(@question) * 40 + 200}ms",
+                else: ""
+              )
+            }
           >
             <form phx-submit="submit_answer" class="relative max-w-md">
               <input
@@ -93,22 +113,25 @@ defmodule SkillKit.Web.OnboardingLive do
                 type="text"
                 placeholder={@placeholder}
                 autocomplete="off"
-                disabled={@waiting}
                 phx-hook="OnboardingInput"
                 class="w-full bg-white dark:bg-editor-bg-alt border border-editor-border rounded-xl
                        px-5 py-4 pr-16 text-[15px] text-editor-text placeholder-editor-text-faint
                        focus:outline-none focus:border-editor-accent-muted
-                       disabled:opacity-50 transition-colors"
+                       transition-colors"
               />
               <button
                 type="submit"
-                disabled={@waiting}
                 class="absolute right-3 top-1/2 -translate-y-1/2
                        w-9 h-9 rounded-full bg-editor-accent text-white
                        flex items-center justify-center
-                       hover:opacity-90 disabled:opacity-40 transition-opacity"
+                       hover:opacity-90 transition-opacity"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="w-4 h-4"
+                >
                   <path
                     fill-rule="evenodd"
                     d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
@@ -146,7 +169,9 @@ defmodule SkillKit.Web.OnboardingLive do
       :for={{word, idx} <- Enum.with_index(@words)}
       class="inline-block animate-onboarding-word-reveal opacity-0"
       style={"animation-delay: #{idx * 40}ms"}
-    >{word}<span :if={idx < length(@words) - 1}>&nbsp;</span></span>
+    >
+      {word}<span :if={idx < length(@words) - 1}>&nbsp;</span>
+    </span>
     """
   end
 
@@ -215,6 +240,7 @@ defmodule SkillKit.Web.OnboardingLive do
     |> assign(:animate_question, true)
     |> assign(:question_key, 0)
     |> assign(:error, nil)
+    |> assign(:waiting_text, "Thinking...")
   end
 
   defp assign_fixed_question(socket, index) when index < length(@fixed_questions) do
@@ -263,6 +289,7 @@ defmodule SkillKit.Web.OnboardingLive do
       socket =
         socket
         |> assign(:waiting, true)
+        |> assign(:waiting_text, "Thinking...")
         |> maybe_start_agent()
         |> send_pairs_to_agent()
 
@@ -288,8 +315,8 @@ defmodule SkillKit.Web.OnboardingLive do
         socket
       ) do
     if has_doc_create?(tool_calls) do
-      Process.send_after(self(), :complete_transition, 600)
-      {:noreply, assign(socket, :transitioning, :out)}
+      # Tool hasn't executed yet — show "creating" state, wait for ToolCallComplete
+      {:noreply, assign(socket, waiting: true, waiting_text: "Creating your project brief...")}
     else
       parsed = parse_question(content)
       {:noreply, assign_question(socket, parsed)}
