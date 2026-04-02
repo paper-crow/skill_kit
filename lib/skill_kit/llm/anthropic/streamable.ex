@@ -54,10 +54,14 @@ defimpl SkillKit.Event.Streamable, for: Anthropic.Event.ContentBlockStop do
   end
 
   defp build_tool_call_complete(id, name, idx, acc) do
-    json = get_in(acc, [:partial_json, idx]) || "{}"
-    input = Jason.decode!(json)
+    json = get_in(acc, [:partial_json, idx])
+    input = decode_tool_input(json)
     {[%ToolCallComplete{id: id, name: name, input: input}], acc}
   end
+
+  defp decode_tool_input(nil), do: %{}
+  defp decode_tool_input(""), do: %{}
+  defp decode_tool_input(json), do: Jason.decode!(json)
 end
 
 defimpl SkillKit.Event.Streamable, for: Anthropic.Event.MessageDelta do
