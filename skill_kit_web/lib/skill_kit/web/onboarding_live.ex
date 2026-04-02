@@ -211,7 +211,7 @@ defmodule SkillKit.Web.OnboardingLive do
     socket =
       socket
       |> assign_onboarding_defaults(docs_root, conversation_id)
-      |> assign_fixed_question(0)
+      |> schedule_first_question()
 
     {:ok, socket}
   end
@@ -224,7 +224,7 @@ defmodule SkillKit.Web.OnboardingLive do
         socket =
           socket
           |> assign_onboarding_defaults(docs_root, conversation_id)
-          |> assign_fixed_question(0)
+          |> schedule_first_question()
 
         {:ok, socket}
 
@@ -250,7 +250,7 @@ defmodule SkillKit.Web.OnboardingLive do
         socket =
           socket
           |> assign_onboarding_defaults(docs_root, conversation_id)
-          |> assign_fixed_question(0)
+          |> schedule_first_question()
 
         {:ok, socket}
     end
@@ -313,7 +313,13 @@ defmodule SkillKit.Web.OnboardingLive do
       |> assign(:question_key, socket.assigns.question_key + 1)
 
     if next_index < length(@fixed_questions) do
-      socket = assign_fixed_question(socket, next_index)
+      Process.send_after(self(), {:show_fixed_question, next_index}, fake_thinking_delay())
+
+      socket =
+        socket
+        |> assign(:waiting, true)
+        |> assign(:waiting_text, "Thinking...")
+
       {:noreply, socket}
     else
       socket =
@@ -339,6 +345,18 @@ defmodule SkillKit.Web.OnboardingLive do
   end
 
   # -- Agent messages ----------------------------------------------------------
+
+  @impl true
+  def handle_info({:show_fixed_question, index}, socket) do
+    socket =
+      socket
+      |> assign_fixed_question(index)
+      |> assign(:waiting, false)
+      |> assign(:animate_question, true)
+      |> assign(:question_key, socket.assigns.question_key + 1)
+
+    {:noreply, socket}
+  end
 
   @impl true
   def handle_info(%SkillKit.Event.Delta{}, socket) do
@@ -551,6 +569,19 @@ defmodule SkillKit.Web.OnboardingLive do
 
   defp transition_class(:out), do: "animate-onboarding-page-exit"
   defp transition_class(_), do: ""
+
+  defp schedule_first_question(socket) do
+    Process.send_after(self(), {:show_fixed_question, 0}, fake_thinking_delay())
+
+    socket
+    |> assign(:waiting, true)
+    |> assign(:waiting_text, "Thinking...")
+    |> assign(:question, "")
+    |> assign(:subtext, nil)
+    |> assign(:placeholder, "")
+  end
+
+  defp fake_thinking_delay, do: Enum.random(800..1500)
 
   defp word_count(text), do: text |> String.split() |> length()
 end
