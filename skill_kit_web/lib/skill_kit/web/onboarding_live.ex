@@ -61,15 +61,18 @@ defmodule SkillKit.Web.OnboardingLive do
           {@error}
         </div>
         <div :if={!@error and @ready} class="animate-onboarding-fade-in">
+          <h2 class="font-heading text-[28px] text-editor-text leading-snug mb-4">
+            Your project brief is ready
+          </h2>
           <p
             :if={@summary}
-            class="font-heading text-[28px] text-editor-text leading-snug mb-8"
+            class="text-[15px] text-editor-text-muted leading-relaxed mb-10"
           >
             {@summary}
           </p>
           <button
             phx-click="get_started"
-            class="inline-flex items-center gap-2 px-5 py-3
+            class="inline-flex items-center gap-2 px-6 py-3
                    bg-editor-accent text-white rounded-xl text-[15px]
                    hover:opacity-90 transition-opacity"
           >
