@@ -6,7 +6,7 @@ defmodule SkillKit.Web.IntegrationTest do
   alias SkillKit.ToolExecution
   alias SkillKit.Web.DocumentKit
 
-  @tmp_dir "test/tmp/integration_test"
+  @tmp_dir Path.expand("../../tmp/integration_test", __DIR__)
 
   setup do
     File.rm_rf!(@tmp_dir)
@@ -25,7 +25,7 @@ defmodule SkillKit.Web.IntegrationTest do
   test "DocumentKit lists project files" do
     {:ok, [kit]} = DocumentKit.list_kits([])
     assert kit.name == "docs"
-    assert length(kit.skills) == 7
+    assert length(kit.skills) == 8
   end
 
   test "DocumentKit Tool can read files" do

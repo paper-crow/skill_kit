@@ -2,7 +2,7 @@ defmodule SkillKit.Web.ChatIntegrationTest do
   use SkillKitWeb.ConnCase
   import Phoenix.LiveViewTest
 
-  @tmp_dir "test/tmp/chat_integration_test"
+  @tmp_dir Path.expand("../../tmp/chat_integration_test", __DIR__)
 
   setup do
     File.rm_rf!(@tmp_dir)

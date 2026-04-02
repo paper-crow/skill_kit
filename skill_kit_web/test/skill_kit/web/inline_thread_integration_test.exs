@@ -2,7 +2,7 @@ defmodule SkillKit.Web.InlineThreadIntegrationTest do
   use SkillKitWeb.ConnCase
   import Phoenix.LiveViewTest
 
-  @tmp_dir "test/tmp/inline_thread_test"
+  @tmp_dir Path.expand("../../tmp/inline_thread_test", __DIR__)
 
   setup do
     File.rm_rf!(@tmp_dir)

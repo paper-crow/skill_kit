@@ -111,11 +111,11 @@ defmodule SkillKit.Web.EditorLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="relative flex h-full w-full">
+    <div class="relative flex h-full w-full animate-editor-page-enter">
       <DocumentTree.document_tree
         files={@files}
         current_path={@current_path}
-        open={@files != []}
+        open={length(@files) > 1}
       />
       <div class="flex-1 flex overflow-hidden">
         <EditorSurface.editor_surface

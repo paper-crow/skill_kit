@@ -6,7 +6,7 @@ defmodule SkillKit.Web.ChatSmokeTest do
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
-  @tmp_dir "test/tmp/chat_smoke_test"
+  @tmp_dir Path.expand("../../tmp/chat_smoke_test", __DIR__)
 
   setup do
     File.rm_rf!(@tmp_dir)
