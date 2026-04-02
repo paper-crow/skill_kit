@@ -54,33 +54,38 @@ defmodule SkillKit.Web.EditorLive do
     docs_root = SkillKitWeb.docs_root()
     File.mkdir_p!(docs_root)
     files = list_files(docs_root)
-    requested_path = path_from_params(params)
-    {current_path, content} = open_document(docs_root, files, requested_path)
 
-    socket =
-      socket
-      |> assign(:docs_root, docs_root)
-      |> assign(:files, files)
-      |> assign(:current_path, current_path)
-      |> assign(:content, content)
-      |> assign(:active_drawer, nil)
-      |> assign(:chat_messages, [])
-      |> assign(:streaming_text, nil)
-      |> assign(:agent_ref, nil)
-      |> assign(:events, [])
-      |> assign(:event_count, 0)
-      |> assign(:debug_paused, false)
-      |> assign(:mermaid_retries, %{})
-      |> assign(:selection, nil)
-      |> assign(:inline_thread, nil)
-      |> assign(:suspended_thread, nil)
-      |> assign(:pending_diff, nil)
-      |> assign(:pending_change, nil)
-      |> assign(:change_check_timer, nil)
+    if files == [] do
+      {:ok, push_navigate(socket, to: "/setup")}
+    else
+      requested_path = path_from_params(params)
+      {current_path, content} = open_document(docs_root, files, requested_path)
 
-    socket = maybe_start_agent(socket)
+      socket =
+        socket
+        |> assign(:docs_root, docs_root)
+        |> assign(:files, files)
+        |> assign(:current_path, current_path)
+        |> assign(:content, content)
+        |> assign(:active_drawer, nil)
+        |> assign(:chat_messages, [])
+        |> assign(:streaming_text, nil)
+        |> assign(:agent_ref, nil)
+        |> assign(:events, [])
+        |> assign(:event_count, 0)
+        |> assign(:debug_paused, false)
+        |> assign(:mermaid_retries, %{})
+        |> assign(:selection, nil)
+        |> assign(:inline_thread, nil)
+        |> assign(:suspended_thread, nil)
+        |> assign(:pending_diff, nil)
+        |> assign(:pending_change, nil)
+        |> assign(:change_check_timer, nil)
 
-    {:ok, socket}
+      socket = maybe_start_agent(socket)
+
+      {:ok, socket}
+    end
   end
 
   @impl true
@@ -110,7 +115,7 @@ defmodule SkillKit.Web.EditorLive do
       <DocumentTree.document_tree
         files={@files}
         current_path={@current_path}
-        open={true}
+        open={@files != []}
       />
       <div class="flex-1 flex overflow-hidden">
         <EditorSurface.editor_surface
@@ -454,8 +459,9 @@ defmodule SkillKit.Web.EditorLive do
           {:changed, change} ->
             notice = %{
               role: :assistant,
-              content: "Document \"#{path}\" has changed since last build. " <>
-                "Say **build** when you're ready to generate updated requirements."
+              content:
+                "Document \"#{path}\" has changed since last build. " <>
+                  "Say **build** when you're ready to generate updated requirements."
             }
 
             socket =
