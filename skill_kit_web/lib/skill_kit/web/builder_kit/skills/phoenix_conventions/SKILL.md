@@ -179,7 +179,15 @@ defp badge_class(_), do: "badge-default"
 - Use `{@assign}` for outputting values (not `<%= %>`)
 - Use `:if` / `:for` attributes instead of `<%= if %>` blocks
 - Use function components (`<.component />`) instead of raw HTML partials
-- Use `class={[...]}` lists for conditional classes
+- Use data attributes with Tailwind `data-[]` selectors for conditional styling — never interpolate class names
+
+```heex
+<%!-- BAD: interpolated classes break Tailwind purging --%>
+<div class={["mt-4", if(@active, do: "bg-blue-500", else: "")]}>
+
+<%!-- GOOD: data attributes with Tailwind data-[] selectors --%>
+<div data-active={"#{@active}"} class="mt-4 data-[active=true]:bg-blue-500">
+```
 
 ```heex
 <div :if={@products != []} class="grid grid-cols-3 gap-4">
@@ -282,5 +290,6 @@ Do not generate code with these patterns:
 - **Raw SQL in application code**: Use Ecto queries; raw SQL only in migrations when necessary
 - **Passing conn/socket to contexts**: Contexts work with plain data only
 - **Inline styles for static values**: Use Tailwind classes
+- **Interpolated CSS classes**: Use data attributes with `data-[]` selectors instead
 - **Large inline templates**: Extract to colocated .html.heex files
 - **Catch-all event handlers**: Pattern match specifically; let unhandled events crash visibly

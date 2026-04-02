@@ -1,7 +1,8 @@
-<div class={[
-  "flex items-center h-full w-full bg-editor-bg",
-  transition_class(@transitioning)
-]}>
+<div
+  data-transitioning={"#{@transitioning}"}
+  class="flex items-center h-full w-full bg-editor-bg
+         data-[transitioning=out]:animate-onboarding-page-exit"
+>
   <div class="pl-16 w-[480px]">
     <.error_state :if={@error} error={@error} />
     <.ready_state :if={!@error and @ready} summary={@summary} />

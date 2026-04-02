@@ -79,7 +79,12 @@ defmodule SkillKit.Web.OnboardingLive do
                hover:opacity-90 transition-opacity"
       >
         Get started
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-4 h-4"
+        >
           <path
             fill-rule="evenodd"
             d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z"
@@ -130,20 +135,17 @@ defmodule SkillKit.Web.OnboardingLive do
       </h1>
       <p
         :if={@subtext}
-        class={[
-          "text-[15px] text-editor-text-faint leading-relaxed mb-9",
-          if(@animate, do: "animate-onboarding-fade-in opacity-0", else: "")
-        ]}
-        style={if(@animate, do: "animation-delay: #{@subtext_delay}", else: "")}
+        data-animate={"#{@animate}"}
+        class="text-[15px] text-editor-text-faint leading-relaxed mb-9
+               data-[animate=true]:animate-onboarding-fade-in data-[animate=true]:opacity-0"
+        style={"animation-delay: #{@subtext_delay}"}
       >
         {@subtext}
       </p>
       <div
-        class={[
-          "mt-9",
-          if(@animate, do: "animate-onboarding-fade-in opacity-0", else: "")
-        ]}
-        style={if(@animate, do: "animation-delay: #{@input_delay}", else: "")}
+        data-animate={"#{@animate}"}
+        class="mt-9 data-[animate=true]:animate-onboarding-fade-in data-[animate=true]:opacity-0"
+        style={"animation-delay: #{@input_delay}"}
       >
         <form phx-submit="submit_answer" class="relative">
           <textarea
@@ -165,7 +167,12 @@ defmodule SkillKit.Web.OnboardingLive do
                    flex items-center justify-center
                    hover:opacity-90 transition-opacity"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              class="w-4 h-4"
+            >
               <path
                 fill-rule="evenodd"
                 d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
@@ -559,9 +566,6 @@ defmodule SkillKit.Web.OnboardingLive do
 
   defp conversation_id_from_params(%{"conversation_id" => id}), do: id
   defp conversation_id_from_params(_), do: nil
-
-  defp transition_class(:out), do: "animate-onboarding-page-exit"
-  defp transition_class(_), do: ""
 
   defp schedule_first_question(socket) do
     socket
