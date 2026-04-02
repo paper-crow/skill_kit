@@ -43,7 +43,8 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     if caller do
       question = %{
         question: input["question"],
-        subtext: input["subtext"]
+        subtext: input["subtext"],
+        placeholder: input["placeholder"]
       }
 
       send(caller, {:onboarding_question, question})

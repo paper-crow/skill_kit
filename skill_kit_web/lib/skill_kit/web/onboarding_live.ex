@@ -100,11 +100,11 @@ defmodule SkillKit.Web.OnboardingLive do
     assign(socket, :waiting, true)
   end
 
-  defp assign_question(socket, %{question: q, subtext: s}) do
+  defp assign_question(socket, question) do
     socket
-    |> assign(:question, q)
-    |> assign(:subtext, s)
-    |> assign(:placeholder, "")
+    |> assign(:question, question.question)
+    |> assign(:subtext, question[:subtext])
+    |> assign(:placeholder, question[:placeholder] || "")
     |> assign(:animate_question, true)
     |> assign(:question_key, socket.assigns.question_key + 1)
     |> assign(:waiting, false)
@@ -124,25 +124,27 @@ defmodule SkillKit.Web.OnboardingLive do
       |> assign(:pairs, pairs)
       |> assign(:animate_question, true)
       |> assign(:question_key, socket.assigns.question_key + 1)
+      |> assign(:waiting, true)
+      |> assign(:waiting_text, "Thinking...")
 
-    if next_index < length(@fixed_questions) do
-      Process.send_after(self(), {:show_fixed_question, next_index}, fake_thinking_delay())
+    cond do
+      next_index < length(@fixed_questions) ->
+        Process.send_after(self(), {:show_fixed_question, next_index}, fake_thinking_delay())
+        {:noreply, socket}
 
-      socket =
-        socket
-        |> assign(:waiting, true)
-        |> assign(:waiting_text, "Thinking...")
+      is_nil(socket.assigns.agent_ref) ->
+        # Last fixed question — start agent and send all answers
+        socket =
+          socket
+          |> maybe_start_agent()
+          |> send_pairs_to_agent()
 
-      {:noreply, socket}
-    else
-      socket =
-        socket
-        |> assign(:waiting, true)
-        |> assign(:waiting_text, "Thinking...")
-        |> maybe_start_agent()
-        |> send_pairs_to_agent()
+        {:noreply, socket}
 
-      {:noreply, socket}
+      true ->
+        # Agent phase — send answer directly to agent
+        SkillKit.send_message(socket.assigns.agent_ref, answer)
+        {:noreply, socket}
     end
   end
 
