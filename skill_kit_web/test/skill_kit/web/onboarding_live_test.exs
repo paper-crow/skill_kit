@@ -113,23 +113,8 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     assert render(view) =~ "Thinking..."
   end
 
-  test "doc creation shows creating state then transitions", %{conn: conn} do
+  test "doc creation shows generating state then transitions", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-
-    # Simulate agent deciding to create the brief
-    send(view.pid, %SkillKit.Types.AssistantMessage{
-      content: "Great, I have enough to create your project brief.",
-      tool_calls: [
-        %SkillKit.Types.ToolCall{
-          id: "tc_1",
-          name: "docs",
-          input: %{"path" => "overview.md", "content" => "# Stockpile"}
-        }
-      ]
-    })
-
-    html = render(view)
-    assert html =~ "Creating your project brief..."
 
     # Simulate the tool completing and creating the file
     File.write!(Path.join(@tmp_dir, "overview.md"), "# Stockpile")
@@ -141,11 +126,15 @@ defmodule SkillKit.Web.OnboardingLiveTest do
       input: %{"path" => "overview.md", "content" => "# Stockpile"}
     })
 
-    # Should trigger the transition
+    # Should show the generating message
     html = render(view)
-    assert html =~ "animate-onboarding-page-exit"
+    assert html =~ "generating your project brief..."
 
-    # After the timer fires, should navigate to the document
+    # After delay, transition starts
+    send(view.pid, :start_transition)
+    assert render(view) =~ "animate-onboarding-page-exit"
+
+    # After fade-out, navigate to the document
     send(view.pid, :complete_transition)
     {path, _flash} = assert_redirect(view)
     assert path =~ "overview"

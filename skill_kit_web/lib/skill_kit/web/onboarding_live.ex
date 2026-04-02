@@ -182,7 +182,8 @@ defmodule SkillKit.Web.OnboardingLive do
         {:noreply, socket}
 
       has_doc_create?(tool_calls) ->
-        {:noreply, assign(socket, waiting: true, waiting_text: "Creating your project brief...")}
+        # Tool is about to execute — will be caught by ToolCallComplete
+        {:noreply, socket}
 
       has_documents?(socket.assigns.docs_root) ->
         {:noreply, assign(socket, ready: true, summary: content)}
@@ -202,8 +203,10 @@ defmodule SkillKit.Web.OnboardingLive do
   @impl true
   def handle_info(%SkillKit.Event.ToolCallComplete{}, socket) do
     if has_documents?(socket.assigns.docs_root) do
-      Process.send_after(self(), :complete_transition, 600)
-      {:noreply, assign(socket, :transitioning, :out)}
+      Process.send_after(self(), :start_transition, 1500)
+
+      {:noreply,
+       assign(socket, waiting: true, waiting_text: "Got it — generating your project brief...")}
     else
       {:noreply, socket}
     end
@@ -216,6 +219,12 @@ defmodule SkillKit.Web.OnboardingLive do
   def handle_info(%SkillKit.Event.Error{reason: reason}, socket) do
     {:noreply,
      assign(socket, :error, "Something went wrong: #{inspect(reason)}. Try refreshing.")}
+  end
+
+  @impl true
+  def handle_info(:start_transition, socket) do
+    Process.send_after(self(), :complete_transition, 600)
+    {:noreply, assign(socket, :transitioning, :out)}
   end
 
   @impl true
