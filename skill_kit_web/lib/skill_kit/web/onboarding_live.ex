@@ -3,21 +3,15 @@ defmodule SkillKit.Web.OnboardingLive do
     layout: {SkillKit.Web.Layouts, :app}
 
   alias SkillKit.Web.Agents
+  alias SkillKit.Web.Onboarding
 
-  import SkillKit.Web.Components.Onboarding
-
-  @fixed_questions [
-    %{
-      question: "What's the one thing it needs to do?",
-      subtext: "Don't overthink it — just the core action.",
-      placeholder: "manage inventory for our warehouse"
-    },
-    %{
-      question: "Give it a working name",
-      subtext: "You can always change this later.",
-      placeholder: "e.g. Stockpile"
-    }
-  ]
+  import SkillKit.Web.Components.Onboarding,
+    only: [
+      error_state: 1,
+      ready_state: 1,
+      waiting_state: 1,
+      question_state: 1
+    ]
 
   @impl true
   def mount(params, _session, socket) do
@@ -86,18 +80,18 @@ defmodule SkillKit.Web.OnboardingLive do
     |> assign(:summary, nil)
   end
 
-  defp assign_fixed_question(socket, index) when index < length(@fixed_questions) do
-    q = Enum.at(@fixed_questions, index)
+  defp assign_fixed_question(socket, index) do
+    case Onboarding.fixed_question(index) do
+      nil ->
+        assign(socket, :waiting, true)
 
-    socket
-    |> assign(:question, q.question)
-    |> assign(:subtext, q.subtext)
-    |> assign(:placeholder, q.placeholder)
-    |> assign(:fixed_index, index)
-  end
-
-  defp assign_fixed_question(socket, _index) do
-    assign(socket, :waiting, true)
+      q ->
+        socket
+        |> assign(:question, q.question)
+        |> assign(:subtext, q.subtext)
+        |> assign(:placeholder, q.placeholder)
+        |> assign(:fixed_index, index)
+    end
   end
 
   defp assign_question(socket, question) do
@@ -128,7 +122,7 @@ defmodule SkillKit.Web.OnboardingLive do
       |> assign(:waiting_text, "Thinking...")
 
     cond do
-      next_index < length(@fixed_questions) ->
+      next_index < Onboarding.fixed_question_count() ->
         Process.send_after(self(), {:show_fixed_question, next_index}, fake_thinking_delay())
         {:noreply, socket}
 
@@ -162,11 +156,6 @@ defmodule SkillKit.Web.OnboardingLive do
   # -- Agent messages ----------------------------------------------------------
 
   @impl true
-  def handle_info({:onboarding_question, question}, socket) do
-    {:noreply, assign_question(socket, question)}
-  end
-
-  @impl true
   def handle_info({:show_fixed_question, index}, socket) do
     socket =
       socket
@@ -198,8 +187,11 @@ defmodule SkillKit.Web.OnboardingLive do
       has_documents?(socket.assigns.docs_root) ->
         {:noreply, assign(socket, ready: true, summary: content)}
 
+      is_binary(content) and content != "" ->
+        parsed = Onboarding.parse_response(content)
+        {:noreply, assign_question(socket, parsed)}
+
       true ->
-        # Agent sent a text message without using docs:ask — ignore it
         {:noreply, socket}
     end
   end
@@ -262,18 +254,9 @@ defmodule SkillKit.Web.OnboardingLive do
   defp send_pairs_to_agent(%{assigns: %{agent_ref: nil}} = socket), do: socket
 
   defp send_pairs_to_agent(socket) do
-    message = format_pairs_message(socket.assigns.pairs)
+    message = Onboarding.format_pairs_message(socket.assigns.pairs)
     SkillKit.send_message(socket.assigns.agent_ref, message)
     socket
-  end
-
-  defp format_pairs_message(pairs) do
-    answers =
-      Enum.map_join(pairs, "\n", fn %{question: q, answer: a} ->
-        "Q: #{q}\nA: #{a}"
-      end)
-
-    "[Onboarding answers]\n#{answers}"
   end
 
   defp has_doc_create?(tool_calls) do

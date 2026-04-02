@@ -12,24 +12,14 @@ defmodule SkillKit.Web.DocumentKit.Tool do
   def definition do
     %SkillKit.Tool{
       name: "docs",
-      description:
-        "Document operations — create, read, update, list, search, structure, history, ask",
+      description: "Document operations — create, read, update, list, search, structure, history",
       input_schema: %{
         "type" => "object",
         "properties" => %{
           "path" => %{"type" => "string", "description" => "Relative file path"},
           "content" => %{"type" => "string", "description" => "File content"},
           "query" => %{"type" => "string", "description" => "Search query"},
-          "limit" => %{"type" => "integer", "description" => "Result limit"},
-          "question" => %{"type" => "string", "description" => "Question text for docs:ask"},
-          "subtext" => %{
-            "type" => "string",
-            "description" => "Helper text shown below the question"
-          },
-          "placeholder" => %{
-            "type" => "string",
-            "description" => "Example text shown in the input field"
-          }
+          "limit" => %{"type" => "integer", "description" => "Result limit"}
         }
       }
     }
@@ -46,23 +36,6 @@ defmodule SkillKit.Web.DocumentKit.Tool do
   end
 
   # -- Dispatch ----------------------------------------------------------------
-
-  defp dispatch("docs:ask", input, context) do
-    caller = get_in(context, [:scope, Access.key(:caller)])
-
-    if caller do
-      question = %{
-        question: input["question"],
-        subtext: input["subtext"],
-        placeholder: input["placeholder"]
-      }
-
-      send(caller, {:onboarding_question, question})
-      {:ok, "Question sent to user. Wait for their response."}
-    else
-      {:error, "No caller process available"}
-    end
-  end
 
   # All remaining skills operate on the docs_root filesystem
   defp dispatch(skill_name, input, context) do

@@ -54,7 +54,7 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     refute html =~ "form"
   end
 
-  test "agent question via docs:ask replaces thinking state", %{conn: conn} do
+  test "agent text response renders as question with subtext", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
@@ -63,22 +63,19 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     view |> form("form", %{answer: "Stockpile"}) |> render_submit()
     assert render(view) =~ "Thinking..."
 
-    # Simulate docs:ask tool sending structured question
-    send(
-      view.pid,
-      {:onboarding_question,
-       %{
-         question: "What kinds of items will you track?",
-         subtext: "This helps me understand the data."
-       }}
-    )
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content:
+        "What kinds of items will you track?\n> This helps me understand the data.\ne.g. electronics parts, resistors, ICs",
+      tool_calls: []
+    })
 
     html = render(view)
     assert html =~ "This helps me understand the data."
+    assert html =~ "electronics parts"
     refute html =~ "Thinking..."
   end
 
-  test "agent question without subtext", %{conn: conn} do
+  test "agent text response without hints uses full text as question", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
@@ -86,18 +83,34 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
     view |> form("form", %{answer: "Stockpile"}) |> render_submit()
 
-    send(
-      view.pid,
-      {:onboarding_question,
-       %{
-         question: "How many users do you expect?",
-         subtext: nil
-       }}
-    )
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content: "How many users do you expect?",
+      tool_calls: []
+    })
 
     html = render(view)
     assert html =~ "expect?"
     assert html =~ "form"
+  end
+
+  test "answering agent question sends message and shows thinking", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
+
+    view |> form("form", %{answer: "track inventory"}) |> render_submit()
+    send(view.pid, {:show_fixed_question, 1})
+    view |> form("form", %{answer: "Stockpile"}) |> render_submit()
+
+    # Agent asks a question via text
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content: "Who uses it?",
+      tool_calls: []
+    })
+
+    refute render(view) =~ "Thinking..."
+
+    # User answers the agent question — should show thinking state
+    view |> form("form", %{answer: "warehouse staff"}) |> render_submit()
+    assert render(view) =~ "Thinking..."
   end
 
   test "doc creation shows creating state then transitions", %{conn: conn} do
