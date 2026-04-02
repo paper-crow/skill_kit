@@ -252,6 +252,11 @@ defmodule SkillKit.Agent.Server do
     end)
   end
 
+  defp handle_response(%AssistantMessage{content: nil, tool_calls: []}, state) do
+    # Empty response (no content, no tool calls) — discard it from messages
+    %{state | messages: List.delete_at(state.messages, -1)}
+  end
+
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
     notify_caller(state, %{response | agent: state.agent_name})
     state

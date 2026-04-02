@@ -101,7 +101,42 @@ defmodule SkillKit.Agent.ServerTest do
 
       assert length(state.messages) >= 4
     end
+
+    test "discards empty assistant response after tool call", %{
+      registry: registry,
+      agent_name: agent_name,
+      definition: definition
+    } do
+      # Simulate: tool call → tool result → LLM produces empty response (no text, no tools)
+      expect_responses([
+        %ToolCall{name: "echo", input: %{"command" => "echo hi"}},
+        %SkillKit.Response.Empty{}
+      ])
+
+      {:ok, pid} =
+        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%UserMessage{content: "do it"}]})
+
+      # Should NOT receive an AssistantMessage (empty response is discarded)
+      refute_receive %AssistantMessage{}, 500
+
+      state = :sys.get_state(pid)
+
+      # Messages should contain: UserMessage, AssistantMessage (with tool_call), ToolResult
+      # but NOT the empty AssistantMessage
+      message_types = Enum.map(state.messages, &message_type/1)
+      refute :empty_assistant in message_types
+    end
   end
+
+  defp message_type(%AssistantMessage{content: nil, tool_calls: []}), do: :empty_assistant
+  defp message_type(%AssistantMessage{tool_calls: []}), do: :assistant
+  defp message_type(%AssistantMessage{}), do: :assistant_with_tools
+  defp message_type(%UserMessage{}), do: :user
+  defp message_type(_), do: :other
 
   describe "LLM error handling" do
     test "gracefully handles LLM stream error without crashing", %{

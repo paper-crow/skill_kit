@@ -148,6 +148,11 @@ if Mix.env() == :test do
       {:ok, Stream.map(events, & &1)}
     end
 
+    defp build_event_stream(%SkillKit.Response.Empty{}) do
+      events = [%SkillKit.Event.Done{stop_reason: :end_turn}]
+      {:ok, Stream.map(events, & &1)}
+    end
+
     defp build_event_stream(%SkillKit.Response.Error{status: status, message: message}) do
       {:error, {status, message}}
     end
