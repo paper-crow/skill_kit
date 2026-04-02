@@ -60,7 +60,35 @@ defmodule SkillKit.Web.OnboardingLive do
         <div :if={@error} class="font-heading text-2xl text-editor-text leading-snug mb-2">
           {@error}
         </div>
-        <div :if={!@error and @waiting} class="animate-onboarding-fade-in">
+        <div :if={!@error and @ready} class="animate-onboarding-fade-in">
+          <p
+            :if={@summary}
+            class="font-heading text-[28px] text-editor-text leading-snug mb-8"
+          >
+            {@summary}
+          </p>
+          <button
+            phx-click="get_started"
+            class="inline-flex items-center gap-2 px-5 py-3
+                   bg-editor-accent text-white rounded-xl text-[15px]
+                   hover:opacity-90 transition-opacity"
+          >
+            Get started
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              class="w-4 h-4"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z"
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
+        <div :if={!@error and !@ready and @waiting} class="animate-onboarding-fade-in">
           <div class="flex items-center gap-3">
             <div class="flex gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse" />
@@ -70,7 +98,7 @@ defmodule SkillKit.Web.OnboardingLive do
             <span class="text-[15px] text-editor-text-faint">{@waiting_text}</span>
           </div>
         </div>
-        <div :if={!@error and !@waiting}>
+        <div :if={!@error and !@ready and !@waiting}>
           <h1 class="font-heading text-[28px] text-editor-text leading-snug mb-2">
             <.animated_words
               :if={@animate_question}
@@ -241,6 +269,8 @@ defmodule SkillKit.Web.OnboardingLive do
     |> assign(:question_key, 0)
     |> assign(:error, nil)
     |> assign(:waiting_text, "Thinking...")
+    |> assign(:ready, false)
+    |> assign(:summary, nil)
   end
 
   defp assign_fixed_question(socket, index) when index < length(@fixed_questions) do
@@ -302,6 +332,12 @@ defmodule SkillKit.Web.OnboardingLive do
     {:noreply, socket}
   end
 
+  @impl true
+  def handle_event("get_started", _params, socket) do
+    Process.send_after(self(), :complete_transition, 600)
+    {:noreply, assign(socket, :transitioning, :out)}
+  end
+
   # -- Agent messages ----------------------------------------------------------
 
   @impl true
@@ -314,12 +350,22 @@ defmodule SkillKit.Web.OnboardingLive do
         %SkillKit.Types.AssistantMessage{content: content, tool_calls: tool_calls},
         socket
       ) do
-    if has_doc_create?(tool_calls) do
-      # Tool hasn't executed yet — show "creating" state, wait for ToolCallComplete
-      {:noreply, assign(socket, waiting: true, waiting_text: "Creating your project brief...")}
-    else
-      parsed = parse_question(content)
-      {:noreply, assign_question(socket, parsed)}
+    cond do
+      socket.assigns.transitioning != :none ->
+        # Already transitioning — ignore late messages
+        {:noreply, socket}
+
+      has_doc_create?(tool_calls) ->
+        # Tool hasn't executed yet — show "creating" state, wait for ToolCallComplete
+        {:noreply, assign(socket, waiting: true, waiting_text: "Creating your project brief...")}
+
+      has_documents?(socket.assigns.docs_root) ->
+        # Docs exist but transition didn't fire yet — show completion with manual button
+        {:noreply, assign(socket, ready: true, summary: content)}
+
+      true ->
+        parsed = parse_question(content)
+        {:noreply, assign_question(socket, parsed)}
     end
   end
 

@@ -123,6 +123,67 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     assert path =~ "overview"
   end
 
+  test "shows get started button when docs exist and agent sends summary", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
+
+    # Create the doc (simulating tool completion)
+    File.write!(Path.join(@tmp_dir, "overview.md"), "# Stockpile")
+
+    # Agent sends a summary message after creating the doc
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content: "Your project brief is ready!",
+      tool_calls: []
+    })
+
+    html = render(view)
+    assert html =~ "Your project brief is ready!"
+    assert html =~ "Get started"
+    refute html =~ "Thinking..."
+  end
+
+  test "get_started button triggers transition to editor", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
+    File.write!(Path.join(@tmp_dir, "overview.md"), "# Stockpile")
+
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content: "Your project brief is ready!",
+      tool_calls: []
+    })
+
+    view |> element("button", "Get started") |> render_click()
+
+    html = render(view)
+    assert html =~ "animate-onboarding-page-exit"
+
+    send(view.pid, :complete_transition)
+    {path, _flash} = assert_redirect(view)
+    assert path =~ "overview"
+  end
+
+  test "late assistant message is ignored during transition", %{conn: conn} do
+    {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
+    File.write!(Path.join(@tmp_dir, "overview.md"), "# Stockpile")
+
+    # Trigger transition
+    send(view.pid, %SkillKit.Event.ToolCallComplete{
+      agent: "onboarding",
+      id: "tc_1",
+      name: "docs",
+      input: %{"path" => "overview.md"}
+    })
+
+    assert render(view) =~ "animate-onboarding-page-exit"
+
+    # Late message arrives — should be ignored
+    send(view.pid, %SkillKit.Types.AssistantMessage{
+      content: "Here's your brief!",
+      tool_calls: []
+    })
+
+    # Still transitioning, not showing a new question
+    assert render(view) =~ "animate-onboarding-page-exit"
+  end
+
   test "complete_transition navigates to editor", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
     File.write!(Path.join(@tmp_dir, "overview.md"), "# My App")
