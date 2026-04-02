@@ -398,7 +398,22 @@ defmodule SkillKit.Catalog do
       MapSet.member?(@subagent_builtins, tool_name) -> :builtin
       MapSet.member?(agent_names, tool_name) -> :subagent
       Map.has_key?(module_skill_map, tool_name) -> {:module_skill, module_skill_map[tool_name]}
-      true -> :tool
+      true -> find_kit_skill(kits, tool_name)
+    end
+  end
+
+  defp find_kit_skill(kits, tool_name) do
+    skill =
+      kits
+      |> Enum.flat_map(& &1.skills)
+      |> Enum.find(fn s ->
+        skill_short_name(s.name) == tool_name and s.tool != SkillKit.Tools.Shell
+      end)
+
+    if skill do
+      {:module_skill, skill}
+    else
+      :tool
     end
   end
 

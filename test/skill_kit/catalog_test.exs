@@ -346,6 +346,26 @@ defmodule SkillKit.CatalogTest do
       assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
     end
 
+    test "classifies kit skill by short name without activation" do
+      {:ok, provider} = Memory.start_link([])
+      skill = make_skill("docs:ask", tool: SkillKit.Web.DocumentKit)
+      kit = %Kit{name: "docs", skills: [skill]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      assert {:module_skill, ^skill} = Catalog.classify(catalog, "ask")
+    end
+
+    test "does not classify shell skills without activation" do
+      {:ok, provider} = Memory.start_link([])
+      skill = make_skill("ns:run")
+      kit = %Kit{name: "ns", skills: [skill]}
+      Memory.put_kit(provider, kit)
+
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "run") == :tool
+    end
+
     test "classifies tool as default" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
