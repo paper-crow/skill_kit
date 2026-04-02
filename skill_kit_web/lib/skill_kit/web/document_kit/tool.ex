@@ -12,14 +12,24 @@ defmodule SkillKit.Web.DocumentKit.Tool do
   def definition do
     %SkillKit.Tool{
       name: "docs",
-      description: "Document operations — create, read, update, list, search, structure, history",
+      description:
+        "Document operations — create, read, update, list, search, structure, history, ask",
       input_schema: %{
         "type" => "object",
         "properties" => %{
           "path" => %{"type" => "string", "description" => "Relative file path"},
           "content" => %{"type" => "string", "description" => "File content"},
           "query" => %{"type" => "string", "description" => "Search query"},
-          "limit" => %{"type" => "integer", "description" => "Result limit"}
+          "limit" => %{"type" => "integer", "description" => "Result limit"},
+          "question" => %{"type" => "string", "description" => "Question text for docs:ask"},
+          "subtext" => %{
+            "type" => "string",
+            "description" => "Helper text shown below the question"
+          },
+          "placeholder" => %{
+            "type" => "string",
+            "description" => "Example text shown in the input field"
+          }
         }
       }
     }
