@@ -10,6 +10,7 @@ defmodule SkillKit.Web.EditorLive do
   alias SkillKit.Web.Components.InlineThread
 
   alias SkillKit.Web.BuilderKit
+  alias SkillKit.Web.BuilderKit.ChangeDetector
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
@@ -74,6 +75,8 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:inline_thread, nil)
       |> assign(:suspended_thread, nil)
       |> assign(:pending_diff, nil)
+      |> assign(:pending_change, nil)
+      |> assign(:change_check_timer, nil)
 
     socket = maybe_start_agent(socket)
 
@@ -146,6 +149,8 @@ defmodule SkillKit.Web.EditorLive do
     {:noreply, push_patch(socket, to: "/#{url_path}")}
   end
 
+  @change_check_delay_ms 3_000
+
   @impl true
   def handle_event("editor_change", %{"content" => content}, socket) do
     root = socket.assigns.docs_root
@@ -153,7 +158,12 @@ defmodule SkillKit.Web.EditorLive do
 
     case File.write(full_path, content) do
       :ok ->
-        {:noreply, assign(socket, :content, content)}
+        socket =
+          socket
+          |> assign(:content, content)
+          |> schedule_change_check()
+
+        {:noreply, socket}
 
       {:error, reason} ->
         error_msg = %{role: :assistant, content: "Save failed: #{inspect(reason)}"}
@@ -429,6 +439,36 @@ defmodule SkillKit.Web.EditorLive do
       |> assign(:streaming_text, nil)
 
     {:noreply, socket}
+  end
+
+  @impl true
+  def handle_info(:check_build_graph, socket) do
+    socket = assign(socket, :change_check_timer, nil)
+
+    case socket.assigns.current_path do
+      nil ->
+        {:noreply, socket}
+
+      path ->
+        case ChangeDetector.check(socket.assigns.docs_root, path, socket.assigns.content) do
+          {:changed, change} ->
+            notice = %{
+              role: :assistant,
+              content: "Document \"#{path}\" has changed since last build. " <>
+                "Say **build** when you're ready to generate updated requirements."
+            }
+
+            socket =
+              socket
+              |> assign(:chat_messages, socket.assigns.chat_messages ++ [notice])
+              |> assign(:pending_change, change)
+
+            {:noreply, socket}
+
+          :no_change ->
+            {:noreply, socket}
+        end
+    end
   end
 
   @impl true
@@ -843,5 +883,16 @@ defmodule SkillKit.Web.EditorLive do
   defp refresh_files(socket) do
     files = list_files(socket.assigns.docs_root)
     assign(socket, :files, files)
+  end
+
+  defp schedule_change_check(socket) do
+    timer = socket.assigns.change_check_timer
+
+    if timer do
+      Process.cancel_timer(timer)
+    end
+
+    ref = Process.send_after(self(), :check_build_graph, @change_check_delay_ms)
+    assign(socket, :change_check_timer, ref)
   end
 end

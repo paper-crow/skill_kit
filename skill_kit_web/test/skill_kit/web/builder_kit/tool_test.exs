@@ -137,6 +137,113 @@ defmodule SkillKit.Web.BuilderKit.ToolTest do
     end
   end
 
+  describe "build:requirements" do
+    test "writes requirements placeholder and updates graph", %{docs_root: root} do
+      File.write!(Path.join(root, "auth.md"), "# Auth\n\nUsers log in with email.")
+
+      mapping = Graph.build_mapping("auth.md", code_files: ["lib/auth.ex"])
+      graph = Graph.put_mapping(Graph.empty_graph(), mapping)
+      Graph.write(root, graph)
+
+      input = %{"document" => "auth.md"}
+      execution = build_execution("build:requirements", input, root)
+      assert {:ok, msg} = Tool.execute(execution)
+      assert msg =~ ".build/requirements/auth.md"
+
+      # Requirements file was written
+      req_path = Path.join(root, ".build/requirements/auth.md")
+      assert File.exists?(req_path)
+      {:ok, content} = File.read(req_path)
+      assert content =~ "Requirements: auth.md"
+
+      # Graph was updated with requirements path
+      {:ok, updated} = Graph.read(root)
+      m = Graph.find_mapping(updated, "auth.md")
+      assert m["requirements"] == ".build/requirements/auth.md"
+    end
+  end
+
+  describe "build:plan" do
+    test "writes plan placeholder and updates graph", %{docs_root: root} do
+      mapping = Graph.build_mapping("auth.md", requirements: ".build/requirements/auth.md")
+      graph = Graph.put_mapping(Graph.empty_graph(), mapping)
+      Graph.write(root, graph)
+
+      input = %{"document" => "auth.md"}
+      execution = build_execution("build:plan", input, root)
+      assert {:ok, msg} = Tool.execute(execution)
+      assert msg =~ ".build/plans/auth.md"
+
+      plan_path = Path.join(root, ".build/plans/auth.md")
+      assert File.exists?(plan_path)
+      {:ok, content} = File.read(plan_path)
+      assert content =~ "Implementation plan: auth.md"
+      assert content =~ ".build/requirements/auth.md"
+    end
+  end
+
+  describe "build:write_code" do
+    test "writes a code file to project root", %{docs_root: root} do
+      input = %{"path" => "lib/my_app/auth.ex", "content" => "defmodule MyApp.Auth do\nend"}
+      execution = build_execution("build:write_code", input, root)
+      # Context needs project_root
+      execution = %{execution | context: %{docs_root: root, project_root: root}}
+
+      assert {:ok, _} = Tool.execute(execution)
+      assert File.read!(Path.join(root, "lib/my_app/auth.ex")) == "defmodule MyApp.Auth do\nend"
+    end
+
+    test "reads a code file when no content provided", %{docs_root: root} do
+      File.mkdir_p!(Path.join(root, "lib"))
+      File.write!(Path.join(root, "lib/app.ex"), "defmodule App do\nend")
+
+      input = %{"path" => "lib/app.ex"}
+      execution = build_execution("build:write_code", input, root)
+      execution = %{execution | context: %{docs_root: root, project_root: root}}
+
+      assert {:ok, "defmodule App do\nend"} = Tool.execute(execution)
+    end
+
+    test "prevents path traversal", %{docs_root: root} do
+      input = %{"path" => "../../etc/passwd", "content" => "bad"}
+      execution = build_execution("build:write_code", input, root)
+      execution = %{execution | context: %{docs_root: root, project_root: root}}
+
+      assert {:error, _} = Tool.execute(execution)
+    end
+  end
+
+  describe "build:generate" do
+    test "returns guidance when plan exists", %{docs_root: root} do
+      mapping = Graph.build_mapping("auth.md", plan: ".build/plans/auth.md")
+      graph = Graph.put_mapping(Graph.empty_graph(), mapping)
+      Graph.write(root, graph)
+
+      input = %{"document" => "auth.md"}
+      execution = build_execution("build:generate", input, root)
+      assert {:ok, msg} = Tool.execute(execution)
+      assert msg =~ ".build/plans/auth.md"
+    end
+
+    test "returns error when no plan exists", %{docs_root: root} do
+      mapping = Graph.build_mapping("auth.md")
+      graph = Graph.put_mapping(Graph.empty_graph(), mapping)
+      Graph.write(root, graph)
+
+      input = %{"document" => "auth.md"}
+      execution = build_execution("build:generate", input, root)
+      assert {:error, msg} = Tool.execute(execution)
+      assert msg =~ "No plan found"
+    end
+
+    test "returns error when document not in graph", %{docs_root: root} do
+      input = %{"document" => "unknown.md"}
+      execution = build_execution("build:generate", input, root)
+      assert {:error, msg} = Tool.execute(execution)
+      assert msg =~ "No build graph mapping"
+    end
+  end
+
   describe "definition/0" do
     test "returns a tool struct" do
       tool = Tool.definition()
