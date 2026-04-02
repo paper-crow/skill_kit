@@ -2,17 +2,14 @@ defmodule SkillKit.Web.EditorLive do
   use Phoenix.LiveView,
     layout: {SkillKit.Web.Layouts, :app}
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Web.Agents
   alias SkillKit.Web.Components.ChatDrawer
   alias SkillKit.Web.Components.DebugPanel
   alias SkillKit.Web.Components.DocumentTree
   alias SkillKit.Web.Components.EditorSurface
   alias SkillKit.Web.Components.InlineThread
 
-  alias SkillKit.Web.BuilderKit
   alias SkillKit.Web.BuilderKit.ChangeDetector
-  alias SkillKit.Web.ConversationStore
-  alias SkillKit.Web.EditorScope
 
   @max_debug_events 200
 
@@ -500,7 +497,7 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   defp handle_agent_start(socket) do
-    case start_agent(socket.assigns.docs_root) do
+    case Agents.start_assistant(self()) do
       {:ok, agent_ref} ->
         assign(socket, :agent_ref, agent_ref)
 
@@ -514,30 +511,6 @@ defmodule SkillKit.Web.EditorLive do
         socket
         |> assign(:chat_messages, [error_msg])
         |> assign(:agent_ref, nil)
-    end
-  end
-
-  defp start_agent(docs_root) do
-    agent_path = SkillKitWeb.agent_path()
-    project_root = SkillKitWeb.project_root()
-    conversations_dir = SkillKitWeb.conversations_dir()
-
-    scope = %EditorScope{
-      project_root: project_root,
-      docs_root: docs_root
-    }
-
-    case Definition.parse(agent_path) do
-      {:ok, definition} ->
-        SkillKit.start_agent(definition,
-          caller: self(),
-          skills: [{SkillKit.Web.DocumentKit, []}, {BuilderKit, []}],
-          scope: scope,
-          conversation_store: {ConversationStore, dir: conversations_dir}
-        )
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 

@@ -2,10 +2,7 @@ defmodule SkillKit.Web.OnboardingLive do
   use Phoenix.LiveView,
     layout: {SkillKit.Web.Layouts, :app}
 
-  alias SkillKit.Agent.Definition
-  alias SkillKit.Web.ConversationStore
-  alias SkillKit.Web.DocumentKit
-  alias SkillKit.Web.EditorScope
+  alias SkillKit.Web.Agents
 
   import SkillKit.Web.Components.Icons
 
@@ -25,7 +22,6 @@ defmodule SkillKit.Web.OnboardingLive do
   @impl true
   def mount(params, _session, socket) do
     docs_root = SkillKitWeb.docs_root()
-    File.mkdir_p!(docs_root)
 
     if has_documents?(docs_root) do
       first_doc = first_document_path(docs_root)
@@ -196,43 +192,12 @@ defmodule SkillKit.Web.OnboardingLive do
   end
 
   defp mount_onboarding(socket, docs_root, conversation_id) do
-    conversations_dir = SkillKitWeb.conversations_dir()
+    socket =
+      socket
+      |> assign_onboarding_defaults(docs_root, conversation_id)
+      |> schedule_first_question()
 
-    case ConversationStore.load(conversation_id, dir: conversations_dir) do
-      {:ok, []} ->
-        socket =
-          socket
-          |> assign_onboarding_defaults(docs_root, conversation_id)
-          |> schedule_first_question()
-
-        {:ok, socket}
-
-      {:ok, messages} ->
-        {pairs, current_question} = replay_conversation(messages)
-
-        socket =
-          socket
-          |> assign_onboarding_defaults(docs_root, conversation_id)
-          |> assign(:pairs, pairs)
-          |> assign(:fixed_index, length(@fixed_questions))
-
-        socket =
-          if current_question do
-            assign_question(socket, current_question)
-          else
-            assign_fixed_question(socket, min(length(pairs), length(@fixed_questions) - 1))
-          end
-
-        {:ok, maybe_start_agent(socket)}
-
-      {:error, _} ->
-        socket =
-          socket
-          |> assign_onboarding_defaults(docs_root, conversation_id)
-          |> schedule_first_question()
-
-        {:ok, socket}
-    end
+    {:ok, socket}
   end
 
   defp assign_onboarding_defaults(socket, docs_root, conversation_id) do
@@ -326,6 +291,11 @@ defmodule SkillKit.Web.OnboardingLive do
   # -- Agent messages ----------------------------------------------------------
 
   @impl true
+  def handle_info({:onboarding_question, question}, socket) do
+    {:noreply, assign_question(socket, question)}
+  end
+
+  @impl true
   def handle_info({:show_fixed_question, index}, socket) do
     socket =
       socket
@@ -349,20 +319,17 @@ defmodule SkillKit.Web.OnboardingLive do
       ) do
     cond do
       socket.assigns.transitioning != :none ->
-        # Already transitioning — ignore late messages
         {:noreply, socket}
 
       has_doc_create?(tool_calls) ->
-        # Tool hasn't executed yet — show "creating" state, wait for ToolCallComplete
         {:noreply, assign(socket, waiting: true, waiting_text: "Creating your project brief...")}
 
       has_documents?(socket.assigns.docs_root) ->
-        # Docs exist but transition didn't fire yet — show completion with manual button
         {:noreply, assign(socket, ready: true, summary: content)}
 
       true ->
-        parsed = parse_question(content)
-        {:noreply, assign_question(socket, parsed)}
+        # Agent sent a text message without using docs:ask — ignore it
+        {:noreply, socket}
     end
   end
 
@@ -390,9 +357,6 @@ defmodule SkillKit.Web.OnboardingLive do
 
   @impl true
   def handle_info(:complete_transition, socket) do
-    conversations_dir = SkillKitWeb.conversations_dir()
-    ConversationStore.delete(socket.assigns.conversation_id, dir: conversations_dir)
-
     doc_path = first_document_path(socket.assigns.docs_root)
     {:noreply, push_navigate(socket, to: "/#{doc_path}")}
   end
@@ -415,36 +379,12 @@ defmodule SkillKit.Web.OnboardingLive do
   end
 
   defp handle_agent_start(socket) do
-    agent_path = Path.join(:code.priv_dir(:skill_kit_web), "agents/onboarding.md")
-    conversations_dir = SkillKitWeb.conversations_dir()
-
-    scope = %EditorScope{
-      project_root: SkillKitWeb.project_root(),
-      docs_root: socket.assigns.docs_root
-    }
-
-    case Definition.parse(agent_path) do
-      {:ok, definition} ->
-        case SkillKit.start_agent(definition,
-               caller: self(),
-               skills: [{DocumentKit, []}],
-               scope: scope,
-               conversation_store: {ConversationStore, dir: conversations_dir},
-               conversation_id: socket.assigns.conversation_id
-             ) do
-          {:ok, agent_ref} ->
-            assign(socket, :agent_ref, agent_ref)
-
-          {:error, reason} ->
-            assign(
-              socket,
-              :error,
-              "Could not start assistant: #{inspect(reason)}. Try refreshing."
-            )
-        end
+    case Agents.start_onboarding(self(), socket.assigns.conversation_id) do
+      {:ok, agent_ref} ->
+        assign(socket, :agent_ref, agent_ref)
 
       {:error, reason} ->
-        assign(socket, :error, "Could not load agent: #{inspect(reason)}. Try refreshing.")
+        assign(socket, :error, "Could not start assistant: #{inspect(reason)}. Try refreshing.")
     end
   end
 
@@ -465,53 +405,8 @@ defmodule SkillKit.Web.OnboardingLive do
     "[Onboarding answers]\n#{answers}"
   end
 
-  # -- Parsing -----------------------------------------------------------------
-
-  defp parse_question(nil), do: %{question: "Let me think...", subtext: nil}
-
-  defp parse_question(content) do
-    case Regex.run(~r/QUESTION:\s*(.+?)(?:\nSUBTEXT:\s*(.+))?$/s, content) do
-      [_, question, subtext] ->
-        %{question: String.trim(question), subtext: String.trim(subtext)}
-
-      [_, question] ->
-        %{question: String.trim(question), subtext: nil}
-
-      nil ->
-        %{question: String.trim(content), subtext: nil}
-    end
-  end
-
   defp has_doc_create?(tool_calls) do
     Enum.any?(tool_calls, fn tc -> tc.name == "docs" and tc.input["path"] != nil end)
-  end
-
-  # -- Conversation replay -----------------------------------------------------
-
-  defp replay_conversation(messages) do
-    {pairs, last_question} =
-      Enum.reduce(messages, {[], nil}, fn msg, {pairs_acc, last_q} ->
-        case msg do
-          %SkillKit.Types.AssistantMessage{content: content} when not is_nil(content) ->
-            parsed = parse_question(content)
-            {pairs_acc, parsed}
-
-          %SkillKit.Types.UserMessage{content: content} when not is_nil(content) ->
-            case last_q do
-              nil ->
-                {pairs_acc, nil}
-
-              %{question: q} ->
-                pair = %{question: q, answer: content}
-                {pairs_acc ++ [pair], nil}
-            end
-
-          _ ->
-            {pairs_acc, last_q}
-        end
-      end)
-
-    {pairs, last_question}
   end
 
   # -- Helpers -----------------------------------------------------------------

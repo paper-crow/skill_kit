@@ -6,7 +6,10 @@ defmodule SkillKit.Web.BuilderKit.ToolTest do
   alias SkillKit.Web.BuilderKit.Graph
   alias SkillKit.Web.BuilderKit.Tool
 
-  @tmp_dir Path.join(System.tmp_dir!(), "builder_tool_test_#{:erlang.unique_integer([:positive])}")
+  @tmp_dir Path.join(
+             System.tmp_dir!(),
+             "builder_tool_test_#{:erlang.unique_integer([:positive])}"
+           )
 
   setup do
     File.rm_rf!(@tmp_dir)

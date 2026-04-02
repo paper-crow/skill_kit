@@ -54,7 +54,7 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     refute html =~ "form"
   end
 
-  test "agent question replaces thinking state", %{conn: conn} do
+  test "agent question via docs:ask replaces thinking state", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
@@ -63,20 +63,22 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     view |> form("form", %{answer: "Stockpile"}) |> render_submit()
     assert render(view) =~ "Thinking..."
 
-    # Simulate agent sending a follow-up question
-    send(view.pid, %SkillKit.Types.AssistantMessage{
-      content:
-        "QUESTION: What kinds of items will you track?\nSUBTEXT: This helps me understand the data.",
-      tool_calls: []
-    })
+    # Simulate docs:ask tool sending structured question
+    send(
+      view.pid,
+      {:onboarding_question,
+       %{
+         question: "What kinds of items will you track?",
+         subtext: "This helps me understand the data."
+       }}
+    )
 
     html = render(view)
-    # Words are split into animated spans, so check subtext (rendered contiguously)
     assert html =~ "This helps me understand the data."
     refute html =~ "Thinking..."
   end
 
-  test "agent question without markers uses full text", %{conn: conn} do
+  test "agent question without subtext", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
@@ -84,12 +86,15 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
     view |> form("form", %{answer: "Stockpile"}) |> render_submit()
 
-    send(view.pid, %SkillKit.Types.AssistantMessage{
-      content: "How many users do you expect?",
-      tool_calls: []
-    })
+    send(
+      view.pid,
+      {:onboarding_question,
+       %{
+         question: "How many users do you expect?",
+         subtext: nil
+       }}
+    )
 
-    # Words are in animated spans — check for a unique word and the form
     html = render(view)
     assert html =~ "expect?"
     assert html =~ "form"

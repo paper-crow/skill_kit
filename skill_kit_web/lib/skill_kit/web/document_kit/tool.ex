@@ -27,8 +27,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
 
   @impl true
   def execute(%SkillKit.ToolExecution{skill: skill, input: input, context: context}) do
-    root = Map.get(context, :docs_root, SkillKitWeb.docs_root())
-    dispatch(skill.name, input, root)
+    dispatch(skill.name, input, context)
   end
 
   @impl true
@@ -38,7 +37,29 @@ defmodule SkillKit.Web.DocumentKit.Tool do
 
   # -- Dispatch ----------------------------------------------------------------
 
-  defp dispatch("docs:create", input, root) do
+  defp dispatch("docs:ask", input, context) do
+    caller = get_in(context, [:scope, Access.key(:caller)])
+
+    if caller do
+      question = %{
+        question: input["question"],
+        subtext: input["subtext"]
+      }
+
+      send(caller, {:onboarding_question, question})
+      {:ok, "Question sent to user. Wait for their response."}
+    else
+      {:error, "No caller process available"}
+    end
+  end
+
+  # All remaining skills operate on the docs_root filesystem
+  defp dispatch(skill_name, input, context) do
+    root = docs_root(context)
+    dispatch_docs(skill_name, input, root)
+  end
+
+  defp dispatch_docs("docs:create", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
          :ok <- ensure_not_exists(abs_path),
          :ok <- File.mkdir_p(Path.dirname(abs_path)),
@@ -47,7 +68,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     end
   end
 
-  defp dispatch("docs:read", input, root) do
+  defp dispatch_docs("docs:read", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
          {:ok, content} <- File.read(abs_path) do
       {:ok, content}
@@ -57,7 +78,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     end
   end
 
-  defp dispatch("docs:update", input, root) do
+  defp dispatch_docs("docs:update", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
          :ok <- ensure_exists(abs_path),
          :ok <- File.write(abs_path, input["content"]) do
@@ -65,7 +86,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     end
   end
 
-  defp dispatch("docs:list", _input, root) do
+  defp dispatch_docs("docs:list", _input, root) do
     files =
       root
       |> Path.join("**/*.md")
@@ -76,7 +97,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     {:ok, files}
   end
 
-  defp dispatch("docs:search", input, root) do
+  defp dispatch_docs("docs:search", input, root) do
     query = input["query"]
 
     results =
@@ -88,7 +109,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     {:ok, results}
   end
 
-  defp dispatch("docs:structure", input, root) do
+  defp dispatch_docs("docs:structure", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
          {:ok, content} <- File.read(abs_path) do
       headings = parse_headings(content)
@@ -99,7 +120,7 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     end
   end
 
-  defp dispatch("docs:history", input, root) do
+  defp dispatch_docs("docs:history", input, root) do
     limit = Map.get(input, "limit", 20)
 
     case validate_path(root, input["path"]) do
@@ -108,8 +129,14 @@ defmodule SkillKit.Web.DocumentKit.Tool do
     end
   end
 
-  defp dispatch(skill_name, _input, _root) do
+  defp dispatch_docs(skill_name, _input, _root) do
     {:error, "Unknown skill: #{skill_name}"}
+  end
+
+  defp docs_root(context) do
+    get_in(context, [:scope, Access.key(:docs_root)]) ||
+      Map.get(context, :docs_root) ||
+      SkillKitWeb.docs_root()
   end
 
   defp run_git_log(abs_path, limit, root) do

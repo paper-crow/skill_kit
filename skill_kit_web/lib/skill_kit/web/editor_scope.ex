@@ -19,6 +19,7 @@ defmodule SkillKit.Web.EditorScope do
 
   defstruct [
     :user,
+    :caller,
     project_root: nil,
     docs_root: nil,
     permissions: ["docs:*", "build:*"]

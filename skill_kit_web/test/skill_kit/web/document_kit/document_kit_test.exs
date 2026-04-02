@@ -7,7 +7,7 @@ defmodule SkillKit.Web.DocumentKit.DocumentKitTest do
     {:ok, [kit]} = DocumentKit.list_kits([])
 
     assert kit.name == "docs"
-    assert length(kit.skills) == 8
+    assert length(kit.skills) == 9
 
     skill_names = Enum.map(kit.skills, & &1.name)
     assert "docs:create" in skill_names

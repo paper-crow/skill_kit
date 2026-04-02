@@ -14,11 +14,15 @@ defmodule SkillKit.Web.BuilderKit.Tool do
   def definition do
     %SkillKit.Tool{
       name: "build",
-      description: "Build pipeline — manage document-to-code graph, generate requirements and plans",
+      description:
+        "Build pipeline — manage document-to-code graph, generate requirements and plans",
       input_schema: %{
         "type" => "object",
         "properties" => %{
-          "document" => %{"type" => "string", "description" => "Document path relative to docs root"},
+          "document" => %{
+            "type" => "string",
+            "description" => "Document path relative to docs root"
+          },
           "code_files" => %{
             "type" => "array",
             "items" => %{"type" => "string"},
@@ -123,7 +127,9 @@ defmodule SkillKit.Web.BuilderKit.Tool do
       case File.write(abs_out, placeholder) do
         :ok ->
           update_graph_artifact(docs_root, doc_path, "requirements", out_path)
-          {:ok, "Requirements document written to #{out_path}. Please review and edit it, then tell me to proceed."}
+
+          {:ok,
+           "Requirements document written to #{out_path}. Please review and edit it, then tell me to proceed."}
 
         {:error, reason} ->
           {:error, "Failed to write requirements: #{inspect(reason)}"}
@@ -144,7 +150,9 @@ defmodule SkillKit.Web.BuilderKit.Tool do
       case File.write(abs_out, placeholder) do
         :ok ->
           update_graph_artifact(docs_root, doc_path, "plan", out_path)
-          {:ok, "Implementation plan written to #{out_path}. Please review and edit it, then tell me to proceed."}
+
+          {:ok,
+           "Implementation plan written to #{out_path}. Please review and edit it, then tell me to proceed."}
 
         {:error, reason} ->
           {:error, "Failed to write plan: #{inspect(reason)}"}
@@ -187,7 +195,8 @@ defmodule SkillKit.Web.BuilderKit.Tool do
           plan_path = mapping["plan"]
 
           if plan_path do
-            {:ok, "Ready to execute plan at #{plan_path}. Use build:write_code to create or update each file, then build:graph_update to record the new hash."}
+            {:ok,
+             "Ready to execute plan at #{plan_path}. Use build:write_code to create or update each file, then build:graph_update to record the new hash."}
           else
             {:error, "No plan found for #{doc_path}. Run build:plan first."}
           end

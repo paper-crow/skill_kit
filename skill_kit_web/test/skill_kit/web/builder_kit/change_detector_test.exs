@@ -4,7 +4,10 @@ defmodule SkillKit.Web.BuilderKit.ChangeDetectorTest do
   alias SkillKit.Web.BuilderKit.ChangeDetector
   alias SkillKit.Web.BuilderKit.Graph
 
-  @tmp_dir Path.join(System.tmp_dir!(), "change_detector_test_#{:erlang.unique_integer([:positive])}")
+  @tmp_dir Path.join(
+             System.tmp_dir!(),
+             "change_detector_test_#{:erlang.unique_integer([:positive])}"
+           )
 
   setup do
     File.rm_rf!(@tmp_dir)
