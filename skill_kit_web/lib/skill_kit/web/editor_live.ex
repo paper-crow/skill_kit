@@ -149,13 +149,15 @@ defmodule SkillKit.Web.EditorLive do
   def handle_event("editor_change", %{"content" => content}, socket) do
     root = socket.assigns.docs_root
     full_path = Path.join(root, socket.assigns.current_path)
-    File.write!(full_path, content)
-    {:noreply, assign(socket, :content, content)}
-  end
 
-  @impl true
-  def handle_event("new_document", _params, socket) do
-    {:noreply, socket}
+    case File.write(full_path, content) do
+      :ok ->
+        {:noreply, assign(socket, :content, content)}
+
+      {:error, reason} ->
+        error_msg = %{role: :assistant, content: "Save failed: #{inspect(reason)}"}
+        {:noreply, assign(socket, :chat_messages, socket.assigns.chat_messages ++ [error_msg])}
+    end
   end
 
   @impl true
@@ -283,14 +285,20 @@ defmodule SkillKit.Web.EditorLive do
   def handle_event("reject_diff", _params, socket) do
     diff = socket.assigns.pending_diff
     full_path = Path.join(socket.assigns.docs_root, diff.path)
-    File.write!(full_path, diff.old_content)
 
-    socket =
-      socket
-      |> assign(:pending_diff, nil)
-      |> assign(:content, diff.old_content)
+    case File.write(full_path, diff.old_content) do
+      :ok ->
+        socket =
+          socket
+          |> assign(:pending_diff, nil)
+          |> assign(:content, diff.old_content)
 
-    {:noreply, socket}
+        {:noreply, socket}
+
+      {:error, reason} ->
+        error_msg = %{role: :assistant, content: "Could not revert file: #{inspect(reason)}"}
+        {:noreply, assign(socket, :chat_messages, socket.assigns.chat_messages ++ [error_msg])}
+    end
   end
 
   @max_mermaid_retries 2
@@ -716,8 +724,10 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   defp open_file(root, path) do
-    content = File.read!(Path.join(root, path))
-    {path, content}
+    case File.read(Path.join(root, path)) do
+      {:ok, content} -> {path, content}
+      {:error, _} -> {path, ""}
+    end
   end
 
   defp toggle_drawer(current, panel) when current == panel, do: nil

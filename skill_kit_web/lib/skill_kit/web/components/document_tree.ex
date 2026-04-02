@@ -72,36 +72,6 @@ defmodule SkillKit.Web.Components.DocumentTree do
     """
   end
 
-  @doc """
-  Converts a flat list of file entries into a nested tree structure.
-  """
-  def build_tree(entries) do
-    grouped = Enum.group_by(entries, &entry_prefix/1)
-    root_files = Map.get(grouped, :root, [])
-    dirs = Map.drop(grouped, [:root])
-
-    root_nodes = Enum.map(root_files, &file_node/1)
-    dir_nodes = dirs |> Enum.sort_by(&elem(&1, 0)) |> Enum.map(&dir_node/1)
-
-    root_nodes ++ dir_nodes
-  end
-
-  defp entry_prefix(%{path: path}) do
-    case Path.split(path) do
-      [_file] -> :root
-      [dir | _rest] -> dir
-    end
-  end
-
-  defp file_node(%{path: path, title: title}) do
-    %{type: :file, name: Path.basename(path), title: title, path: path}
-  end
-
-  defp dir_node({dir, entries}) do
-    children = Enum.map(entries, &file_node/1)
-    %{type: :directory, name: dir, children: children}
-  end
-
   defp slugify(text) do
     text
     |> String.downcase()

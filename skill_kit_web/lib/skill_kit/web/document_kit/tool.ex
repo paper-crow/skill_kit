@@ -40,12 +40,9 @@ defmodule SkillKit.Web.DocumentKit.Tool do
 
   defp dispatch("docs:create", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
-         :ok <- ensure_not_exists(abs_path) do
-      abs_path
-      |> Path.dirname()
-      |> File.mkdir_p!()
-
-      File.write!(abs_path, input["content"])
+         :ok <- ensure_not_exists(abs_path),
+         :ok <- File.mkdir_p(Path.dirname(abs_path)),
+         :ok <- File.write(abs_path, input["content"]) do
       {:ok, "Created #{input["path"]}"}
     end
   end
@@ -62,8 +59,8 @@ defmodule SkillKit.Web.DocumentKit.Tool do
 
   defp dispatch("docs:update", input, root) do
     with {:ok, abs_path} <- validate_path(root, input["path"]),
-         :ok <- ensure_exists(abs_path) do
-      File.write!(abs_path, input["content"])
+         :ok <- ensure_exists(abs_path),
+         :ok <- File.write(abs_path, input["content"]) do
       {:ok, "Updated #{input["path"]}"}
     end
   end

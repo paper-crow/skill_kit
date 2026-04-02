@@ -38,12 +38,13 @@ defmodule SkillKit.Web.ConversationStore do
 
     case File.read(path) do
       {:ok, contents} ->
-        messages =
-          contents
-          |> Jason.decode!()
-          |> Enum.map(&deserialize_message/1)
+        case Jason.decode(contents) do
+          {:ok, decoded} ->
+            {:ok, Enum.map(decoded, &deserialize_message/1)}
 
-        {:ok, messages}
+          {:error, _} ->
+            {:error, :corrupt}
+        end
 
       {:error, :enoent} ->
         {:ok, []}

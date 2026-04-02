@@ -138,6 +138,19 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert length(headings) == 4
       assert hd(headings) == %{level: 1, text: "Title"}
     end
+
+    test "returns empty list for empty file", %{docs_root: root} do
+      File.write!(Path.join(root, "empty.md"), "")
+      execution = build_execution("docs:structure", %{"path" => "empty.md"}, root)
+
+      assert {:ok, []} = Tool.execute(execution)
+    end
+
+    test "returns error for missing file", %{docs_root: root} do
+      execution = build_execution("docs:structure", %{"path" => "nope.md"}, root)
+
+      assert {:error, _} = Tool.execute(execution)
+    end
   end
 
   describe "docs:history" do
@@ -155,6 +168,13 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
 
       assert is_binary(log)
       assert log =~ "init"
+    end
+
+    test "returns error when not a git repo", %{docs_root: root} do
+      File.write!(Path.join(root, "doc.md"), "# Doc")
+      execution = build_execution("docs:history", %{"path" => "doc.md"}, root)
+
+      assert {:error, _} = Tool.execute(execution)
     end
   end
 
@@ -180,6 +200,14 @@ defmodule SkillKit.Web.DocumentKit.ToolTest do
       assert tool.name == "docs"
       assert tool.description != ""
       assert is_map(tool.input_schema)
+    end
+  end
+
+  describe "unknown skill" do
+    test "returns error for unknown skill name", %{docs_root: root} do
+      execution = build_execution("docs:unknown", %{}, root)
+
+      assert {:error, "Unknown skill: docs:unknown"} = Tool.execute(execution)
     end
   end
 
