@@ -49,141 +49,132 @@ defmodule SkillKit.Web.OnboardingLive do
     end
   end
 
-  @impl true
-  def render(assigns) do
+  # -- Components ---------------------------------------------------------------
+
+  attr(:error, :string, required: true)
+
+  defp error_state(assigns) do
     ~H"""
-    <div class={[
-      "flex items-center h-full w-full bg-editor-bg",
-      transition_class(@transitioning)
-    ]}>
-      <div class="pl-16 w-[480px]">
-        <div :if={@error} class="font-heading text-2xl text-editor-text leading-snug mb-2">
-          {@error}
+    <div class="font-heading text-2xl text-editor-text leading-snug mb-2">
+      {@error}
+    </div>
+    """
+  end
+
+  attr(:summary, :string, default: nil)
+
+  defp ready_state(assigns) do
+    ~H"""
+    <div class="animate-onboarding-fade-in">
+      <h2 class="font-heading text-[28px] text-editor-text leading-snug mb-4">
+        Your project brief is ready
+      </h2>
+      <p :if={@summary} class="text-[15px] text-editor-text-muted leading-relaxed mb-10">
+        {@summary}
+      </p>
+      <button
+        phx-click="get_started"
+        class="inline-flex items-center gap-2 px-6 py-3
+               bg-editor-accent text-white rounded-xl text-[15px]
+               hover:opacity-90 transition-opacity"
+      >
+        Get started
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+          <path
+            fill-rule="evenodd"
+            d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </button>
+    </div>
+    """
+  end
+
+  attr(:text, :string, required: true)
+
+  defp waiting_state(assigns) do
+    ~H"""
+    <div class="animate-onboarding-fade-in">
+      <div class="flex items-center gap-3">
+        <div class="flex gap-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse" />
+          <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:150ms]" />
+          <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:300ms]" />
         </div>
-        <div :if={!@error and @ready} class="animate-onboarding-fade-in">
-          <h2 class="font-heading text-[28px] text-editor-text leading-snug mb-4">
-            Your project brief is ready
-          </h2>
-          <p
-            :if={@summary}
-            class="text-[15px] text-editor-text-muted leading-relaxed mb-10"
-          >
-            {@summary}
-          </p>
+        <span class="text-[15px] text-editor-text-faint">{@text}</span>
+      </div>
+    </div>
+    """
+  end
+
+  attr(:question, :string, required: true)
+  attr(:subtext, :string, default: nil)
+  attr(:placeholder, :string, default: "")
+  attr(:animate, :boolean, default: false)
+  attr(:question_key, :integer, required: true)
+
+  defp question_state(assigns) do
+    delay_base = word_count(assigns.question) * 40
+
+    assigns =
+      assigns
+      |> assign(:subtext_delay, "#{delay_base + 100}ms")
+      |> assign(:input_delay, "#{delay_base + 200}ms")
+
+    ~H"""
+    <div>
+      <h1 class="font-heading text-[28px] text-editor-text leading-snug mb-2">
+        <.animated_words :if={@animate} text={@question} key={@question_key} />
+        <span :if={!@animate}>{@question}</span>
+      </h1>
+      <p
+        :if={@subtext}
+        class={[
+          "text-[15px] text-editor-text-faint leading-relaxed mb-9",
+          if(@animate, do: "animate-onboarding-fade-in opacity-0", else: "")
+        ]}
+        style={if(@animate, do: "animation-delay: #{@subtext_delay}", else: "")}
+      >
+        {@subtext}
+      </p>
+      <div
+        class={[
+          "mt-9",
+          if(@animate, do: "animate-onboarding-fade-in opacity-0", else: "")
+        ]}
+        style={if(@animate, do: "animation-delay: #{@input_delay}", else: "")}
+      >
+        <form phx-submit="submit_answer" class="relative">
+          <textarea
+            id={"onboarding-input-#{@question_key}"}
+            name="answer"
+            rows="3"
+            placeholder={@placeholder}
+            autocomplete="off"
+            phx-hook="OnboardingInput"
+            class="w-full bg-white dark:bg-editor-bg-alt border border-editor-border rounded-xl
+                   px-5 py-4 pr-16 text-[15px] text-editor-text placeholder-editor-text-faint
+                   focus:outline-none focus:border-editor-accent-muted
+                   resize-none transition-colors"
+          />
           <button
-            phx-click="get_started"
-            class="inline-flex items-center gap-2 px-6 py-3
-                   bg-editor-accent text-white rounded-xl text-[15px]
+            type="submit"
+            class="absolute right-3 bottom-3
+                   w-9 h-9 rounded-full bg-editor-accent text-white
+                   flex items-center justify-center
                    hover:opacity-90 transition-opacity"
           >
-            Get started
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              class="w-4 h-4"
-            >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
               <path
                 fill-rule="evenodd"
-                d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z"
+                d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
                 clip-rule="evenodd"
               />
             </svg>
           </button>
-        </div>
-        <div :if={!@error and !@ready and @waiting} class="animate-onboarding-fade-in">
-          <div class="flex items-center gap-3">
-            <div class="flex gap-1">
-              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse" />
-              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:150ms]" />
-              <span class="w-1.5 h-1.5 rounded-full bg-editor-accent-muted animate-pulse [animation-delay:300ms]" />
-            </div>
-            <span class="text-[15px] text-editor-text-faint">{@waiting_text}</span>
-          </div>
-        </div>
-        <div :if={!@error and !@ready and !@waiting}>
-          <h1 class="font-heading text-[28px] text-editor-text leading-snug mb-2">
-            <.animated_words
-              :if={@animate_question}
-              text={@question}
-              key={@question_key}
-            />
-            <span :if={!@animate_question}>{@question}</span>
-          </h1>
-          <p
-            :if={@subtext}
-            class={[
-              "text-[15px] text-editor-text-faint leading-relaxed mb-9",
-              if(@animate_question, do: "animate-onboarding-fade-in opacity-0", else: "")
-            ]}
-            style={
-              if(@animate_question,
-                do: "animation-delay: #{word_count(@question) * 40 + 100}ms",
-                else: ""
-              )
-            }
-          >
-            {@subtext}
-          </p>
-          <div
-            class={[
-              "mt-9",
-              if(@animate_question, do: "animate-onboarding-fade-in opacity-0", else: "")
-            ]}
-            style={
-              if(@animate_question,
-                do: "animation-delay: #{word_count(@question) * 40 + 200}ms",
-                else: ""
-              )
-            }
-          >
-            <form phx-submit="submit_answer" class="relative">
-              <textarea
-                id={"onboarding-input-#{@question_key}"}
-                name="answer"
-                rows="3"
-                placeholder={@placeholder}
-                autocomplete="off"
-                phx-hook="OnboardingInput"
-                class="w-full bg-white dark:bg-editor-bg-alt border border-editor-border rounded-xl
-                       px-5 py-4 pr-16 text-[15px] text-editor-text placeholder-editor-text-faint
-                       focus:outline-none focus:border-editor-accent-muted
-                       resize-none transition-colors"
-              />
-              <button
-                type="submit"
-                class="absolute right-3 bottom-3
-                       w-9 h-9 rounded-full bg-editor-accent text-white
-                       flex items-center justify-center
-                       hover:opacity-90 transition-opacity"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  class="w-4 h-4"
-                >
-                  <path
-                    fill-rule="evenodd"
-                    d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
-                    clip-rule="evenodd"
-                  />
-                </svg>
-              </button>
-            </form>
-          </div>
-        </div>
+        </form>
       </div>
-      <button
-        id="onboarding-theme-toggle"
-        phx-hook="Theme"
-        class="fixed bottom-6 left-8 text-editor-text-faint hover:text-editor-accent-muted
-               text-sm transition-colors"
-        title="Toggle theme"
-      >
-        <span class="dark:hidden">&#9790;</span>
-        <span class="hidden dark:inline">&#9728;</span>
-      </button>
     </div>
     """
   end
@@ -192,8 +183,7 @@ defmodule SkillKit.Web.OnboardingLive do
   attr(:key, :integer, required: true)
 
   defp animated_words(assigns) do
-    words = String.split(assigns.text)
-    assigns = assign(assigns, :words, words)
+    assigns = assign(assigns, :words, String.split(assigns.text))
 
     ~H"""
     <span

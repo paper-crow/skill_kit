@@ -1,0 +1,28 @@
+<div class={[
+  "flex items-center h-full w-full bg-editor-bg",
+  transition_class(@transitioning)
+]}>
+  <div class="pl-16 w-[480px]">
+    <.error_state :if={@error} error={@error} />
+    <.ready_state :if={!@error and @ready} summary={@summary} />
+    <.waiting_state :if={!@error and !@ready and @waiting} text={@waiting_text} />
+    <.question_state
+      :if={!@error and !@ready and !@waiting}
+      question={@question}
+      subtext={@subtext}
+      placeholder={@placeholder}
+      animate={@animate_question}
+      question_key={@question_key}
+    />
+  </div>
+  <button
+    id="onboarding-theme-toggle"
+    phx-hook="Theme"
+    class="fixed bottom-6 left-8 text-editor-text-faint hover:text-editor-accent-muted
+           text-sm transition-colors"
+    title="Toggle theme"
+  >
+    <span class="dark:hidden">&#9790;</span>
+    <span class="hidden dark:inline">&#9728;</span>
+  </button>
+</div>
