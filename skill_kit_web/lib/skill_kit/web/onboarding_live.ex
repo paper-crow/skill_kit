@@ -7,6 +7,8 @@ defmodule SkillKit.Web.OnboardingLive do
   alias SkillKit.Web.DocumentKit
   alias SkillKit.Web.EditorScope
 
+  import SkillKit.Web.Components.Icons
+
   @fixed_questions [
     %{
       question: "What's the one thing it needs to do?",
@@ -78,19 +80,7 @@ defmodule SkillKit.Web.OnboardingLive do
                bg-editor-accent text-white rounded-xl text-[15px]
                hover:opacity-90 transition-opacity"
       >
-        Get started
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          class="w-4 h-4"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z"
-            clip-rule="evenodd"
-          />
-        </svg>
+        Get started <.icon name="hero-arrow-right-mini" class="w-4 h-4" />
       </button>
     </div>
     """
@@ -167,18 +157,7 @@ defmodule SkillKit.Web.OnboardingLive do
                    flex items-center justify-center
                    hover:opacity-90 transition-opacity"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              class="w-4 h-4"
-            >
-              <path
-                fill-rule="evenodd"
-                d="M10 17a.75.75 0 01-.75-.75V5.612L5.29 9.77a.75.75 0 01-1.08-1.04l5.25-5.5a.75.75 0 011.08 0l5.25 5.5a.75.75 0 11-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0110 17z"
-                clip-rule="evenodd"
-              />
-            </svg>
+            <.icon name="hero-arrow-up-mini" class="w-4 h-4" />
           </button>
         </form>
       </div>
