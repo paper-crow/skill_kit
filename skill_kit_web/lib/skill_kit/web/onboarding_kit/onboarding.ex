@@ -1,4 +1,4 @@
-defmodule SkillKit.Web.Onboarding do
+defmodule SkillKit.Web.OnboardingKit.Onboarding do
   @moduledoc """
   Domain logic for the onboarding flow.
 

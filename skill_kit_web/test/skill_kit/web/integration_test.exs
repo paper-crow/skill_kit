@@ -25,7 +25,7 @@ defmodule SkillKit.Web.IntegrationTest do
   test "DocumentKit lists project files" do
     {:ok, [kit]} = DocumentKit.list_kits([])
     assert kit.name == "docs"
-    assert length(kit.skills) == 8
+    assert length(kit.skills) == 7
   end
 
   test "DocumentKit Tool can read files" do

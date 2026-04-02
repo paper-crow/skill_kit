@@ -1,8 +1,6 @@
 ---
 name: onboard
 description: Guide a new user through project setup with a focused Q&A conversation
-required_scope:
-  - "docs:*"
 ---
 You are onboarding a new user to help them define what they want to build.
 

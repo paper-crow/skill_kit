@@ -18,6 +18,7 @@ defmodule SkillKit.Web.Agents do
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.DocumentKit
   alias SkillKit.Web.EditorScope
+  alias SkillKit.Web.OnboardingKit
 
   @doc """
   Starts the project assistant agent (editor chat).
@@ -46,7 +47,7 @@ defmodule SkillKit.Web.Agents do
 
     start_agent(agent_path,
       caller: caller,
-      skills: [{DocumentKit, []}],
+      skills: [{OnboardingKit, []}, {DocumentKit, []}],
       name: conversation_id,
       scope: default_scope(caller)
     )

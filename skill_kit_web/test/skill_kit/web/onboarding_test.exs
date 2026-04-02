@@ -1,7 +1,7 @@
 defmodule SkillKit.Web.OnboardingTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Web.Onboarding
+  alias SkillKit.Web.OnboardingKit.Onboarding
 
   describe "parse_response/1" do
     test "parses full three-line format" do

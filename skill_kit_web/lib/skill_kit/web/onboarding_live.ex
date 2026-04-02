@@ -3,7 +3,7 @@ defmodule SkillKit.Web.OnboardingLive do
     layout: {SkillKit.Web.Layouts, :app}
 
   alias SkillKit.Web.Agents
-  alias SkillKit.Web.Onboarding
+  alias SkillKit.Web.OnboardingKit.Onboarding
 
   import SkillKit.Web.Components.Onboarding,
     only: [
