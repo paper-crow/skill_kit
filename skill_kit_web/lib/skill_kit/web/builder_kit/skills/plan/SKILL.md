@@ -15,3 +15,5 @@ Input:
 - `document` — path to the source document (used to find the requirements file via the build graph)
 
 The skill reads the requirements from the graph's recorded path, reads the current code files, and writes the plan. The user reviews this document before proceeding to code generation.
+
+Before writing the plan, activate `build:phoenix_conventions` for the full reference of Phoenix/LiveView patterns, project structure, and anti-patterns to follow.
