@@ -471,10 +471,9 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   defp start_agent(docs_root) do
-    agent_path = Application.app_dir(:skill_kit_web, "priv/agents/assistant.md")
+    agent_path = SkillKitWeb.agent_path()
     project_root = SkillKitWeb.project_root()
-
-    conversations_dir = Path.join(project_root, ".skill_kit/conversations")
+    conversations_dir = SkillKitWeb.conversations_dir()
 
     scope = %EditorScope{
       project_root: project_root,

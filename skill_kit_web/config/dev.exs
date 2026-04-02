@@ -21,10 +21,12 @@ config :skill_kit_web, SkillKit.Web.DevEndpoint,
     ]
   ]
 
-# In dev, point to the parent project (worktree root)
-# __DIR__ is skill_kit_web/config/, so ../.. gets to the worktree root
-config :skill_kit_web, :project_root, Path.expand("../..", __DIR__)
-config :skill_kit_web, :docs_root, Path.expand("../../guides", __DIR__)
+# Project root: the host application being built.
+# Set SKILL_KIT_PROJECT env var to point at an external project.
+# Falls back to a local dev_project/ sandbox for development.
+config :skill_kit_web,
+  :project_root,
+  System.get_env("SKILL_KIT_PROJECT") || Path.expand("../dev_project", __DIR__)
 
 config :esbuild,
   version: "0.24.2",
