@@ -6,6 +6,7 @@ import AutoScroll from "./hooks/auto_scroll";
 import ChatScroll from "./hooks/chat_scroll";
 import MarkdownEditor from "./hooks/markdown_editor";
 import InlineThread from "./hooks/inline_thread";
+import OnboardingInput from "./hooks/onboarding_input";
 import Theme from "./hooks/theme";
 
 // Make available to hooks
@@ -31,6 +32,7 @@ const hooks = {
   ChatScroll,
   InlineThread,
   MarkdownEditor,
+  OnboardingInput,
   Theme,
 };
 
