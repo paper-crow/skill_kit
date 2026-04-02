@@ -15,6 +15,8 @@ defmodule SkillKit.Web.Router do
   scope "/", SkillKit.Web do
     pipe_through(:browser)
 
+    live("/setup", OnboardingLive, :new)
+    live("/setup/:conversation_id", OnboardingLive, :show)
     live("/", EditorLive, :index)
     live("/*path", EditorLive, :show)
   end

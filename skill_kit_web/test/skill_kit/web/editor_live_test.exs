@@ -2,7 +2,7 @@ defmodule SkillKit.Web.EditorLiveTest do
   use SkillKitWeb.ConnCase
   import Phoenix.LiveViewTest
 
-  @tmp_dir "test/tmp/editor_live_test"
+  @tmp_dir Path.expand("../../tmp/editor_live_test", __DIR__)
 
   setup do
     File.rm_rf!(@tmp_dir)
@@ -43,14 +43,13 @@ defmodule SkillKit.Web.EditorLiveTest do
     assert html =~ "Features" or html =~ "Welcome"
   end
 
-  test "empty docs directory renders without crash", %{conn: conn} do
+  test "empty docs directory redirects to /setup", %{conn: conn} do
     empty_dir = Path.join(@tmp_dir, "empty")
     File.mkdir_p!(empty_dir)
     Application.put_env(:skill_kit_web, :docs_root, empty_dir)
 
-    {:ok, _view, html} = live(conn, "/")
-    # Should render the page structure without crashing
-    assert html =~ "Type your message"
+    {:error, {:live_redirect, %{to: path}}} = live(conn, "/")
+    assert path == "/setup"
   end
 
   test "editor_change saves content to file", %{conn: conn} do
