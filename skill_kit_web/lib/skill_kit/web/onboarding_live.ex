@@ -56,7 +56,7 @@ defmodule SkillKit.Web.OnboardingLive do
       "flex items-center h-full w-full bg-editor-bg",
       transition_class(@transitioning)
     ]}>
-      <div class="pl-16 max-w-lg">
+      <div class="pl-16 w-[480px]">
         <div :if={@error} class="font-heading text-2xl text-editor-text leading-snug mb-2">
           {@error}
         </div>
@@ -134,22 +134,22 @@ defmodule SkillKit.Web.OnboardingLive do
               )
             }
           >
-            <form phx-submit="submit_answer" class="relative max-w-md">
-              <input
+            <form phx-submit="submit_answer" class="relative">
+              <textarea
                 id={"onboarding-input-#{@question_key}"}
                 name="answer"
-                type="text"
+                rows="3"
                 placeholder={@placeholder}
                 autocomplete="off"
                 phx-hook="OnboardingInput"
                 class="w-full bg-white dark:bg-editor-bg-alt border border-editor-border rounded-xl
                        px-5 py-4 pr-16 text-[15px] text-editor-text placeholder-editor-text-faint
                        focus:outline-none focus:border-editor-accent-muted
-                       transition-colors"
+                       resize-none transition-colors"
               />
               <button
                 type="submit"
-                class="absolute right-3 top-1/2 -translate-y-1/2
+                class="absolute right-3 bottom-3
                        w-9 h-9 rounded-full bg-editor-accent text-white
                        flex items-center justify-center
                        hover:opacity-90 transition-opacity"
