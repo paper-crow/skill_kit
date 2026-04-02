@@ -37,6 +37,12 @@ module.exports = {
       spacing: {
         "section": "24px",
       },
+      animation: {
+        "onboarding-word-reveal": "onboarding-word-reveal 0.3s ease-out forwards",
+        "onboarding-page-exit": "onboarding-page-exit 0.4s ease-out forwards",
+        "onboarding-fade-in": "onboarding-fade-in 0.4s ease-out forwards",
+        "editor-page-enter": "editor-page-enter 0.4s ease-out forwards",
+      },
     },
   },
   plugins: [
