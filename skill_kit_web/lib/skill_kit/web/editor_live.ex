@@ -9,6 +9,7 @@ defmodule SkillKit.Web.EditorLive do
   alias SkillKit.Web.Components.EditorSurface
   alias SkillKit.Web.Components.InlineThread
 
+  alias SkillKit.Web.BuilderKit
   alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.EditorScope
 
@@ -484,7 +485,7 @@ defmodule SkillKit.Web.EditorLive do
       {:ok, definition} ->
         SkillKit.start_agent(definition,
           caller: self(),
-          skills: [{SkillKit.Web.DocumentKit, []}],
+          skills: [{SkillKit.Web.DocumentKit, []}, {BuilderKit, []}],
           scope: scope,
           conversation_store: {ConversationStore, dir: conversations_dir}
         )
