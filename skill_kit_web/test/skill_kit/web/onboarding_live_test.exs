@@ -12,13 +12,8 @@ defmodule SkillKit.Web.OnboardingLiveTest do
     on_exit(fn -> File.rm_rf!(@tmp_dir) end)
   end
 
-  test "shows thinking state on mount then reveals first question", %{conn: conn} do
-    {:ok, view, html} = live(conn, "/setup/#{@conversation_id}")
-    assert html =~ "Thinking..."
-
-    # Simulate the delayed message arriving
-    send(view.pid, {:show_fixed_question, 0})
-    html = render(view)
+  test "renders first question immediately on mount", %{conn: conn} do
+    {:ok, _view, html} = live(conn, "/setup/#{@conversation_id}")
     assert html =~ "Don&#39;t overthink it"
     refute html =~ "Thinking..."
   end
@@ -31,7 +26,6 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
   test "submitting answer shows thinking then next fixed question", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-    send(view.pid, {:show_fixed_question, 0})
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
     assert render(view) =~ "Thinking..."
@@ -42,7 +36,6 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
   test "empty answer does not advance", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-    send(view.pid, {:show_fixed_question, 0})
 
     view |> form("form", %{answer: ""}) |> render_submit()
     assert render(view) =~ "Don&#39;t overthink it"
@@ -50,7 +43,6 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
   test "shows thinking state after last fixed question", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-    send(view.pid, {:show_fixed_question, 0})
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
     send(view.pid, {:show_fixed_question, 1})
@@ -64,7 +56,6 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
   test "agent question replaces thinking state", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-    send(view.pid, {:show_fixed_question, 0})
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
     send(view.pid, {:show_fixed_question, 1})
@@ -87,7 +78,6 @@ defmodule SkillKit.Web.OnboardingLiveTest do
 
   test "agent question without markers uses full text", %{conn: conn} do
     {:ok, view, _html} = live(conn, "/setup/#{@conversation_id}")
-    send(view.pid, {:show_fixed_question, 0})
 
     view |> form("form", %{answer: "track inventory"}) |> render_submit()
     send(view.pid, {:show_fixed_question, 1})

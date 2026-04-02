@@ -571,14 +571,10 @@ defmodule SkillKit.Web.OnboardingLive do
   defp transition_class(_), do: ""
 
   defp schedule_first_question(socket) do
-    Process.send_after(self(), {:show_fixed_question, 0}, fake_thinking_delay())
-
     socket
-    |> assign(:waiting, true)
-    |> assign(:waiting_text, "Thinking...")
-    |> assign(:question, "")
-    |> assign(:subtext, nil)
-    |> assign(:placeholder, "")
+    |> assign_fixed_question(0)
+    |> assign(:waiting, false)
+    |> assign(:animate_question, true)
   end
 
   defp fake_thinking_delay, do: Enum.random(800..1500)
