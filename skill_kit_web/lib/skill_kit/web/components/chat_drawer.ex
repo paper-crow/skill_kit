@@ -17,8 +17,17 @@ defmodule SkillKit.Web.Components.ChatDrawer do
     ]}>
       <div id="chat-messages" phx-hook="ChatScroll" class="flex-1 overflow-y-auto px-4 py-4 space-y-5">
         <DiffBlock.diff_block :if={@pending_diff} diff={@pending_diff} />
-        <.message :for={msg <- @messages} role={msg.role} content={msg.content} />
-        <.streaming_message :if={@streaming_text} text={@streaming_text} />
+        <.message
+          :for={{msg, show_header} <- group_messages(@messages)}
+          role={msg.role}
+          content={msg.content}
+          show_header={show_header}
+        />
+        <.streaming_message
+          :if={@streaming_text}
+          text={@streaming_text}
+          show_header={show_header_for_streaming(@messages)}
+        />
       </div>
 
       <div class="px-3 py-3">
@@ -63,13 +72,14 @@ defmodule SkillKit.Web.Components.ChatDrawer do
 
   attr(:role, :atom, required: true)
   attr(:content, :string, required: true)
+  attr(:show_header, :boolean, default: true)
 
   defp message(%{role: :assistant} = assigns) do
     assigns = assign(assigns, :html, render_markdown(assigns.content))
 
     ~H"""
     <div data-role="assistant">
-      <div class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
+      <div :if={@show_header} class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
       <div class="prose-chat text-[15px] text-editor-text-muted">
         {Phoenix.HTML.raw(@html)}
       </div>
@@ -80,25 +90,43 @@ defmodule SkillKit.Web.Components.ChatDrawer do
   defp message(%{role: :user} = assigns) do
     ~H"""
     <div data-role="user">
-      <div class="text-sm font-medium text-editor-text-faint mb-1.5">You</div>
+      <div :if={@show_header} class="text-sm font-medium text-editor-text-faint mb-1.5">You</div>
       <div class="text-[15px] text-editor-text-muted">{@content}</div>
     </div>
     """
   end
 
   attr(:text, :string, required: true)
+  attr(:show_header, :boolean, default: true)
 
   defp streaming_message(assigns) do
     assigns = assign(assigns, :html, render_markdown(assigns.text))
 
     ~H"""
     <div>
-      <div class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
+      <div :if={@show_header} class="text-sm font-medium text-editor-accent mb-1.5">Assistant</div>
       <div class="prose-chat text-[15px] text-editor-text-muted">
         {Phoenix.HTML.raw(@html)}<span class="inline-block w-1.5 h-3.5 bg-editor-accent animate-pulse ml-0.5 align-text-bottom" />
       </div>
     </div>
     """
+  end
+
+  defp group_messages(messages) do
+    messages
+    |> Enum.with_index()
+    |> Enum.map(fn {msg, idx} ->
+      prev_role = if idx > 0, do: Enum.at(messages, idx - 1).role
+      show_header = msg.role != prev_role
+      {msg, show_header}
+    end)
+  end
+
+  defp show_header_for_streaming([]), do: true
+
+  defp show_header_for_streaming(messages) do
+    last = List.last(messages)
+    last.role != :assistant
   end
 
   defp render_markdown(text) do

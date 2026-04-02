@@ -7,6 +7,10 @@ defmodule SkillKit.Web.Agents do
   function. All infrastructure (paths, scope, store) is derived from
   `SkillKitWeb` configuration.
 
+  Uses `LiveConversationStore` which notifies the caller on load/save,
+  so LiveViews receive `{:conversation_loaded, messages}` and
+  `{:conversation_saved, messages}` to stay in sync with the agent.
+
   ## Usage
 
       {:ok, agent_ref} = Agents.start_assistant(self())
@@ -15,9 +19,9 @@ defmodule SkillKit.Web.Agents do
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Web.BuilderKit
-  alias SkillKit.Web.ConversationStore
   alias SkillKit.Web.DocumentKit
   alias SkillKit.Web.EditorScope
+  alias SkillKit.Web.LiveConversationStore
   alias SkillKit.Web.OnboardingKit
 
   @doc """
@@ -58,7 +62,8 @@ defmodule SkillKit.Web.Agents do
   defp start_agent(agent_path, opts) do
     case Definition.parse(agent_path) do
       {:ok, definition} ->
-        all_opts = Keyword.put_new(opts, :conversation_store, default_conversation_store())
+        caller = Keyword.fetch!(opts, :caller)
+        all_opts = Keyword.put(opts, :conversation_store, conversation_store(caller))
         SkillKit.start_agent(definition, all_opts)
 
       {:error, reason} ->
@@ -74,7 +79,7 @@ defmodule SkillKit.Web.Agents do
     }
   end
 
-  defp default_conversation_store do
-    {ConversationStore, dir: SkillKitWeb.conversations_dir()}
+  defp conversation_store(caller) do
+    {LiveConversationStore, dir: SkillKitWeb.conversations_dir(), caller: caller}
   end
 end

@@ -421,6 +421,19 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
+  def handle_info(%SkillKit.Event.ToolCallComplete{name: "docs", input: input}, socket) do
+    socket = refresh_files(socket)
+
+    new_path = input["path"]
+    existing_paths = Enum.map(socket.assigns.files, & &1.path)
+
+    if new_path && new_path in existing_paths do
+      {:noreply, push_patch(socket, to: "/#{String.trim_trailing(new_path, ".md")}")}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(%SkillKit.Event.ToolCallComplete{}, socket) do
     {:noreply, socket}
   end
@@ -475,6 +488,22 @@ defmodule SkillKit.Web.EditorLive do
   end
 
   @impl true
+  def handle_info({:conversation_loaded, []}, socket) do
+    {:noreply, maybe_send_init(socket)}
+  end
+
+  @impl true
+  def handle_info({:conversation_loaded, messages}, socket) do
+    chat_messages = conversation_to_chat(messages)
+    {:noreply, assign(socket, :chat_messages, chat_messages)}
+  end
+
+  @impl true
+  def handle_info({:conversation_saved, _messages}, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def handle_info(_unknown, socket) do
     {:noreply, socket}
   end
@@ -512,6 +541,48 @@ defmodule SkillKit.Web.EditorLive do
         |> assign(:chat_messages, [error_msg])
         |> assign(:agent_ref, nil)
     end
+  end
+
+  defp maybe_send_init(%{assigns: %{agent_ref: nil}} = socket), do: socket
+
+  defp maybe_send_init(%{assigns: %{current_path: path}} = socket) when is_binary(path) do
+    # Send as SystemMessage so it doesn't appear in the chat thread
+    message = %SkillKit.Types.SystemMessage{
+      content:
+        "[Viewing: #{path}] Fresh project. Suggest what to refine in the overview or which document to create next. Stay product-focused."
+    }
+
+    agent_ref = socket.assigns.agent_ref
+
+    case Registry.lookup(agent_ref.registry, {agent_ref.name, :mailbox}) do
+      [{pid, _}] -> GenServer.cast(pid, {:message, message})
+      [] -> :ok
+    end
+
+    socket
+  end
+
+  defp maybe_send_init(socket), do: socket
+
+  defp conversation_to_chat(messages) do
+    messages
+    |> Enum.filter(&displayable_message?/1)
+    |> Enum.map(&to_chat_message/1)
+  end
+
+  defp displayable_message?(%SkillKit.Types.UserMessage{content: c}) when is_binary(c), do: true
+
+  defp displayable_message?(%SkillKit.Types.AssistantMessage{content: c}) when is_binary(c),
+    do: true
+
+  defp displayable_message?(_), do: false
+
+  defp to_chat_message(%SkillKit.Types.UserMessage{content: content}) do
+    %{role: :user, content: content}
+  end
+
+  defp to_chat_message(%SkillKit.Types.AssistantMessage{content: content}) do
+    %{role: :assistant, content: content}
   end
 
   # -- Telemetry ---------------------------------------------------------------
