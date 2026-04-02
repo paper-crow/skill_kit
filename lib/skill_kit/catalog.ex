@@ -328,12 +328,27 @@ defmodule SkillKit.Catalog do
   end
 
   defp skill_to_tool(skill) do
+    schema = skill_input_schema(skill)
+
     %Tool{
       name: skill_short_name(skill.name),
       description: skill.description,
-      input_schema: %{"type" => "object"}
+      input_schema: schema
     }
   end
+
+  defp skill_input_schema(%{metadata: %{"input_schema" => schema}}) when is_map(schema) do
+    stringify_keys(schema)
+  end
+
+  defp skill_input_schema(_skill), do: %{"type" => "object"}
+
+  defp stringify_keys(map) when is_map(map) do
+    Map.new(map, fn {k, v} -> {to_string(k), stringify_keys(v)} end)
+  end
+
+  defp stringify_keys(list) when is_list(list), do: Enum.map(list, &stringify_keys/1)
+  defp stringify_keys(value), do: value
 
   defp agent_to_tool(%Definition{name: name, description: description}) do
     %Tool{
