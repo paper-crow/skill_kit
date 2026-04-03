@@ -25,8 +25,8 @@ config :skill_kit_web, SkillKit.Web.DevEndpoint,
 # Set SKILL_KIT_PROJECT env var to point at an external project.
 # Falls back to a local dev_project/ sandbox for development.
 config :skill_kit_web,
-  :project_root,
-  System.get_env("SKILL_KIT_PROJECT") || Path.expand("../dev_project", __DIR__)
+       :project_root,
+       System.get_env("SKILL_KIT_PROJECT") || Path.expand("../dev_project", __DIR__)
 
 config :esbuild,
   version: "0.24.2",
