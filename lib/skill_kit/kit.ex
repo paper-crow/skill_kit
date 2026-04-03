@@ -47,45 +47,64 @@ defmodule SkillKit.Kit do
   ]
 
   defmacro __using__(opts) do
-    skills_dir = Keyword.get(opts, :skills_dir, default_skills_dir(__CALLER__))
+    caller_dir = Path.dirname(__CALLER__.file)
+    kit_path = resolve_path(opts, caller_dir, __CALLER__)
+    skills_dir = Path.join(kit_path, "skills")
     kit_name = Keyword.get(opts, :name, infer_kit_name(__CALLER__.module))
+
+    # Compile-time: read and parse all SKILL.md and AGENT.md files
+    {:ok, skills} = compile_skills(skills_dir, kit_name)
+    agent = compile_agent(kit_path)
+    resource_paths = compile_resource_paths(skills_dir, kit_path)
 
     quote do
       @behaviour SkillKit.Kit.Provider
       @behaviour SkillKit.Tool
 
+      # Track files for recompilation when they change
+      for path <- unquote(resource_paths) do
+        @external_resource path
+      end
+
       @kit_name unquote(kit_name)
-      @skills_dir unquote(skills_dir)
+
+      # Patch tool module — not available at macro expansion time
+      @compiled_skills Enum.map(
+                         unquote(Macro.escape(skills)),
+                         &Map.put(&1, :tool, __MODULE__)
+                       )
+
+      @compiled_agent unquote(Macro.escape(agent))
 
       @impl SkillKit.Kit.Provider
       def load_kits(config) do
-        SkillKit.Kit.do_load_kits(@kit_name, @skills_dir, __MODULE__, config)
+        skills = patch_source_config(@compiled_skills, config)
+        kit = %SkillKit.Kit{name: @kit_name, skills: skills, agent: @compiled_agent}
+        {:ok, [kit]}
       end
 
       @impl SkillKit.Kit.Provider
-      def list_kits(config) do
-        load_kits(config)
-      end
+      def list_kits(config), do: load_kits(config)
 
       @impl SkillKit.Kit.Provider
       def get_kit(config, name) do
         case list_kits(config) do
-          {:ok, kits} -> find_kit(kits, name)
-          error -> error
+          {:ok, kits} ->
+            case Enum.find(kits, &(&1.name == name)) do
+              nil -> {:error, :not_found}
+              kit -> {:ok, kit}
+            end
+
+          error ->
+            error
         end
       end
 
-      defp find_kit(kits, name) do
-        case Enum.find(kits, &(&1.name == name)) do
-          nil -> {:error, :not_found}
-          kit -> {:ok, kit}
-        end
-      end
+      @doc "Returns the agent definition from AGENT.md, or nil if not present."
+      def agent_definition, do: @compiled_agent
 
       @impl SkillKit.Tool
-      def resume(_execution, _state, _decision) do
-        {:error, :not_resumable}
-      end
+      def resume(_execution, _state, _decision), do: {:error, :not_resumable}
 
       @impl SkillKit.Tool
       def definition do
@@ -96,29 +115,85 @@ defmodule SkillKit.Kit do
         }
       end
 
-      defoverridable resume: 3, definition: 0, load_kits: 1, list_kits: 1, get_kit: 2
+      defp patch_source_config(skills, config) do
+        Enum.map(skills, fn skill ->
+          %{skill | metadata: Map.put(skill.metadata, "source_config", config)}
+        end)
+      end
+
+      defoverridable resume: 3,
+                     definition: 0,
+                     load_kits: 1,
+                     list_kits: 1,
+                     get_kit: 2,
+                     agent_definition: 0
+    end
+  end
+
+  # --- Compile-time helpers (called during macro expansion) ---
+
+  @doc false
+  def compile_skills(skills_dir, kit_name) do
+    case File.ls(skills_dir) do
+      {:ok, entries} ->
+        skills =
+          entries
+          |> Enum.sort()
+          |> Enum.map(&Path.join(skills_dir, &1))
+          |> Enum.filter(&skill_dir?/1)
+          |> Enum.flat_map(&compile_skill(&1, kit_name))
+
+        {:ok, skills}
+
+      {:error, :enoent} ->
+        {:ok, []}
     end
   end
 
   @doc false
-  def do_load_kits(kit_name, skills_dir, tool_module, config) do
-    case load_skill_files(skills_dir, kit_name, tool_module, config) do
-      {:ok, skills} ->
-        kit = %__MODULE__{name: kit_name, skills: skills}
-        {:ok, [kit]}
+  def compile_agent(kit_path) do
+    agent_path = Path.join(kit_path, "AGENT.md")
 
-      {:error, _} = error ->
-        error
+    case Definition.parse(agent_path) do
+      {:ok, definition} -> definition
+      {:error, _} -> nil
     end
   end
 
-  # --- Private helpers ---
+  @doc false
+  def compile_resource_paths(skills_dir, kit_path) do
+    skill_paths =
+      case File.ls(skills_dir) do
+        {:ok, entries} ->
+          entries
+          |> Enum.map(&Path.join(skills_dir, &1))
+          |> Enum.filter(&skill_dir?/1)
+          |> Enum.map(&Path.join(&1, "SKILL.md"))
 
-  defp default_skills_dir(caller) do
-    caller_dir = Path.dirname(caller.file)
+        {:error, _} ->
+          []
+      end
 
-    quote do
-      Path.join(unquote(caller_dir), "skills")
+    agent_path = Path.join(kit_path, "AGENT.md")
+    agent_paths = if File.exists?(agent_path), do: [agent_path], else: []
+
+    skill_paths ++ agent_paths
+  end
+
+  defp compile_skill(skill_dir, kit_name) do
+    path = Path.join(skill_dir, "SKILL.md")
+
+    case parse_skill_file(path, kit_name) do
+      {:ok, skill} -> [skill]
+      {:error, _} -> []
+    end
+  end
+
+  defp resolve_path(opts, caller_dir, caller_env) do
+    case Keyword.get(opts, :path) do
+      nil -> caller_dir
+      path when is_binary(path) -> path
+      quoted -> elem(Code.eval_quoted(quoted, [], caller_env), 0)
     end
   end
 
@@ -129,37 +204,15 @@ defmodule SkillKit.Kit do
     |> Macro.underscore()
   end
 
-  defp load_skill_files(dir, kit_name, tool_module, config) do
-    case File.ls(dir) do
-      {:ok, entries} -> parse_skill_dirs(entries, dir, kit_name, tool_module, config)
-      {:error, :enoent} -> {:ok, []}
-    end
-  end
-
-  defp parse_skill_dirs(entries, dir, kit_name, tool_module, config) do
-    entries
-    |> Enum.sort()
-    |> Enum.map(&Path.join(dir, &1))
-    |> Enum.filter(&skill_dir?/1)
-    |> Enum.reduce_while({:ok, []}, fn skill_dir, {:ok, acc} ->
-      path = Path.join(skill_dir, "SKILL.md")
-
-      case parse_skill_file(path, kit_name, tool_module, config) do
-        {:ok, skill} -> {:cont, {:ok, acc ++ [skill]}}
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
-  end
-
   defp skill_dir?(path) do
     File.dir?(path) and File.exists?(Path.join(path, "SKILL.md"))
   end
 
-  defp parse_skill_file(path, kit_name, tool_module, config) do
+  defp parse_skill_file(path, kit_name) do
     with {:ok, content} <- File.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
          {:ok, yaml_map} <- parse_yaml(frontmatter) do
-      build_kit_skill(yaml_map, body, path, kit_name, tool_module, config)
+      build_kit_skill(yaml_map, body, path, kit_name)
     end
   end
 
@@ -184,12 +237,11 @@ defmodule SkillKit.Kit do
     YamlElixir.read_from_string(yaml_str, atoms: false)
   end
 
-  defp build_kit_skill(yaml_map, body, source_path, kit_name, tool_module, config) do
+  defp build_kit_skill(yaml_map, body, source_path, kit_name) do
     with {:ok, bare_name} <- fetch_required_string(yaml_map, "name"),
          {:ok, description} <- fetch_required_string(yaml_map, "description") do
       qualified_name = "#{kit_name}:#{bare_name}"
       metadata = Map.get(yaml_map, "metadata", %{})
-      merged_metadata = Map.put(metadata, "source_config", config)
 
       {:ok,
        %Skill{
@@ -198,8 +250,8 @@ defmodule SkillKit.Kit do
          description: description,
          body: body,
          location: source_path,
-         tool: tool_module,
-         metadata: merged_metadata
+         tool: nil,
+         metadata: metadata
        }}
     end
   end

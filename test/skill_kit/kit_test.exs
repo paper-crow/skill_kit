@@ -1,6 +1,5 @@
 defmodule SkillKit.KitTest.TestKit do
-  use SkillKit.Kit,
-    skills_dir: Path.join(__DIR__, "../support/fixtures/test_kit/skills")
+  use SkillKit.Kit, path: Path.expand("../support/fixtures/test_kit", __DIR__)
 
   alias SkillKit.ToolExecution
 
@@ -10,12 +9,20 @@ defmodule SkillKit.KitTest.TestKit do
   end
 end
 
+defmodule SkillKit.KitTest.TestKitWithAgent do
+  use SkillKit.Kit, path: Path.expand("../support/fixtures/test_kit_with_agent", __DIR__)
+
+  @impl SkillKit.Tool
+  def execute(_execution), do: {:ok, "pong"}
+end
+
 defmodule SkillKit.KitTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Agent.Definition
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
+  alias SkillKit.KitTest.TestKitWithAgent
   alias SkillKit.Skill
   alias SkillKit.ToolExecution
 
@@ -54,6 +61,32 @@ defmodule SkillKit.KitTest do
     test "kit name is inferred from module" do
       {:ok, [kit]} = TestKit.load_kits([])
       assert kit.name == "test_kit"
+    end
+  end
+
+  describe "compile-time agent loading" do
+    test "load_kits includes agent definition when AGENT.md exists" do
+      assert {:ok, [kit]} = TestKitWithAgent.load_kits([])
+      assert kit.agent != nil
+      assert kit.agent.name == "test-agent"
+      assert kit.agent.description == "A test agent for kit loading"
+      assert kit.agent.system_prompt =~ "You are a test agent."
+    end
+
+    test "agent_definition/0 returns the agent" do
+      agent = TestKitWithAgent.agent_definition()
+      assert agent != nil
+      assert agent.name == "test-agent"
+    end
+
+    test "agent_definition/0 returns nil when no AGENT.md" do
+      assert TestKit.agent_definition() == nil
+    end
+
+    test "kit includes both skills and agent" do
+      assert {:ok, [kit]} = TestKitWithAgent.load_kits([])
+      assert length(kit.skills) == 1
+      assert kit.agent != nil
     end
   end
 

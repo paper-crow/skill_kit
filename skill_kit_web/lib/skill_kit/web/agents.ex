@@ -47,9 +47,9 @@ defmodule SkillKit.Web.Agents do
   """
   @spec start_onboarding(pid(), String.t()) :: {:ok, SkillKit.agent()} | {:error, term()}
   def start_onboarding(caller, conversation_id) do
-    agent_path = Application.app_dir(:skill_kit_web, "priv/agents/onboarding.md")
+    definition = OnboardingKit.agent_definition()
 
-    start_agent(agent_path,
+    start_agent_from_definition(definition,
       caller: caller,
       skills: [{OnboardingKit, []}, {DocumentKit, []}],
       name: conversation_id,
@@ -61,14 +61,15 @@ defmodule SkillKit.Web.Agents do
 
   defp start_agent(agent_path, opts) do
     case Definition.parse(agent_path) do
-      {:ok, definition} ->
-        caller = Keyword.fetch!(opts, :caller)
-        all_opts = Keyword.put(opts, :conversation_store, conversation_store(caller))
-        SkillKit.start_agent(definition, all_opts)
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, definition} -> start_agent_from_definition(definition, opts)
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp start_agent_from_definition(definition, opts) do
+    caller = Keyword.fetch!(opts, :caller)
+    all_opts = Keyword.put(opts, :conversation_store, conversation_store(caller))
+    SkillKit.start_agent(definition, all_opts)
   end
 
   defp default_scope(caller) do

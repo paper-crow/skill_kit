@@ -1,7 +1,7 @@
 defmodule SkillKit.Test.EchoKit do
   use SkillKit.Kit,
     name: "test_kit",
-    skills_dir: Path.join([__DIR__, "../../support/fixtures/test_kit/skills"])
+    path: Path.expand("../../support/fixtures/test_kit", __DIR__)
 
   alias SkillKit.ToolExecution
 
