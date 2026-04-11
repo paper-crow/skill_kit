@@ -142,7 +142,7 @@ setup do
 end
 
 test "persists messages across agent restarts", %{store: store} do
-  definition = %SkillKit.Agent.Definition{...}
+  definition = %SkillKit.Agent{...}
 
   # First session
   SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "Hi!"})

@@ -18,7 +18,8 @@ SkillKit creates intelligent agents that can:
 Each agent runs as an isolated OTP supervision tree with its own Registry, ensuring fault tolerance and process isolation.
 
 ### **Flexible Tool System**
-- Load skills from filesystem or in-memory providers
+- Load skills from filesystem, module-backed kits, or in-memory providers
+- Compile-time skill parsing with automatic recompilation on changes
 - Execute tools with proper authorization
 - Support for hooks at execution boundaries
 - Extensible through behavior-based providers
@@ -48,12 +49,8 @@ Agents can spawn child agents for specialized tasks, with depth controls and par
 SkillKit follows a simple three-step pattern:
 
 ```elixir
-# 1. Start an agent
-{:ok, agent} = SkillKit.start_agent(
-  skills: [{SkillKit.Kit.Local, dir: ".skills"}],
-  caller: self(),
-  scope: my_scope
-)
+# 1. Start an agent — from a module-backed kit, path, or definition
+{:ok, agent} = SkillKit.start_agent(MyApp.AssistantKit, caller: self())
 
 # 2. Send messages
 :ok = SkillKit.send_message(agent, "Hello, how can you help me?")
@@ -61,5 +58,22 @@ SkillKit follows a simple three-step pattern:
 # 3. Clean up
 :ok = SkillKit.stop_agent(agent)
 ```
+
+`start_agent/2` accepts multiple forms for the first argument:
+
+```elixir
+# Module-backed kit — skills and AGENT.md compiled into the module
+SkillKit.start_agent(MyApp.AssistantKit, caller: self())
+
+# Filesystem path — loads AGENT.md and skills/ from disk at runtime
+SkillKit.start_agent("priv/agents/assistant", caller: self())
+
+# Pre-built definition — full control over the agent identity
+SkillKit.start_agent(%SkillKit.Agent{...}, skills: [...], caller: self())
+```
+
+When starting from a kit (module or path), the kit's skills are automatically
+included in the agent's tool pool. See the [Architecture](architecture.md) and
+[Providers](providers.md) guides for details.
 
 This framework enables building sophisticated AI agents that are both powerful and reliable, leveraging Elixir's strengths in concurrent, fault-tolerant systems.

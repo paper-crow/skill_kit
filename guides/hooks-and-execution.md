@@ -220,5 +220,5 @@ Boundary-specific keys:
 | Skill activation | `:skill` (Skill.t), `:skill_name`, `:arguments` |
 | LLM request | `:model`, `:message_count`, `:tool_count` |
 | Conversation save | `:message_count` |
-| Agent | `:definition` (Definition.t) |
+| Agent | `:definition` (Agent.t) |
 | Turn | `:message_count` |

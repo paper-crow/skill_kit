@@ -9,22 +9,51 @@ executes tools, and streams events back to the caller process.
 The public API follows a three-step pattern:
 
 ```elixir
-# Source-driven: discovers root agent from providers
-{:ok, agent} = SkillKit.start_agent(
-  skills: [{SkillKit.Kit.Local, dir: ".skills"}],
-  caller: self(),
-  scope: my_scope
-)
+# 1. Start an agent
+{:ok, agent} = SkillKit.start_agent(MyApp.AssistantKit, caller: self())
 
-# Or definition-driven: pass an agent definition directly
-{:ok, agent} = SkillKit.start_agent(definition, skills: [...], caller: self())
-
+# 2. Send messages
 :ok = SkillKit.send_message(agent, "Hello")
 # ... receive events in caller process ...
+
+# 3. Shut down
+:ok = SkillKit.stop_agent(agent)
 ```
 
-The source-driven form resolves the agent identity from the first argument,
-then delegates to the definition-driven form.
+### Agent resolution
+
+The first argument to `start_agent/2` identifies the agent. It accepts
+several forms — all resolve to a `%SkillKit.Agent{}` before the agent starts:
+
+| Form | Resolution |
+|------|------------|
+| `%Agent{}` | Used directly. |
+| `"path/to/agent"` | Shorthand for `{Kit.Local, dir: "path/to/agent"}`. |
+| `MyApp.Kit` | Bare module, shorthand for `{MyApp.Kit, []}`. |
+| `{MyApp.Kit, opts}` | Calls `module.load_kits(opts)` and extracts the first kit with a non-nil `agent` field. |
+
+### Auto-include of kit skills
+
+When the agent is loaded from a provider (string, module, or tuple form),
+SkillKit automatically adds that provider to the skills list. This means the
+kit's own skills and sub-agents are available in the agent's tool pool without
+needing to pass them separately:
+
+```elixir
+# The kit's skills are auto-included — no need to repeat in :skills
+{:ok, agent} = SkillKit.start_agent(MyApp.FilesKit, caller: self())
+
+# Additional skill sources can still be added
+{:ok, agent} = SkillKit.start_agent(MyApp.FilesKit,
+  skills: [{MyApp.ExtraKit, []}],
+  caller: self()
+)
+```
+
+When passing a `%Agent{}` directly, no auto-include happens — you must
+supply all skill sources explicitly via `:skills`.
+
+### Agent references
 
 `start_agent` builds an `AgentRef` — an opaque struct holding the agent name,
 a unique Registry name, and the supervisor PID. `send_message/2` routes to the
@@ -38,7 +67,7 @@ Each agent owns its own Registry and two isolated children under a top-level
 
 ```mermaid
 graph TD
-    A[SkillKit.Agent<br/>:one_for_one] --> B[Registry<br/>process discovery]
+    A[SkillKit.Agent.Supervisor<br/>:one_for_one] --> B[Registry<br/>process discovery]
     A --> C[SkillKit.Catalog<br/>aggregates providers]
     A --> D[Agent.Core<br/>:rest_for_one]
     
@@ -60,7 +89,7 @@ graph TD
 ```
 
 ```
-SkillKit.Agent (one_for_one)
+SkillKit.Agent.Supervisor (one_for_one)
 ├── Registry              (process discovery for this agent)
 ├── SkillKit.Catalog      (aggregates providers, builds tool defs, classifies calls)
 └── Agent.Core            (rest_for_one)
@@ -166,7 +195,7 @@ the LLM responds with no tool calls or a halt condition is reached.
 ## Subagents
 
 An agent can delegate work to a child agent by invoking a subagent tool call.
-The Server looks up the child's `Agent.Definition` via `Catalog.get_agent/2`,
+The Server looks up the child's `%Agent{}` via `Catalog.get_agent/2`,
 spawns the child under its `SubagentSupervisor`, monitors the child supervisor
 PID, and continues its own turn. When the child calls `report_result` or
 terminates, it delivers its result back to the parent Server via the parent's
