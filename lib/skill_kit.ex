@@ -43,6 +43,7 @@ defmodule SkillKit do
   """
 
   alias SkillKit.Agent
+  alias SkillKit.Agent.Supervisor, as: AgentSupervisor
   alias SkillKit.AgentRef
   alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Types.AssistantMessage
@@ -73,13 +74,13 @@ defmodule SkillKit do
     * `:name` — override the agent name (default: name from definition)
 
   """
-  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}) ::
+  @spec start_agent(Agent.t() | String.t() | {module(), keyword()}) ::
           {:ok, agent()} | {:error, term()}
   def start_agent(agent) do
     start_agent(agent, [])
   end
 
-  @spec start_agent(Agent.Definition.t() | String.t() | {module(), keyword()}, keyword()) ::
+  @spec start_agent(Agent.t() | String.t() | {module(), keyword()}, keyword()) ::
           {:ok, agent()} | {:error, term()}
   def start_agent(agent, opts) do
     definition = resolve_agent(agent)
@@ -93,7 +94,7 @@ defmodule SkillKit do
     do_start_agent(definition, Keyword.put(opts, :skills, all_skills))
   end
 
-  defp do_start_agent(%Agent.Definition{} = definition, opts) do
+  defp do_start_agent(%Agent{} = definition, opts) do
     caller = Keyword.get(opts, :caller, self())
     skills = Keyword.get(opts, :skills, [])
     conversation_store = Keyword.get(opts, :conversation_store)
@@ -114,7 +115,7 @@ defmodule SkillKit do
       conversation_store: conversation_store
     }
 
-    case Agent.start_link(agent_opts) do
+    case AgentSupervisor.start_link(agent_opts) do
       {:ok, sup_pid} ->
         {:ok, %AgentRef{name: agent_name, registry: registry_name, supervisor_pid: sup_pid}}
 
@@ -127,7 +128,7 @@ defmodule SkillKit do
   # Agent resolution
   # -------------------------------------------------------------------
 
-  defp resolve_agent(%Agent.Definition{} = definition), do: definition
+  defp resolve_agent(%Agent{} = definition), do: definition
 
   defp resolve_agent(path) when is_binary(path) do
     resolve_agent({SkillKit.Kit.Local, dir: path})
@@ -166,7 +167,7 @@ defmodule SkillKit do
   # Auto-include agent kit's tools
   # -------------------------------------------------------------------
 
-  defp agent_as_provider(%Agent.Definition{}), do: nil
+  defp agent_as_provider(%Agent{}), do: nil
   defp agent_as_provider(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
   defp agent_as_provider(module) when is_atom(module), do: {module, []}
   defp agent_as_provider({module, config}), do: {module, config}
@@ -232,7 +233,7 @@ defmodule SkillKit do
   end
 
   @doc false
-  @spec start_subagent(Agent.Definition.t(), keyword(), keyword()) ::
+  @spec start_subagent(Agent.t(), keyword(), keyword()) ::
           {:ok, agent()} | {:error, term()}
   def start_subagent(definition, parent_opts, opts \\ []) do
     depth = Keyword.fetch!(parent_opts, :depth)
@@ -254,7 +255,7 @@ defmodule SkillKit do
       parent_registry: parent_registry
     }
 
-    case Agent.start_link(agent_opts) do
+    case AgentSupervisor.start_link(agent_opts) do
       {:ok, sup_pid} ->
         {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
 

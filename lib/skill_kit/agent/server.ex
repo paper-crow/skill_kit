@@ -9,7 +9,7 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
@@ -46,7 +46,7 @@ defmodule SkillKit.Agent.Server do
   @type t :: %__MODULE__{
           agent_name: String.t(),
           parent_name: String.t() | nil,
-          definition: Definition.t(),
+          definition: Agent.t(),
           depth: non_neg_integer(),
           scope: term(),
           registry: atom(),

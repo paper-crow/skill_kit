@@ -15,7 +15,7 @@ defmodule SkillKit.Kit.Local do
 
   @behaviour SkillKit.Kit.Provider
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Kit
   alias SkillKit.Kit.Local.Parser
 
@@ -176,7 +176,7 @@ defmodule SkillKit.Kit.Local do
   end
 
   defp load_agent_file(file, {agents, errors}) do
-    case Definition.parse(file) do
+    case Agent.parse(file) do
       {:ok, agent} -> {[agent | agents], errors}
       {:error, reason} -> {agents, [{Path.basename(file), reason} | errors]}
     end
@@ -190,7 +190,7 @@ defmodule SkillKit.Kit.Local do
     root_path = Path.join(dir, "AGENT.md")
 
     if File.exists?(root_path) do
-      case Definition.parse(root_path) do
+      case Agent.parse(root_path) do
         {:ok, agent} -> {agent, []}
         {:error, reason} -> {nil, [{"AGENT.md", reason}]}
       end

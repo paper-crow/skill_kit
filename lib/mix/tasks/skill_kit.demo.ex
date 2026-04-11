@@ -7,7 +7,7 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
   use Mix.Task
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error
   alias SkillKit.Types.AssistantMessage
@@ -27,7 +27,7 @@ defmodule Mix.Tasks.SkillKit.Demo do
     end
 
     agent_md = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve/AGENT.md")
-    {:ok, definition} = Definition.parse(agent_md)
+    {:ok, definition} = Agent.parse(agent_md)
 
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 

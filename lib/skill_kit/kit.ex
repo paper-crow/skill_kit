@@ -10,30 +10,35 @@ defmodule SkillKit.Kit do
 
   When a module does `use SkillKit.Kit`, it becomes both a
   `SkillKit.Kit.Provider` (can load skills from `skills/*/SKILL.md`) and a
-  `SkillKit.Tool` (can execute them).
+  `SkillKit.Tool` (can execute them). All skill and agent files are read
+  and parsed at compile time — no runtime filesystem access is needed.
 
   The kit name is inferred from the module's last segment, downcased and
   underscored. Override with `name: "custom_name"`.
 
   Options:
 
-    * `:skills_dir` — directory containing skill subdirectories (each with a `SKILL.md`).
-      Defaults to `skills/` relative to the module's source file.
+    * `:path` — the kit root directory. Skills are loaded from `<path>/skills/`
+      and `AGENT.md` from `<path>/AGENT.md`. Defaults to the directory containing
+      the module's source file.
     * `:name` — override the inferred kit name.
 
-  The macro generates default implementations for `definition/0` and
-  `resume/3` but does NOT generate `execute/1` — the using module must
-  define that callback itself.
+  The macro generates default implementations for `definition/0`, `resume/3`,
+  `load_kits/1`, `list_kits/1`, `get_kit/2`, and `agent_definition/0`. All are
+  overridable. The using module must define `execute/1`.
+
+  `agent_definition/0` returns the parsed `%SkillKit.Agent{}` from
+  the kit's `AGENT.md`, or `nil` if no agent file exists.
   """
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Skill
 
   @type t :: %__MODULE__{
           name: String.t(),
           skills: [Skill.t()],
-          subagents: [Definition.t()],
-          agent: Definition.t() | nil,
+          subagents: [Agent.t()],
+          agent: Agent.t() | nil,
           metadata: map()
         }
 
@@ -154,7 +159,7 @@ defmodule SkillKit.Kit do
   def compile_agent(kit_path) do
     agent_path = Path.join(kit_path, "AGENT.md")
 
-    case Definition.parse(agent_path) do
+    case Agent.parse(agent_path) do
       {:ok, definition} -> definition
       {:error, _} -> nil
     end

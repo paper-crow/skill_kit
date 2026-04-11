@@ -1,119 +1,46 @@
-defmodule SkillKit.Agent.AgentTest do
+defmodule SkillKit.AgentTest do
   use ExUnit.Case, async: true
 
-  import Mox
+  @fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "agents"])
 
-  alias SkillKit.Agent
-  alias SkillKit.Agent.Definition
-  alias SkillKit.Types.UserMessage
+  describe "parse/1" do
+    test "parses a full AGENT.md with all fields" do
+      path = Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"])
+      assert {:ok, agent} = SkillKit.Agent.parse(path)
 
-  setup :verify_on_exit!
+      assert agent.name == "project-a"
 
-  setup do
-    registry_name = :"agent_test_registry_#{:erlang.unique_integer([:positive])}"
+      assert agent.description ==
+               "Manages project A. Use when the user asks about project A."
 
-    agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
-
-    definition = %Definition{
-      name: agent_name,
-      description: "Test agent",
-      system_prompt: "You are a test.",
-      path: "/tmp/test",
-      mailbox: %{max_messages: 10, flush_interval: 500}
-    }
-
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
-  end
-
-  describe "start_link" do
-    test "starts full agent tree with all components registered", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = Agent.start_link(opts)
-
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :catalog})
+      assert agent.model == "claude-sonnet-4-6"
+      assert agent.system_prompt =~ "project A manager"
+      assert agent.path == path
+      assert agent.max_agent_depth == 2
+      assert agent.mailbox.max_messages == 5
+      assert agent.mailbox.flush_interval == 200
     end
 
-    test "mailbox can deliver messages to server", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %SkillKit.Event.Delta{text: "OK"},
-          %SkillKit.Event.Done{stop_reason: :end_turn}
-        ]
+    test "parses minimal AGENT.md with defaults" do
+      path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
+      assert {:ok, agent} = SkillKit.Agent.parse(path)
 
-        {:ok, Stream.map(events, & &1)}
-      end)
-
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = Agent.start_link(opts)
-
-      [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
-      [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
-      Mox.allow(SkillKit.LLM.Mock, self(), server_pid)
-
-      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hello"}})
-      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "world"}})
-      send(mailbox_pid, :flush)
-
-      Process.sleep(50)
-      state = :sys.get_state(server_pid)
-      assert Enum.any?(state.messages, &match?(%UserMessage{content: "hello"}, &1))
-      assert Enum.any?(state.messages, &match?(%UserMessage{content: "world"}, &1))
+      assert agent.name == "simple"
+      assert agent.description == "A simple agent with defaults."
+      assert agent.model == nil
+      assert agent.system_prompt =~ "Do the thing"
+      assert agent.max_agent_depth == 1
+      assert agent.mailbox.max_messages == 10
+      assert agent.mailbox.flush_interval == 500
     end
 
-    test "server state has correct depth and scope", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      scope = %SkillKit.TestScope{user: "user-1", permissions: ["admin:read"]}
+    test "returns error for missing name" do
+      path = Path.join([@fixtures_path, "invalid", "missing-name", "AGENT.md"])
+      assert {:error, {:missing_field, "name"}} = SkillKit.Agent.parse(path)
+    end
 
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 2,
-        parent_name: "parent-agent",
-        scope: scope,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = Agent.start_link(opts)
-
-      [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
-      state = :sys.get_state(server_pid)
-
-      assert state.depth == 2
-      assert state.parent_name == "parent-agent"
-      assert state.scope == scope
+    test "returns error for nonexistent file" do
+      assert {:error, :enoent} = SkillKit.Agent.parse("/nonexistent/AGENT.md")
     end
   end
 end

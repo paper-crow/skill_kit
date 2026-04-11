@@ -14,7 +14,7 @@ defmodule SkillKit.Catalog do
 
   require Logger
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Authorization
   alias SkillKit.Skill
   alias SkillKit.Tool
@@ -47,18 +47,18 @@ defmodule SkillKit.Catalog do
     GenServer.call(catalog, {:get_skill, name})
   end
 
-  @spec list_agents(GenServer.server()) :: [Definition.t()]
+  @spec list_agents(GenServer.server()) :: [Agent.t()]
   def list_agents(catalog) do
     GenServer.call(catalog, :list_agents)
   end
 
   @spec get_agent(GenServer.server(), String.t()) ::
-          {:ok, Definition.t()} | {:error, :not_found}
+          {:ok, Agent.t()} | {:error, :not_found}
   def get_agent(catalog, name) do
     GenServer.call(catalog, {:get_agent, name})
   end
 
-  @spec agent(GenServer.server()) :: Definition.t() | nil
+  @spec agent(GenServer.server()) :: Agent.t() | nil
   def agent(catalog) do
     GenServer.call(catalog, :agent)
   end
@@ -350,7 +350,7 @@ defmodule SkillKit.Catalog do
   defp stringify_keys(list) when is_list(list), do: Enum.map(list, &stringify_keys/1)
   defp stringify_keys(value), do: value
 
-  defp agent_to_tool(%Definition{name: name, description: description}) do
+  defp agent_to_tool(%Agent{name: name, description: description}) do
     %Tool{
       name: name,
       description: description,

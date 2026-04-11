@@ -14,7 +14,7 @@ if Mix.env() == :test do
     This imports `SkillKit.Test` and sets up `Mox.verify_on_exit!/1`.
     """
 
-    alias SkillKit.Agent.Definition
+    alias SkillKit.Agent
     alias SkillKit.Agent.Server
     alias SkillKit.Response.Error
 
@@ -42,7 +42,7 @@ if Mix.env() == :test do
 
       definition =
         Keyword.get_lazy(opts, :definition, fn ->
-          %Definition{
+          %Agent{
             name: agent_name,
             description: "Test agent",
             system_prompt: "You are a test agent.",

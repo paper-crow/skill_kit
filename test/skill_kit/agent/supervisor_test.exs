@@ -3,7 +3,7 @@ defmodule SkillKit.Agent.SupervisorTest do
 
   import Mox
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Agent.Supervisor, as: AgentSupervisor
   alias SkillKit.Types.UserMessage
 
@@ -14,7 +14,7 @@ defmodule SkillKit.Agent.SupervisorTest do
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %Definition{
+    definition = %Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",
