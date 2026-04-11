@@ -19,7 +19,7 @@ end
 defmodule SkillKit.KitTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
   alias SkillKit.KitTest.TestKitWithAgent
@@ -94,7 +94,7 @@ defmodule SkillKit.KitTest do
     test "creates kit with skills and agents" do
       skill = %Skill{name: "tools:echo", namespace: "tools", description: "Echo"}
 
-      agent = %Definition{
+      agent = %Agent{
         name: "helper",
         description: "Helps",
         system_prompt: "Help.",
@@ -121,8 +121,8 @@ defmodule SkillKit.KitTest do
       assert kit.agent == nil
     end
 
-    test "agent can hold a Definition struct" do
-      root = %Definition{
+    test "agent can hold an Agent struct" do
+      root = %Agent{
         name: "root",
         description: "Root agent",
         system_prompt: "You are the root.",

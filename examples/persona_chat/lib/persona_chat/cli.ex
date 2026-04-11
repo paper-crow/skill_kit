@@ -8,7 +8,7 @@ defmodule PersonaChat.CLI do
     mix persona_chat --user alice --manage               # lobby for create/delete
   """
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Types.AssistantMessage
 
@@ -180,7 +180,7 @@ defmodule PersonaChat.CLI do
   defp print_persona(name) do
     agent_path = Path.join([@personas_dir, name, "AGENT.md"])
 
-    case Definition.parse(agent_path) do
+    case Agent.parse(agent_path) do
       {:ok, defn} -> IO.puts("  - #{defn.name}: #{defn.description}")
       _ -> IO.puts("  - #{name}: (could not parse)")
     end

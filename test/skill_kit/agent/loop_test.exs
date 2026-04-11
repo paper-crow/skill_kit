@@ -4,8 +4,6 @@ defmodule SkillKit.Agent.LoopTest do
   import Mox
   import SkillKit.TelemetryHelper
 
-  alias SkillKit.Agent
-  alias SkillKit.Agent.Definition
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Types.AssistantMessage
@@ -19,7 +17,7 @@ defmodule SkillKit.Agent.LoopTest do
 
     agent_name = "loop-test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %Definition{
+    definition = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent for loop",
       system_prompt: "You are a helpful test agent.",
@@ -60,7 +58,7 @@ defmodule SkillKit.Agent.LoopTest do
         registry: registry
       }
 
-      {:ok, _sup} = Agent.start_link(opts)
+      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(opts)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
@@ -106,7 +104,7 @@ defmodule SkillKit.Agent.LoopTest do
         registry: registry
       }
 
-      {:ok, _sup} = Agent.start_link(opts)
+      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(opts)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})

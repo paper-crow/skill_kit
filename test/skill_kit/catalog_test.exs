@@ -1,7 +1,7 @@
 defmodule SkillKit.CatalogTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Catalog
   alias SkillKit.Hook
   alias SkillKit.Kit
@@ -54,7 +54,7 @@ defmodule SkillKit.CatalogTest do
   end
 
   defp make_agent(name, opts \\ []) do
-    %Definition{
+    %Agent{
       name: name,
       description: Keyword.get(opts, :description, "#{name} agent"),
       system_prompt: "You are #{name}.",

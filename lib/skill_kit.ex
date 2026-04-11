@@ -55,7 +55,7 @@ defmodule SkillKit do
   Starts a new agent.
 
   The first argument identifies the agent. It accepts:
-  - `%Definition{}` — a pre-built agent definition struct
+  - `%Agent{}` — a pre-built agent struct
   - `"path"` — string path, resolved as `{Kit.Local, dir: "path"}`
   - `{module, opts}` — a kit provider tuple
 
@@ -86,7 +86,7 @@ defmodule SkillKit do
     definition = resolve_agent(agent)
     skills = normalize_skills(Keyword.get(opts, :skills, []))
 
-    # If agent is a provider (not a plain %Definition{}), add it to skills
+    # If agent is a provider (not a plain %Agent{}), add it to skills
     # so the agent kit's skills/sub-agents are auto-included in the tool pool
     agent_provider = agent_as_provider(agent)
     all_skills = merge_agent_provider(agent_provider, skills)

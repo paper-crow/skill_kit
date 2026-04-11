@@ -4,7 +4,6 @@ defmodule SkillKit.Agent.CoreTest do
   import Mox
 
   alias SkillKit.Agent.Core
-  alias SkillKit.Agent.Definition
   alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
@@ -15,7 +14,7 @@ defmodule SkillKit.Agent.CoreTest do
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %Definition{
+    definition = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",

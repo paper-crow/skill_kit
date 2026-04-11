@@ -17,7 +17,7 @@ defmodule SkillKit.Web.Agents do
       {:ok, agent_ref} = Agents.start_onboarding(self(), "onboarding-abc123")
   """
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Web.BuilderKit
   alias SkillKit.Web.DocumentKit
   alias SkillKit.Web.EditorScope
@@ -58,7 +58,7 @@ defmodule SkillKit.Web.Agents do
   # -- Internal ----------------------------------------------------------------
 
   defp start_agent(agent_path, opts) do
-    case Definition.parse(agent_path) do
+    case Agent.parse(agent_path) do
       {:ok, definition} -> start_agent_from_definition(definition, opts)
       {:error, reason} -> {:error, reason}
     end

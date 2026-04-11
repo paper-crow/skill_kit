@@ -4,7 +4,6 @@ defmodule SkillKit.Agent.ServerTest do
   import Mox
   import SkillKit.Test
 
-  alias SkillKit.Agent.Definition
   alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
   alias SkillKit.Event.Delta
@@ -26,7 +25,7 @@ defmodule SkillKit.Agent.ServerTest do
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %Definition{
+    definition = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test agent.",
@@ -165,7 +164,7 @@ defmodule SkillKit.Agent.ServerTest do
       registry: registry,
       agent_name: agent_name
     } do
-      definition = %Definition{
+      definition = %SkillKit.Agent{
         name: agent_name,
         description: "Test agent",
         system_prompt: "You are a calculator.",
@@ -196,7 +195,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       agent = "tools-agent-#{:erlang.unique_integer([:positive])}"
 
-      def_for_test = %Definition{
+      def_for_test = %SkillKit.Agent{
         name: agent,
         description: "Test agent",
         system_prompt: "You are a test agent.",
