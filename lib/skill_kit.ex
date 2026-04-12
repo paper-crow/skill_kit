@@ -43,86 +43,80 @@ defmodule SkillKit do
   """
 
   alias SkillKit.Agent
-  alias SkillKit.Agent.Supervisor, as: AgentSupervisor
   alias SkillKit.AgentRef
   alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Runtime
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.UserMessage
 
   @type agent :: AgentRef.t()
 
+  @valid_opts [:skills, :runtime, :scope, :conversation_store, :caller, :name]
+
   @doc """
   Starts a new agent.
 
   The first argument identifies the agent. It accepts:
-  - `%Agent{}` — a pre-built agent struct
   - `"path"` — string path, resolved as `{Kit.Local, dir: "path"}`
+  - `MyModule` — bare module, resolved as `{MyModule, []}`
   - `{module, opts}` — a kit provider tuple
 
-  When the agent is loaded from a kit provider (string or tuple), the
-  kit's skills and sub-agents are automatically included in the tool pool.
+  When the agent is loaded from a kit provider, the kit's skills and
+  sub-agents are automatically included in the tool pool.
 
   Returns `{:ok, agent_ref}` where `agent_ref` is an opaque reference
   used with `send_message/2` and `stop_agent/1`.
 
   ## Options
 
-    * `:caller` — the pid to receive streamed events (default: `self()`)
-    * `:skills` — list of skill sources; accepts `{module, config}`, `"path"`, or bare `Module` (default: `[]`)
-    * `:conversation_store` — `{module, config}` for persisting conversation history (default: `nil`)
-    * `:scope` — granted scopes for authorization (default: `nil`)
-    * `:name` — override the agent name (default: name from definition)
+    * `:skills` — list of skill sources (default: `[]`)
+    * `:runtime` — `{module, config}` for agent spawning (default: `{Runtime.Local, []}`)
+    * `:scope` — authorization scope (default: `nil`)
+    * `:conversation_store` — `{module, config}` for persistence (default: `nil`)
+    * `:caller` — pid for events (default: `self()`)
+    * `:name` — override agent name
 
   """
-  @spec start_agent(Agent.t() | String.t() | {module(), keyword()}) ::
+  @spec start_agent(Agent.t() | String.t() | {module(), keyword()} | module()) ::
           {:ok, agent()} | {:error, term()}
-  def start_agent(agent) do
-    start_agent(agent, [])
+  def start_agent(source) do
+    start_agent(source, [])
   end
 
-  @spec start_agent(Agent.t() | String.t() | {module(), keyword()}, keyword()) ::
+  @spec start_agent(Agent.t() | String.t() | {module(), keyword()} | module(), keyword()) ::
           {:ok, agent()} | {:error, term()}
-  def start_agent(agent, opts) do
-    definition = resolve_agent(agent)
-    skills = normalize_skills(Keyword.get(opts, :skills, []))
+  def start_agent(source, opts) do
+    source
+    |> resolve_and_build(opts)
+    |> assign_caller()
+    |> Runtime.start_agent()
+  end
 
-    # If agent is a provider (not a plain %Agent{}), add it to skills
-    # so the agent kit's skills/sub-agents are auto-included in the tool pool
-    agent_provider = agent_as_provider(agent)
+  defp resolve_and_build(source, opts) do
+    Keyword.validate!(opts, @valid_opts)
+
+    agent = resolve_agent(source)
+    skills = normalize_skills(Keyword.get(opts, :skills, []))
+    agent_provider = agent_as_provider(source)
     all_skills = merge_agent_provider(agent_provider, skills)
 
-    do_start_agent(definition, Keyword.put(opts, :skills, all_skills))
-  end
-
-  defp do_start_agent(%Agent{} = definition, opts) do
-    caller = Keyword.get(opts, :caller, self())
-    skills = Keyword.get(opts, :skills, [])
-    conversation_store = Keyword.get(opts, :conversation_store)
-    scope = Keyword.get(opts, :scope)
-    agent_name = Keyword.get(opts, :name, definition.name)
-
-    registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
-
-    agent = %{
-      definition
-      | name: agent_name,
-        depth: 0,
-        parent_ref: nil,
-        scope: scope,
-        skills: skills,
-        registry: registry_name,
-        caller: caller,
-        conversation_store: conversation_store
+    %{
+      agent
+      | name: Keyword.get(opts, :name, agent.name),
+        skills: all_skills,
+        runtime: Keyword.get(opts, :runtime, agent.runtime),
+        scope: Keyword.get(opts, :scope, agent.scope),
+        conversation_store: Keyword.get(opts, :conversation_store, agent.conversation_store),
+        caller: Keyword.get(opts, :caller),
+        registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
     }
-
-    case AgentSupervisor.start_link(agent) do
-      {:ok, sup_pid} ->
-        {:ok, %AgentRef{name: agent_name, registry: registry_name, supervisor_pid: sup_pid}}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
   end
+
+  defp assign_caller(%{caller: nil} = agent) do
+    %{agent | caller: self()}
+  end
+
+  defp assign_caller(agent), do: agent
 
   # -------------------------------------------------------------------
   # Agent resolution
@@ -229,42 +223,6 @@ defmodule SkillKit do
       %EventError{agent: ^agent_name, reason: reason} -> {:error, reason}
     after
       timeout -> {:error, :timeout}
-    end
-  end
-
-  @doc false
-  @spec start_subagent(Agent.t(), keyword(), keyword()) ::
-          {:ok, agent()} | {:error, term()}
-  def start_subagent(definition, parent_opts, opts \\ []) do
-    depth = Keyword.fetch!(parent_opts, :depth)
-    parent_name = Keyword.fetch!(parent_opts, :parent_name)
-    parent_registry = Keyword.fetch!(parent_opts, :parent_registry)
-    skills = Keyword.get(opts, :skills, [])
-
-    registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
-
-    parent_ref = %AgentRef{
-      name: parent_name,
-      registry: parent_registry,
-      supervisor_pid: self()
-    }
-
-    agent = %{
-      definition
-      | depth: depth + 1,
-        parent_ref: parent_ref,
-        scope: nil,
-        skills: skills,
-        registry: registry_name,
-        caller: nil
-    }
-
-    case AgentSupervisor.start_link(agent) do
-      {:ok, sup_pid} ->
-        {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
-
-      {:error, reason} ->
-        {:error, reason}
     end
   end
 
