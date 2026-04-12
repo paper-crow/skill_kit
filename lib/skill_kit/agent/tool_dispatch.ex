@@ -20,18 +20,50 @@ defmodule SkillKit.Agent.ToolDispatch do
   @spec execute_all(Server.t(), [ToolCall.t()]) :: {[ToolResult.t()], Server.t()}
   def execute_all(state, tool_calls) do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
-      {result, acc} =
-        case SkillKit.Catalog.classify(catalog(acc.agent), tc.name, acc.activated_skills) do
-          :tool -> {execute_command(acc, tc), acc}
-          {:module_skill, skill} -> {execute_module_skill(acc, tc, skill), acc}
-          :activate_skill -> activate_skill(acc, tc)
-          :subagent -> spawn_subagent(acc, tc)
-        end
+      case execute_one(acc, tc) do
+        {:suspended, execution, acc} ->
+          result = %ToolResult{
+            tool_call_id: tc.id,
+            content: "Waiting for input."
+          }
 
-      notify_caller(acc, %{result | agent: acc.agent.name})
+          acc = track_suspension(acc, tc, execution)
+          notify_caller(acc, %{result | agent: acc.agent.name})
+          {result, acc}
 
-      {result, acc}
+        {result, acc} ->
+          notify_caller(acc, %{result | agent: acc.agent.name})
+          {result, acc}
+      end
     end)
+  end
+
+  defp execute_one(state, %ToolCall{} = tc) do
+    case SkillKit.Catalog.classify(catalog(state.agent), tc.name, state.activated_skills) do
+      :tool -> execute_command(state, tc)
+      {:module_skill, skill} -> execute_module_skill(state, tc, skill)
+      :activate_skill -> activate_skill(state, tc)
+      :subagent -> spawn_subagent(state, tc)
+    end
+  end
+
+  defp track_suspension(state, tc, execution) do
+    event = %SkillKit.Event.InputRequested{
+      agent: state.agent.name,
+      tool_call_id: tc.id,
+      tool_name: tc.name,
+      suspended_state: execution.suspended_state
+    }
+
+    notify_caller(state, event)
+
+    suspended =
+      Map.put(state.pending_tools, tc.id, %{
+        execution: execution,
+        tool_call: tc
+      })
+
+    %{state | pending_tools: suspended}
   end
 
   defp execute_command(state, %ToolCall{id: id, input: input}) do
@@ -51,7 +83,16 @@ defmodule SkillKit.Agent.ToolDispatch do
         do_execute_command(id, tool, input, tool_context, hook_context)
       end)
 
-    unwrap_tool_result(id, result)
+    case result do
+      {:suspended, execution, _hook_ctx} ->
+        {:suspended, execution, state}
+
+      {:deny, reason} ->
+        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, state}
+
+      tool_result ->
+        {unwrap_tool_result(id, tool_result), state}
+    end
   end
 
   defp do_execute_command(id, tool, input, tool_context, hook_context) do
@@ -71,14 +112,8 @@ defmodule SkillKit.Agent.ToolDispatch do
 
         {result, Map.put(hook_context, :result, execution.result)}
 
-      {:pending, _execution} ->
-        result = %ToolResult{
-          tool_call_id: id,
-          content: "Command requires approval (not yet supported).",
-          is_error: true
-        }
-
-        {result, hook_context}
+      {:pending, execution} ->
+        {:suspended, execution, hook_context}
     end
   end
 
@@ -222,7 +257,16 @@ defmodule SkillKit.Agent.ToolDispatch do
         do_execute_module_skill(state, id, skill, input, hook_context)
       end)
 
-    unwrap_tool_result(id, result)
+    case result do
+      {:suspended, execution, _hook_ctx} ->
+        {:suspended, execution, state}
+
+      {:deny, reason} ->
+        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, state}
+
+      tool_result ->
+        {unwrap_tool_result(id, tool_result), state}
+    end
   end
 
   defp do_execute_module_skill(state, id, skill, input, hook_context) do
@@ -232,18 +276,20 @@ defmodule SkillKit.Agent.ToolDispatch do
       %{scope: state.agent.scope, agent_name: state.agent.name}
       |> Map.merge(Map.new(source_config))
 
-    execution = %ToolExecution{skill: skill, input: input, context: context}
+    execution = %ToolExecution{skill: skill, input: input, context: context, tool: skill.tool}
 
-    result =
-      case apply(skill.tool, :execute, [execution]) do
-        {:ok, value} ->
-          %ToolResult{tool_call_id: id, content: to_string(value)}
+    case ToolExecution.execute(execution) do
+      {:ok, exec} ->
+        result = %ToolResult{tool_call_id: id, content: to_string(exec.result)}
+        {result, Map.put(hook_context, :result, exec.result)}
 
-        {:error, reason} ->
-          %ToolResult{tool_call_id: id, content: inspect(reason), is_error: true}
-      end
+      {:error, exec} ->
+        result = %ToolResult{tool_call_id: id, content: inspect(exec.result), is_error: true}
+        {result, Map.put(hook_context, :result, exec.result)}
 
-    {result, Map.put(hook_context, :result, result)}
+      {:pending, exec} ->
+        {:suspended, exec, hook_context}
+    end
   end
 
   defp spawn_subagent(state, %ToolCall{id: id, name: name, input: input}) do

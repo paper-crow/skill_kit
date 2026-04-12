@@ -27,6 +27,7 @@ defmodule SkillKit.Agent.Server do
     messages: [],
     subagents: %{},
     pending_requests: %{},
+    pending_tools: %{},
     activated_skills: []
   ]
 
@@ -36,6 +37,7 @@ defmodule SkillKit.Agent.Server do
           messages: list(),
           subagents: map(),
           pending_requests: map(),
+          pending_tools: map(),
           activated_skills: [SkillKit.Skill.t()]
         }
 
