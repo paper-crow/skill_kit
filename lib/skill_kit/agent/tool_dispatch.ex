@@ -84,7 +84,7 @@ defmodule SkillKit.Agent.ToolDispatch do
       end)
 
     case result do
-      {:suspended, execution, _hook_ctx} ->
+      {:suspended, execution} ->
         {:suspended, execution, state}
 
       {:deny, reason} ->
@@ -113,7 +113,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         {result, Map.put(hook_context, :result, execution.result)}
 
       {:pending, execution} ->
-        {:suspended, execution, hook_context}
+        {{:suspended, execution}, hook_context}
     end
   end
 
@@ -258,7 +258,7 @@ defmodule SkillKit.Agent.ToolDispatch do
       end)
 
     case result do
-      {:suspended, execution, _hook_ctx} ->
+      {:suspended, execution} ->
         {:suspended, execution, state}
 
       {:deny, reason} ->
@@ -288,7 +288,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         {result, Map.put(hook_context, :result, exec.result)}
 
       {:pending, exec} ->
-        {:suspended, exec, hook_context}
+        {{:suspended, exec}, hook_context}
     end
   end
 

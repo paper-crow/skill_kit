@@ -13,13 +13,16 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
+  alias SkillKit.Event.InputRequested
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Hooks
+  alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
+  alias SkillKit.Types.ToolResult
 
   defstruct [
     :agent,
@@ -163,6 +166,68 @@ defmodule SkillKit.Agent.Server do
         {:noreply, state}
     end
   end
+
+  # --- Respond (resume suspended tool) ---
+
+  @impl true
+  def handle_cast({:respond, tool_call_id, answer}, state) do
+    case Map.pop(state.pending_tools, tool_call_id) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {%{execution: execution, tool_call: tc}, pending_tools} ->
+        state = %{state | pending_tools: pending_tools}
+        handle_resume(state, tc, ToolExecution.resume(execution, answer))
+    end
+  end
+
+  defp handle_resume(state, tc, {:ok, resumed}) do
+    result = %ToolResult{
+      tool_call_id: tc.id,
+      content: format_resume_result(resumed.result)
+    }
+
+    notify_caller(state, %{result | agent: state.agent.name})
+    state = %{state | messages: state.messages ++ [result]}
+    state = run_agent_loop(state, [])
+    {:noreply, state}
+  end
+
+  defp handle_resume(state, tc, {:error, resumed}) do
+    result = %ToolResult{
+      tool_call_id: tc.id,
+      content: "Resume failed: #{inspect(resumed.result)}",
+      is_error: true
+    }
+
+    notify_caller(state, %{result | agent: state.agent.name})
+    state = %{state | messages: state.messages ++ [result]}
+    state = run_agent_loop(state, [])
+    {:noreply, state}
+  end
+
+  defp handle_resume(state, tc, {:pending, resumed}) do
+    event = %InputRequested{
+      agent: state.agent.name,
+      tool_call_id: tc.id,
+      tool_name: tc.name,
+      suspended_state: resumed.suspended_state
+    }
+
+    notify_caller(state, event)
+
+    pending =
+      Map.put(state.pending_tools, tc.id, %{
+        execution: resumed,
+        tool_call: tc
+      })
+
+    {:noreply, %{state | pending_tools: pending}}
+  end
+
+  defp format_resume_result(result) when is_binary(result), do: result
+  defp format_resume_result({:ok, output}), do: to_string(output)
+  defp format_resume_result(other), do: inspect(other)
 
   # --- Core Loop ---
 

@@ -194,6 +194,27 @@ defmodule SkillKit do
   end
 
   @doc """
+  Responds to a suspended tool call with input.
+
+  When a tool returns `{:pending, state}`, the caller receives an
+  `%Event.InputRequested{}` event. Call `respond/3` with the
+  `tool_call_id` from the event and the answer to resume execution.
+  """
+  @spec respond(agent(), String.t(), any()) :: :ok | {:error, :not_found}
+  def respond(%AgentRef{} = agent, tool_call_id, answer) do
+    case Registry.lookup(agent.registry, {agent.name, :server}) do
+      [{pid, _}] ->
+        GenServer.cast(pid, {:respond, tool_call_id, answer})
+        :ok
+
+      [] ->
+        {:error, :not_found}
+    end
+  rescue
+    ArgumentError -> {:error, :not_found}
+  end
+
+  @doc """
   Sends a message and blocks until the agent responds.
 
   Returns `{:ok, text}` on success, `{:error, reason}` on LLM error,
