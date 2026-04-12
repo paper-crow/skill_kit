@@ -35,7 +35,7 @@ defmodule SkillKit.Agent.SupervisorTest do
 
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
+      assert [{_, _}] = Registry.lookup(registry, {agent_name, :tool_runner})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :catalog})
     end
 

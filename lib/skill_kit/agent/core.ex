@@ -1,16 +1,17 @@
 defmodule SkillKit.Agent.Core do
   @moduledoc """
-  Supervisor for the core agent processes: Mailbox, Server, SubagentSupervisor.
+  Supervisor for the core agent processes: Mailbox, Server, ToolRunner.
 
-  Uses `:rest_for_one` — if Mailbox crashes, Server and SubagentSupervisor
-  restart. If Server crashes, SubagentSupervisor restarts.
+  Uses `:rest_for_one` — if Mailbox crashes, Server and ToolRunner
+  restart. If Server crashes, ToolRunner restarts. In-flight tool
+  calls and subagents should not continue without a Server.
   """
 
   use Supervisor
 
   alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
-  alias SkillKit.Agent.SubagentSupervisor
+  alias SkillKit.Agent.ToolRunner
 
   def start_link(%SkillKit.Agent{} = agent) do
     Supervisor.start_link(__MODULE__, agent)
@@ -21,7 +22,7 @@ defmodule SkillKit.Agent.Core do
     children = [
       {Mailbox, agent},
       {Server, agent},
-      {SubagentSupervisor, agent}
+      {ToolRunner, agent}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

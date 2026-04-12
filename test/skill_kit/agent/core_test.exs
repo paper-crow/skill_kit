@@ -41,7 +41,7 @@ defmodule SkillKit.Agent.CoreTest do
 
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
+      assert [{_, _}] = Registry.lookup(registry, {agent_name, :tool_runner})
     end
 
     test "mailbox can flush to server via registry", %{

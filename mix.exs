@@ -91,7 +91,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Agent.Server,
           SkillKit.Agent.Mailbox,
           SkillKit.Agent.Core,
-          SkillKit.Agent.SubagentSupervisor
+          SkillKit.Agent.ToolRunner
         ],
         "LLM Providers": [
           SkillKit.LLM,
