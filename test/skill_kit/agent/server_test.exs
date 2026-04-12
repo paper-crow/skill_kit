@@ -29,7 +29,6 @@ defmodule SkillKit.Agent.ServerTest do
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test agent.",
-      path: "/tmp/test",
       registry: registry_name
     }
 
@@ -159,7 +158,6 @@ defmodule SkillKit.Agent.ServerTest do
         name: agent_name,
         description: "Test agent",
         system_prompt: "You are a calculator.",
-        path: "/tmp/test",
         model: "claude-sonnet-4-20250514",
         caller: self(),
         registry: registry
@@ -191,7 +189,6 @@ defmodule SkillKit.Agent.ServerTest do
         name: agent_name,
         description: "Test agent",
         system_prompt: "You are a test agent.",
-        path: "/tmp/test",
         caller: self(),
         registry: reg
       }

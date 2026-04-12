@@ -107,8 +107,7 @@ defmodule SkillKit.KitTest do
       agent = %Agent{
         name: "helper",
         description: "Helps",
-        system_prompt: "Help.",
-        path: "/tmp"
+        system_prompt: "Help."
       }
 
       kit = %Kit{name: "my-kit", skills: [skill], subagents: [agent]}
@@ -135,8 +134,7 @@ defmodule SkillKit.KitTest do
       root = %Agent{
         name: "root",
         description: "Root agent",
-        system_prompt: "You are the root.",
-        path: "/tmp"
+        system_prompt: "You are the root."
       }
 
       kit = %Kit{name: "my-kit", agent: root}

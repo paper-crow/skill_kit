@@ -17,7 +17,6 @@ defmodule SkillKit.Agent.SupervisorTest do
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",
-      path: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 500},
       registry: registry_name
     }
@@ -79,7 +78,6 @@ defmodule SkillKit.Agent.SupervisorTest do
         name: agent_name,
         description: "Test agent",
         system_prompt: "You are a test.",
-        path: "/tmp/test",
         mailbox: %{max_messages: 10, flush_interval: 500},
         registry: registry,
         depth: 2,

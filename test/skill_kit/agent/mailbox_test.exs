@@ -17,7 +17,6 @@ defmodule SkillKit.Agent.MailboxTest do
       name: agent_name,
       description: "test agent",
       system_prompt: "test",
-      path: "/tmp/test",
       registry: registry,
       mailbox: mailbox_config
     }

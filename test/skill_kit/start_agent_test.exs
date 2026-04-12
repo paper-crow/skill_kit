@@ -50,8 +50,8 @@ defmodule SkillKit.StartAgentTest do
 
   describe "start_agent/2 with %Agent{}" do
     test "accepts a %Agent{} struct" do
-      {:ok, definition} =
-        Agent.parse(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, content} = Storage.read(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, definition} = Agent.parse(content)
 
       assert {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
@@ -60,8 +60,8 @@ defmodule SkillKit.StartAgentTest do
     end
 
     test "overrides agent name" do
-      {:ok, definition} =
-        Agent.parse(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, content} = Storage.read(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, definition} = Agent.parse(content)
 
       assert {:ok, agent} =
                SkillKit.start_agent(definition, name: "overridden", caller: self())

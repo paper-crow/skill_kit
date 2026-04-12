@@ -8,8 +8,7 @@ defmodule SkillKit.AgentTest do
       agent = %SkillKit.Agent{
         name: "test",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp"
+        system_prompt: "Test"
       }
 
       assert agent.skills == []
@@ -24,7 +23,8 @@ defmodule SkillKit.AgentTest do
 
     test "parse/1 returns agent with new fields defaulted" do
       path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
-      assert {:ok, agent} = SkillKit.Agent.parse(path)
+      content = File.read!(path)
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
       assert agent.skills == []
       assert agent.runtime == {SkillKit.Runtime.Local, []}
@@ -35,8 +35,8 @@ defmodule SkillKit.AgentTest do
 
   describe "parse/1" do
     test "parses a full AGENT.md with all fields" do
-      path = Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"])
-      assert {:ok, agent} = SkillKit.Agent.parse(path)
+      content = File.read!(Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"]))
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
       assert agent.name == "project-a"
 
@@ -45,15 +45,14 @@ defmodule SkillKit.AgentTest do
 
       assert agent.model == "claude-sonnet-4-6"
       assert agent.system_prompt =~ "project A manager"
-      assert agent.path == path
       assert agent.max_agent_depth == 2
       assert agent.mailbox.max_messages == 5
       assert agent.mailbox.flush_interval == 200
     end
 
     test "parses minimal AGENT.md with defaults" do
-      path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
-      assert {:ok, agent} = SkillKit.Agent.parse(path)
+      content = File.read!(Path.join([@fixtures_path, "valid", "simple", "AGENT.md"]))
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
       assert agent.name == "simple"
       assert agent.description == "A simple agent with defaults."
@@ -65,12 +64,8 @@ defmodule SkillKit.AgentTest do
     end
 
     test "returns error for missing name" do
-      path = Path.join([@fixtures_path, "invalid", "missing-name", "AGENT.md"])
-      assert {:error, {:missing_field, "name"}} = SkillKit.Agent.parse(path)
-    end
-
-    test "returns error for nonexistent file" do
-      assert {:error, :enoent} = SkillKit.Agent.parse("/nonexistent/AGENT.md")
+      content = File.read!(Path.join([@fixtures_path, "invalid", "missing-name", "AGENT.md"]))
+      assert {:error, {:missing_field, "name"}} = SkillKit.Agent.parse(content)
     end
   end
 end

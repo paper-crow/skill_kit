@@ -21,7 +21,6 @@ defmodule SkillKit.Agent.LoopTest do
       name: agent_name,
       description: "Test agent for loop",
       system_prompt: "You are a helpful test agent.",
-      path: "/tmp/test",
       mailbox: %{max_messages: 10, flush_interval: 60_000},
       registry: registry_name
     }

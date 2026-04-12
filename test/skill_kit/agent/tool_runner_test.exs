@@ -13,7 +13,6 @@ defmodule SkillKit.Agent.ToolRunnerTest do
       name: agent_name,
       description: "Test",
       system_prompt: "Test",
-      path: "/tmp/test",
       registry: registry_name
     }
 

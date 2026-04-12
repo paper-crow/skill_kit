@@ -184,7 +184,7 @@ defmodule SkillKit.Kit.Local do
 
   defp load_agent_file(file, {agents, errors}) do
     with {:ok, content} <- Storage.read(file),
-         {:ok, agent} <- Agent.parse(content, path: file) do
+         {:ok, agent} <- Agent.parse(content) do
       {[agent | agents], errors}
     else
       {:error, reason} -> {agents, [{Path.basename(file), reason} | errors]}
@@ -200,7 +200,7 @@ defmodule SkillKit.Kit.Local do
 
     if Storage.exists?(root_path) do
       with {:ok, content} <- Storage.read(root_path),
-           {:ok, agent} <- Agent.parse(content, path: root_path) do
+           {:ok, agent} <- Agent.parse(content) do
         {agent, []}
       else
         {:error, reason} -> {nil, [{"AGENT.md", reason}]}

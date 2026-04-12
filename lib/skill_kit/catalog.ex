@@ -162,13 +162,6 @@ defmodule SkillKit.Catalog do
     {:reply, result, state}
   end
 
-  # Backward compat — ignore activated_skills
-  def handle_call({:classify, tool_name, _activated_skills}, _from, state) do
-    kits = load_all_kits(state.providers)
-    result = do_classify(kits, tool_name)
-    {:reply, result, state}
-  end
-
   def handle_call(:tool_config, _from, state) do
     kits = load_all_kits(state.providers)
     result = find_tool_config(kits)

@@ -248,8 +248,7 @@ defmodule SkillKit.RespondTest do
         SkillKit.start_agent(%Agent{
           name: "dead-respond-#{:erlang.unique_integer([:positive])}",
           description: "Test",
-          system_prompt: "Test",
-          path: "/tmp/test"
+          system_prompt: "Test"
         })
 
       SkillKit.stop_agent(agent)

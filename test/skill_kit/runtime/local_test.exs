@@ -10,7 +10,6 @@ defmodule SkillKit.Runtime.LocalTest do
         name: "runtime-test-#{:erlang.unique_integer([:positive])}",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         registry: :"runtime_test_reg_#{:erlang.unique_integer([:positive])}"
       }
 

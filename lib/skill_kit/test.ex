@@ -50,7 +50,6 @@ if Mix.env() == :test do
             name: agent_name,
             description: "Test agent",
             system_prompt: "You are a test agent.",
-            path: "/tmp/test",
             caller: caller,
             scope: scope,
             skills: skills,

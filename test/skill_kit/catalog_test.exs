@@ -57,8 +57,7 @@ defmodule SkillKit.CatalogTest do
     %Agent{
       name: name,
       description: Keyword.get(opts, :description, "#{name} agent"),
-      system_prompt: "You are #{name}.",
-      path: "/test/#{name}"
+      system_prompt: "You are #{name}."
     }
   end
 

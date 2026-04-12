@@ -160,7 +160,7 @@ defmodule SkillKit.Kit do
     agent_path = Path.join(kit_path, "AGENT.md")
 
     with {:ok, content} <- File.read(agent_path),
-         {:ok, agent} <- Agent.parse(content, path: agent_path) do
+         {:ok, agent} <- Agent.parse(content) do
       agent
     else
       _ -> nil

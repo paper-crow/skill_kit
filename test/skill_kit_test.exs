@@ -22,7 +22,6 @@ defmodule SkillKitTest do
         name: "api-test-agent",
         description: "Test agent",
         system_prompt: "You are helpful.",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -47,8 +46,7 @@ defmodule SkillKitTest do
       definition = %SkillKit.Agent{
         name: "dead-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -62,8 +60,7 @@ defmodule SkillKitTest do
       definition = %SkillKit.Agent{
         name: "cleanup-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -86,7 +83,6 @@ defmodule SkillKitTest do
         name: "store-test-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -121,7 +117,6 @@ defmodule SkillKitTest do
         name: "agent-opt-test",
         description: "Test agent",
         system_prompt: "You are helpful.",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -138,7 +133,6 @@ defmodule SkillKitTest do
         name: "sync-test-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -154,8 +148,7 @@ defmodule SkillKitTest do
       definition = %SkillKit.Agent{
         name: "sync-error-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       SkillKit.Test.expect_error(500, "internal error")
@@ -170,7 +163,6 @@ defmodule SkillKitTest do
         name: "sync-delta-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -189,8 +181,7 @@ defmodule SkillKitTest do
       definition = %SkillKit.Agent{
         name: "sync-timeout-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       # Mock that never returns — simulate a halted server
