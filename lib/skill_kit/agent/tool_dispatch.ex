@@ -4,8 +4,13 @@ defmodule SkillKit.Agent.ToolDispatch do
   tool calls from the LLM. Handles plain tools, module skills,
   skill activation, and subagent spawning.
 
-  The Server delegates here with `execute_all/2`, keeping all tool
-  execution logic out of the core loop.
+  Execution is synchronous — `execute_all/2` blocks until all tool calls
+  complete and returns `{results, updated_state}`. This is intentional:
+  the LLM needs all results before producing its next response.
+
+  Subagent delegation returns immediately (the subagent runs independently).
+  Tools that need external input should return `{:pending, state}` to
+  suspend rather than blocking.
   """
 
   alias SkillKit.Agent.Server

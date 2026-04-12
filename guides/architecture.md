@@ -162,6 +162,17 @@ to `ToolDispatch.execute_all/2`. The dispatch classifies each tool call via
 the Catalog and executes it with appropriate hooks. The Server loops until
 the model returns a response with no tools.
 
+Tool execution is **synchronous** — the Server blocks while tools run.
+This is intentional: the LLM needs all tool results before it can produce
+its next response, so there's nothing for the Server to do with partial
+results. Subagent delegation is the exception — it returns immediately
+with "Delegated to X" and the subagent's result arrives later via `:DOWN`.
+
+For tools that need to wait on external input (human approval, API
+callbacks), use the `{:pending, state}` / `resume/3` suspension mechanism
+rather than blocking the Server. This lets the Server stay responsive
+while the tool waits.
+
 ```mermaid
 flowchart TD
     A[Server receives<br/>mailbox flush messages] --> B[Call Catalog.tool_definitions/2]
