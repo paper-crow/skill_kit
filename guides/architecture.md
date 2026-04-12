@@ -198,11 +198,11 @@ flowchart TD
     O --> K
 ```
 
-Tool calls are classified by `Catalog.classify/3` as one of:
+Tool calls are classified by `Catalog.classify/2` as one of:
 - `:tool` — shell command or registered tool module
-- `{:module_skill, skill}` — kit-provided tool with a `SkillKit.Tool` implementation
-- `:activate_skill` — renders a skill body and adds it to the conversation
-- `:subagent` — spawns a child agent via `Runtime.start_agent/1`
+- `:activate_skill` — forks the parent context into a skill agent that runs
+  the skill in isolation with the parent's conversation history
+- `:subagent` — spawns a fresh child agent via `Runtime.start_agent/1`
 
 Tools can return `{:pending, state}` to suspend execution. The caller
 receives `%Event.InputRequested{}` and responds via `SkillKit.respond/3`.

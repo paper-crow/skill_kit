@@ -311,8 +311,8 @@ defmodule SkillKit.Catalog do
       %Tool{
         name: "activate_skill",
         description:
-          "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
-            "for a task (e.g. code review, style conventions). Available skills:\n#{skill_descriptions}",
+          "Activate a skill to handle the current task. The skill runs with full " <>
+            "conversation context in an isolated agent. Available skills:\n#{skill_descriptions}",
         input_schema: %{
           "type" => "object",
           "properties" => %{
@@ -320,11 +320,6 @@ defmodule SkillKit.Catalog do
               "type" => "string",
               "description" => "The skill name to activate",
               "enum" => skill_names
-            },
-            "arguments" => %{
-              "type" => "string",
-              "description" =>
-                "Arguments to pass to the skill (space-separated, accessible as $ARGUMENTS, $0, $1, etc.)"
             }
           },
           "required" => ["name"]
