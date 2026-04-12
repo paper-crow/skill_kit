@@ -88,6 +88,25 @@ Parse failures are logged as warnings and skipped; the rest of the kit still loa
 
 ---
 
+## Built-in: GitHub Provider
+
+`SkillKit.Kit.GitHub` imports skills from GitHub repositories at runtime. Repos
+are downloaded as tarballs, cached locally, and loaded via `Kit.Local`. The
+provider ships built-in skills so agents can import repos mid-conversation.
+
+```elixir
+{SkillKit.Kit.GitHub,
+  allowed_sources: ["paper-crow/*", "community/tools"],
+  api_token: {:env, "GITHUB_TOKEN"},
+  cache_dir: "/tmp/skill_kit/github"
+}
+```
+
+See the `SkillKit.Kit.GitHub` moduledoc for reference format, allowed sources
+patterns, cache behaviour, and built-in skill details.
+
+---
+
 ## Built-in: In-Memory Provider
 
 `SkillKit.Kit.Memory` is an `Agent`-backed provider for testing and dynamic skill

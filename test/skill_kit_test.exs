@@ -1,14 +1,20 @@
 defmodule SkillKitTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: false
 
   import Mox
 
   alias SkillKit.Conversation.Store.Filesystem
   alias SkillKit.Event.Delta
+  alias SkillKit.Storage
   alias SkillKit.Types.AssistantMessage
 
   setup :set_mox_global
   setup :verify_on_exit!
+
+  setup do
+    start_supervised!(Storage.Memory)
+    :ok
+  end
 
   describe "start_agent/2 + send_message/2 + stop_agent/1" do
     test "full lifecycle with streaming deltas" do
@@ -70,14 +76,9 @@ defmodule SkillKitTest do
     end
 
     test "conversation_store persists and restores messages" do
-      store_path =
-        Path.join(
-          System.tmp_dir!(),
-          "skill_kit_store_test_#{:erlang.unique_integer([:positive])}"
-        )
+      store_path = "skill_kit_store_test_#{:erlang.unique_integer([:positive])}"
 
-      File.mkdir_p!(store_path)
-      on_exit(fn -> File.rm_rf!(store_path) end)
+      Storage.ensure_dir!(store_path)
 
       store = {SkillKit.Conversation.Store.Filesystem, path: store_path}
 

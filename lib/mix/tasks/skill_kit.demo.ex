@@ -27,7 +27,9 @@ defmodule Mix.Tasks.SkillKit.Demo do
     end
 
     agent_md = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve/AGENT.md")
-    {:ok, definition} = Agent.parse(agent_md)
+    with {:ok, content} <- File.read(agent_md), {:ok, definition} <- Agent.parse(content, path: agent_md) do
+      definition
+    end
 
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 

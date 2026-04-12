@@ -1,12 +1,30 @@
 defmodule SkillKit.Kit.Local.ParserTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Hook
   alias SkillKit.Kit.Local.Parser
   alias SkillKit.Skill
 
-  @fixtures_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills"])
-  @valid_path Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills", "valid"])
+  @fixtures_dir Path.join([__DIR__, "..", "..", "..", "support", "fixtures", "skills"])
+
+  setup do
+    start_supervised!(SkillKit.Storage.Memory)
+    seed_fixtures()
+    :ok
+  end
+
+  # Seeds on-disk fixture files into Storage.Memory so the parser can read them.
+  defp seed_fixtures do
+    fixture_files = Path.wildcard(Path.join(@fixtures_dir, "**/*.md"))
+
+    Enum.each(fixture_files, fn disk_path ->
+      content = File.read!(disk_path)
+      SkillKit.Storage.put!(disk_path, content)
+    end)
+  end
+
+  @fixtures_path @fixtures_dir
+  @valid_path Path.join(@fixtures_dir, "valid")
 
   # ---------------------------------------------------------------------------
   # load_file/1 — valid files
@@ -405,10 +423,8 @@ defmodule SkillKit.Kit.Local.ParserTest do
   # ---------------------------------------------------------------------------
 
   defp write_tmp_fixture(filename, content) do
-    tmp_dir = System.tmp_dir!()
-    path = Path.join(tmp_dir, "skill_kit_test_#{:erlang.unique_integer([:positive])}_#{filename}")
-    File.write!(path, content)
-    on_exit(fn -> File.rm(path) end)
+    path = "tmp/skill_kit_test_#{:erlang.unique_integer([:positive])}_#{filename}"
+    SkillKit.Storage.put!(path, content)
     path
   end
 end

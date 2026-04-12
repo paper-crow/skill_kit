@@ -1,17 +1,19 @@
 defmodule SkillKit.Kit.Local.ListGetTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Kit.Local
+  alias SkillKit.Storage
 
-  @fixtures_dir Path.expand("../../fixtures/local_list_get", __DIR__)
+  @fixtures_dir "test_fixtures/local_list_get"
 
   setup do
-    # Create a kit with the new directory structure
+    start_supervised!(Storage.Memory)
+
     kit_dir = Path.join(@fixtures_dir, "my_kit")
     skill_dir = Path.join([kit_dir, "skills", "hello"])
-    File.mkdir_p!(skill_dir)
+    Storage.ensure_dir!(skill_dir)
 
-    File.write!(Path.join(skill_dir, "SKILL.md"), """
+    Storage.put!(Path.join(skill_dir, "SKILL.md"), """
     ---
     name: "my_kit:hello"
     description: "Hello skill"
@@ -19,7 +21,6 @@ defmodule SkillKit.Kit.Local.ListGetTest do
     Say hello.
     """)
 
-    on_exit(fn -> File.rm_rf!(@fixtures_dir) end)
     %{dir: @fixtures_dir, kit_dir: kit_dir}
   end
 

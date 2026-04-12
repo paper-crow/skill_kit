@@ -1,20 +1,14 @@
 defmodule SkillKit.Conversation.Store.FilesystemTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SkillKit.Conversation.Store.Filesystem
+  alias SkillKit.Storage
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.UserMessage
 
-  @test_path Path.join(
-               System.tmp_dir!(),
-               "skill_kit_conv_test_#{:erlang.unique_integer([:positive])}"
-             )
-
   setup do
-    File.rm_rf!(@test_path)
-    File.mkdir_p!(@test_path)
-    on_exit(fn -> File.rm_rf!(@test_path) end)
-    {:ok, config: [path: @test_path]}
+    start_supervised!(Storage.Memory)
+    {:ok, config: [path: "conversations"]}
   end
 
   test "save and load round-trips messages", %{config: config} do
@@ -45,7 +39,7 @@ defmodule SkillKit.Conversation.Store.FilesystemTest do
   test "sanitizes conversation id for filesystem safety", %{config: config} do
     messages = [%UserMessage{content: "test"}]
     assert :ok = Filesystem.save("../../evil", messages, config)
-    # Should create a safe filename, not traverse directories
-    refute File.exists?(Path.join([@test_path, "..", "..", "evil.bin"]))
+    refute Storage.exists?("conversations/../../evil.bin")
+    assert Storage.exists?("conversations/______evil.bin")
   end
 end

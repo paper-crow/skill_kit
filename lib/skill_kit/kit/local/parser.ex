@@ -79,7 +79,7 @@ defmodule SkillKit.Kit.Local.Parser do
   """
   @spec load_file(Path.t()) :: {:ok, Skill.t()} | {:error, term()}
   def load_file(path) do
-    with {:ok, content} <- File.read(path),
+    with {:ok, content} <- SkillKit.Storage.read(path),
          {:ok, frontmatter, body} <- split_frontmatter(content),
          {:ok, yaml_map} <- parse_yaml(frontmatter) do
       build_skill(yaml_map, body, path)

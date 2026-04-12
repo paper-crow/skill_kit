@@ -72,25 +72,4 @@ defmodule SkillKit.FrontmatterTest do
       assert yaml["metadata"]["workspace"] == "~/.agents/test"
     end
   end
-
-  describe "parse_file/1" do
-    test "reads and parses a file" do
-      path =
-        Path.join(System.tmp_dir!(), "test_frontmatter_#{:erlang.unique_integer([:positive])}.md")
-
-      File.write!(path, """
-      ---
-      name: from-file
-      ---
-      File body.
-      """)
-
-      assert {:ok, %{"name" => "from-file"}, "File body."} = Frontmatter.parse_file(path)
-      File.rm!(path)
-    end
-
-    test "returns error for missing file" do
-      assert {:error, :enoent} = Frontmatter.parse_file("/nonexistent/file.md")
-    end
-  end
 end

@@ -49,14 +49,14 @@ defmodule SkillKit.Agent do
   ]
 
   @doc """
-  Parses an AGENT.md file at `path` into a `%SkillKit.Agent{}`.
+  Parses AGENT.md content into a `%SkillKit.Agent{}`.
 
   Returns `{:ok, agent}` or `{:error, reason}`.
   """
-  @spec parse(Path.t()) :: {:ok, t()} | {:error, term()}
-  def parse(path) do
-    with {:ok, yaml, body} <- SkillKit.Frontmatter.parse_file(path) do
-      build(yaml, body, path)
+  @spec parse(String.t(), keyword()) :: {:ok, t()} | {:error, term()}
+  def parse(content, opts \\ []) do
+    with {:ok, yaml, body} <- SkillKit.Frontmatter.parse(content) do
+      build(yaml, body, Keyword.get(opts, :path))
     end
   end
 
