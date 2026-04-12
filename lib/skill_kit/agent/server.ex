@@ -276,7 +276,7 @@ defmodule SkillKit.Agent.Server do
 
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
     notify_caller(state, %{response | agent: state.agent.name})
-    maybe_terminate_subagent(response, state)
+    complete_turn(response, state)
   end
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
@@ -290,11 +290,9 @@ defmodule SkillKit.Agent.Server do
     %{state | messages: state.messages ++ results}
   end
 
-  defp maybe_terminate_subagent(_response, %{agent: %{parent_ref: nil}} = state) do
-    state
-  end
+  defp complete_turn(_response, %{agent: %{parent_ref: nil}} = state), do: state
 
-  defp maybe_terminate_subagent(response, state) do
+  defp complete_turn(response, state) do
     save_conversation(state)
     exit({:shutdown, {:result, response}})
   end
