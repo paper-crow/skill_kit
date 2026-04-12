@@ -12,10 +12,21 @@ defmodule SkillKit.Agent.MailboxTest do
     {:ok, registry: registry_name, agent_name: agent_name}
   end
 
+  defp build_agent(agent_name, registry, mailbox_config) do
+    %SkillKit.Agent{
+      name: agent_name,
+      description: "test agent",
+      system_prompt: "test",
+      path: "/tmp/test",
+      registry: registry,
+      mailbox: mailbox_config
+    }
+  end
+
   describe "init" do
     test "registers in the agent registry", %{registry: registry, agent_name: agent_name} do
-      config = %{max_messages: 10, flush_interval: 500}
-      {:ok, pid} = Mailbox.start_link({agent_name, config, registry})
+      agent = build_agent(agent_name, registry, %{max_messages: 10, flush_interval: 500})
+      {:ok, pid} = Mailbox.start_link(agent)
 
       assert [{^pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
     end
@@ -25,8 +36,8 @@ defmodule SkillKit.Agent.MailboxTest do
     test "buffers messages until flush interval", %{registry: registry, agent_name: agent_name} do
       Registry.register(registry, {agent_name, :server}, [])
 
-      config = %{max_messages: 100, flush_interval: 50}
-      {:ok, mailbox} = Mailbox.start_link({agent_name, config, registry})
+      agent = build_agent(agent_name, registry, %{max_messages: 100, flush_interval: 50})
+      {:ok, mailbox} = Mailbox.start_link(agent)
 
       GenServer.cast(mailbox, {:message, "msg1"})
       GenServer.cast(mailbox, {:message, "msg2"})
@@ -40,8 +51,8 @@ defmodule SkillKit.Agent.MailboxTest do
     } do
       Registry.register(registry, {agent_name, :server}, [])
 
-      config = %{max_messages: 2, flush_interval: 60_000}
-      {:ok, mailbox} = Mailbox.start_link({agent_name, config, registry})
+      agent = build_agent(agent_name, registry, %{max_messages: 2, flush_interval: 60_000})
+      {:ok, mailbox} = Mailbox.start_link(agent)
 
       GenServer.cast(mailbox, {:message, "msg1"})
       GenServer.cast(mailbox, {:message, "msg2"})
@@ -52,8 +63,8 @@ defmodule SkillKit.Agent.MailboxTest do
     test "does not flush when buffer is empty", %{registry: registry, agent_name: agent_name} do
       Registry.register(registry, {agent_name, :server}, [])
 
-      config = %{max_messages: 10, flush_interval: 50}
-      _mailbox = Mailbox.start_link({agent_name, config, registry})
+      agent = build_agent(agent_name, registry, %{max_messages: 10, flush_interval: 50})
+      _mailbox = Mailbox.start_link(agent)
 
       Process.sleep(100)
       refute_received {:mailbox_flush, _}

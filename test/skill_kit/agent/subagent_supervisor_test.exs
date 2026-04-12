@@ -12,18 +12,30 @@ defmodule SkillKit.Agent.SubagentSupervisorTest do
     {:ok, registry: registry_name, agent_name: agent_name}
   end
 
+  defp build_agent(agent_name, registry) do
+    %SkillKit.Agent{
+      name: agent_name,
+      description: "test agent",
+      system_prompt: "test",
+      path: "/tmp/test",
+      registry: registry
+    }
+  end
+
   describe "start_link" do
     test "registers in the agent registry via :via naming", %{
       registry: registry,
       agent_name: agent_name
     } do
-      {:ok, pid} = SubagentSupervisor.start_link({agent_name, registry})
+      agent = build_agent(agent_name, registry)
+      {:ok, pid} = SubagentSupervisor.start_link(agent)
 
       assert [{^pid, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
     end
 
     test "can start children dynamically", %{registry: registry, agent_name: agent_name} do
-      {:ok, pid} = SubagentSupervisor.start_link({agent_name, registry})
+      agent = build_agent(agent_name, registry)
+      {:ok, pid} = SubagentSupervisor.start_link(agent)
 
       spec = %{id: :test_task, start: {Task, :start_link, [fn -> Process.sleep(:infinity) end]}}
       assert {:ok, _child} = DynamicSupervisor.start_child(pid, spec)

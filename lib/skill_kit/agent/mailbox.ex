@@ -18,21 +18,21 @@ defmodule SkillKit.Agent.Mailbox do
     messages: []
   ]
 
-  def start_link({agent_name, config, registry}) do
-    GenServer.start_link(__MODULE__, {agent_name, config, registry})
+  def start_link(%SkillKit.Agent{} = agent) do
+    GenServer.start_link(__MODULE__, agent)
   end
 
   @impl true
-  def init({agent_name, config, registry}) do
-    Registry.register(registry, {agent_name, :mailbox}, [])
+  def init(%SkillKit.Agent{} = agent) do
+    Registry.register(agent.registry, {agent.name, :mailbox}, [])
 
     {:ok,
      %__MODULE__{
-       agent_name: agent_name,
-       registry: registry,
-       max_messages: config.max_messages,
-       flush_interval: config.flush_interval,
-       timer_ref: schedule_flush(config.flush_interval)
+       agent_name: agent.name,
+       registry: agent.registry,
+       max_messages: agent.mailbox.max_messages,
+       flush_interval: agent.mailbox.flush_interval,
+       timer_ref: schedule_flush(agent.mailbox.flush_interval)
      }}
   end
 

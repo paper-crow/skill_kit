@@ -417,7 +417,7 @@ defmodule SkillKit.Agent.ServerTest do
   describe "subagent result handling" do
     test "builds rich resume message with parent_intent and task", %{
       agent_name: agent_name,
-      registry: registry,
+      registry: _registry,
       agent: agent
     } do
       assert_response(%Text{content: "Fixing now."}, fn messages, _opts ->
@@ -429,8 +429,8 @@ defmodule SkillKit.Agent.ServerTest do
         assert content =~ "Found 2 issues"
       end)
 
-      mailbox_config = %{max_messages: 1, flush_interval: 50}
-      {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
+      mailbox_agent = %{agent | mailbox: %{max_messages: 1, flush_interval: 50}}
+      {:ok, _mailbox_pid} = Mailbox.start_link(mailbox_agent)
 
       {:ok, pid} = Server.start_link(%{agent | caller: self()})
 

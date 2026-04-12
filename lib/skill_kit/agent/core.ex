@@ -19,9 +19,9 @@ defmodule SkillKit.Agent.Core do
   @impl true
   def init(%SkillKit.Agent{} = agent) do
     children = [
-      {Mailbox, {agent.name, agent.mailbox, agent.registry}},
+      {Mailbox, agent},
       {Server, agent},
-      {SubagentSupervisor, {agent.name, agent.registry}}
+      {SubagentSupervisor, agent}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

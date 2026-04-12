@@ -13,9 +13,9 @@ defmodule SkillKit.Agent.SubagentSupervisor do
 
   use DynamicSupervisor
 
-  def start_link({agent_name, registry}) do
+  def start_link(%SkillKit.Agent{} = agent) do
     DynamicSupervisor.start_link(__MODULE__, :ok,
-      name: {:via, Registry, {registry, {agent_name, :subagent_supervisor}}}
+      name: {:via, Registry, {agent.registry, {agent.name, :subagent_supervisor}}}
     )
   end
 
