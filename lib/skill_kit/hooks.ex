@@ -51,6 +51,9 @@ defmodule SkillKit.Hooks do
           {{:pending, state}, %{}, Map.put(context, :status, :suspended)}
       end
     end)
+  catch
+    :exit, {reason, {GenServer, :call, _}} when reason in [:noproc, :normal, :shutdown] ->
+      func.() |> elem(0)
   end
 
   @doc """
@@ -60,6 +63,8 @@ defmodule SkillKit.Hooks do
   def cast(agent_or_catalog, event, context) do
     catalog = catalog_ref(agent_or_catalog)
     notify(catalog, event, context)
+  catch
+    :exit, {reason, {GenServer, :call, _}} when reason in [:noproc, :normal, :shutdown] -> :ok
   end
 
   # -- Private: catalog resolution ------------------------------------------

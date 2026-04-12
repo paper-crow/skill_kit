@@ -33,7 +33,6 @@ defmodule SkillKit.Agent.Server do
     halted: false,
     messages: [],
     subagents: %{},
-    pending_requests: %{},
     pending_tools: %{},
     activated_skills: []
   ]
@@ -43,7 +42,6 @@ defmodule SkillKit.Agent.Server do
           halted: boolean(),
           messages: list(),
           subagents: map(),
-          pending_requests: map(),
           pending_tools: map(),
           activated_skills: [SkillKit.Skill.t()]
         }
@@ -64,28 +62,20 @@ defmodule SkillKit.Agent.Server do
       halted: false
     }
 
-    try do
-      Hooks.cast(agent, :pre_agent, %{
-        agent_name: agent.name,
-        definition: agent
-      })
-    catch
-      :exit, _reason -> :ok
-    end
+    Hooks.cast(agent, :pre_agent, %{
+      agent_name: agent.name,
+      definition: agent
+    })
 
     {:ok, state}
   end
 
   @impl true
   def terminate(_reason, state) do
-    try do
-      Hooks.cast(state.agent, :post_agent, %{
-        agent_name: state.agent.name,
-        definition: state.agent
-      })
-    catch
-      :exit, _reason -> :ok
-    end
+    Hooks.cast(state.agent, :post_agent, %{
+      agent_name: state.agent.name,
+      definition: state.agent
+    })
 
     :ok
   end
@@ -185,31 +175,6 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp handle_resume(state, tc, {:ok, resumed}) do
-    result = %ToolResult{
-      tool_call_id: tc.id,
-      content: format_resume_result(resumed.result)
-    }
-
-    notify_caller(state, %{result | agent: state.agent.name})
-    state = %{state | messages: state.messages ++ [result]}
-    state = run_agent_loop(state, [])
-    {:noreply, state}
-  end
-
-  defp handle_resume(state, tc, {:error, resumed}) do
-    result = %ToolResult{
-      tool_call_id: tc.id,
-      content: "Resume failed: #{inspect(resumed.result)}",
-      is_error: true
-    }
-
-    notify_caller(state, %{result | agent: state.agent.name})
-    state = %{state | messages: state.messages ++ [result]}
-    state = run_agent_loop(state, [])
-    {:noreply, state}
-  end
-
   defp handle_resume(state, tc, {:pending, resumed}) do
     event = %InputRequested{
       agent: state.agent.name,
@@ -227,6 +192,32 @@ defmodule SkillKit.Agent.Server do
       })
 
     {:noreply, %{state | pending_tools: pending}}
+  end
+
+  defp handle_resume(state, tc, {status, resumed}) do
+    result = build_resume_result(tc, status, resumed)
+    notify_caller(state, %{result | agent: state.agent.name})
+
+    state
+    |> append_message(result)
+    |> run_agent_loop([])
+    |> then(&{:noreply, &1})
+  end
+
+  defp build_resume_result(tc, :ok, resumed) do
+    %ToolResult{tool_call_id: tc.id, content: format_resume_result(resumed.result)}
+  end
+
+  defp build_resume_result(tc, :error, resumed) do
+    %ToolResult{
+      tool_call_id: tc.id,
+      content: "Resume failed: #{inspect(resumed.result)}",
+      is_error: true
+    }
+  end
+
+  defp append_message(state, message) do
+    %{state | messages: state.messages ++ [message]}
   end
 
   defp format_resume_result(result) when is_binary(result), do: result
@@ -289,9 +280,14 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
-    {results, state} = ToolDispatch.execute_all(state, tool_calls)
-    state = %{state | messages: state.messages ++ results}
-    run_agent_loop(state, [])
+    state
+    |> ToolDispatch.execute_all(tool_calls)
+    |> append_results()
+    |> run_agent_loop([])
+  end
+
+  defp append_results({results, state}) do
+    %{state | messages: state.messages ++ results}
   end
 
   defp maybe_terminate_subagent(_response, %{agent: %{parent_ref: nil}} = state) do
@@ -383,31 +379,22 @@ defmodule SkillKit.Agent.Server do
   defp load_conversation({mod, config}, agent_name, agent) do
     load_context = %{agent_name: agent_name}
 
-    try do
-      agent
-      |> hooked_load(load_context, mod, agent_name, config)
-      |> unwrap_load_result()
-    catch
-      :exit, _reason -> do_load_conversation(mod, agent_name, config)
-    end
-  end
-
-  defp hooked_load(agent, load_context, mod, agent_name, config) do
     Hooks.call(agent, :conversation_load, load_context, fn ->
-      messages = do_load_conversation(mod, agent_name, config)
+      messages = load_from_store(mod, agent_name, config)
       {messages, Map.put(load_context, :messages, messages)}
     end)
+    |> unwrap_denied()
   end
 
-  defp unwrap_load_result({:deny, _reason}), do: []
-  defp unwrap_load_result(messages), do: messages
-
-  defp do_load_conversation(mod, agent_name, config) do
+  defp load_from_store(mod, agent_name, config) do
     case apply(mod, :load, [agent_name, config]) do
       {:ok, msgs} -> msgs
       {:error, _} -> []
     end
   end
+
+  defp unwrap_denied({:deny, _}), do: []
+  defp unwrap_denied(result), do: result
 
   defp save_conversation(%{agent: %{conversation_store: nil}}), do: :ok
 
