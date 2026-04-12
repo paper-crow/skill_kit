@@ -414,6 +414,50 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "natural completion" do
+    test "subagent terminates with {:shutdown, {:result, msg}} after final response", %{
+      agent: agent,
+      registry: registry
+    } do
+      # Trap exits so the test process isn't killed by the Server's exit
+      Process.flag(:trap_exit, true)
+
+      parent_ref = %SkillKit.AgentRef{
+        name: "parent",
+        registry: registry,
+        supervisor_pid: self()
+      }
+
+      subagent = %{agent | parent_ref: parent_ref, caller: self()}
+
+      expect_response(%Text{content: "Task complete!"})
+
+      {:ok, pid} = Server.start_link(subagent)
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+      ref = Process.monitor(pid)
+
+      send(pid, {:mailbox_flush, [%UserMessage{content: "do it"}]})
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, {:shutdown, {:result, msg}}}, 2000
+      assert %AssistantMessage{content: "Task complete!"} = msg
+    end
+
+    test "top-level agent does NOT terminate after final response", %{
+      agent: agent
+    } do
+      expect_response(%Text{content: "Hello!"})
+
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hi"}]})
+
+      assert_receive %AssistantMessage{content: "Hello!"}, 1000
+      Process.sleep(100)
+      assert Process.alive?(pid)
+    end
+  end
+
   describe "subagent result handling" do
     test "builds rich resume message with parent_intent and task", %{
       agent_name: agent_name,

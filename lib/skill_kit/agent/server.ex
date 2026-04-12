@@ -145,6 +145,44 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
+  # Subagent completed naturally — capture result from shutdown reason
+  @impl true
+  def handle_info({:DOWN, _ref, :process, pid, {:shutdown, {:result, response}}}, state) do
+    case Map.pop(state.subagents, pid) do
+      {nil, _} ->
+        {:noreply, state}
+
+      {entry, subagents} ->
+        state = %{state | subagents: subagents}
+
+        intent = entry.parent_intent || "N/A"
+        result_text = response.content || "(no content)"
+
+        message = %SystemMessage{
+          content: """
+          [Subagent Complete] #{entry.name} finished the task you delegated.
+
+          **Your plan before delegating:** "#{intent}"
+          **Task you delegated:** "#{entry.task}"
+          **Result:**
+          #{result_text}
+
+          Continue with your plan.\
+          """
+        }
+
+        Hooks.cast(catalog(state.agent), :post_subagent, %{
+          name: entry.name,
+          task: entry.task,
+          result: result_text,
+          agent_name: state.agent.name
+        })
+
+        cast_to_mailbox(state, {:message, message})
+        {:noreply, state}
+    end
+  end
+
   # Subagent crashed — inject error as System message
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, reason}, state) do
@@ -219,13 +257,22 @@ defmodule SkillKit.Agent.Server do
 
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
     notify_caller(state, %{response | agent: state.agent.name})
-    state
+    maybe_terminate_subagent(response, state)
   end
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
     {results, state} = execute_tool_calls(tool_calls, state)
     state = %{state | messages: state.messages ++ results}
     run_agent_loop(state, [])
+  end
+
+  defp maybe_terminate_subagent(_response, %{agent: %{parent_ref: nil}} = state) do
+    state
+  end
+
+  defp maybe_terminate_subagent(response, state) do
+    save_conversation(state)
+    exit({:shutdown, {:result, response}})
   end
 
   defp execute_tool_calls(tool_calls, state) do
