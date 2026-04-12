@@ -39,7 +39,7 @@ defmodule SkillKit.Agent.ToolDispatch do
   end
 
   defp execute_one(state, %ToolCall{} = tc) do
-    case SkillKit.Catalog.classify(catalog(state.agent), tc.name, state.activated_skills) do
+    case SkillKit.Catalog.classify(state.agent, tc.name, state.activated_skills) do
       :tool -> execute_command(state, tc)
       {:module_skill, skill} -> execute_module_skill(state, tc, skill)
       :activate_skill -> activate_skill(state, tc)
@@ -79,7 +79,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     }
 
     result =
-      Hooks.call(catalog(state.agent), :tool_use, hook_context, fn ->
+      Hooks.call(state.agent, :tool_use, hook_context, fn ->
         do_execute_command(id, tool, input, tool_context, hook_context)
       end)
 
@@ -118,7 +118,7 @@ defmodule SkillKit.Agent.ToolDispatch do
   end
 
   defp find_tool(state) do
-    case SkillKit.Catalog.tool_config(catalog(state.agent)) do
+    case SkillKit.Catalog.tool_config(state.agent) do
       nil -> SkillKit.Tools.Shell
       {tool, _metadata} -> tool
     end
@@ -127,7 +127,7 @@ defmodule SkillKit.Agent.ToolDispatch do
   defp build_tool_context(state) do
     base_context = %{scope: state.agent.scope}
 
-    case SkillKit.Catalog.tool_config(catalog(state.agent)) do
+    case SkillKit.Catalog.tool_config(state.agent) do
       nil -> base_context
       {_tool, metadata} -> merge_tool_config(base_context, metadata)
     end
@@ -178,7 +178,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     skill_name = Map.get(input, "name", "")
     arguments = Map.get(input, "arguments", "")
 
-    case SkillKit.Catalog.get_skill(catalog(state.agent), skill_name) do
+    case SkillKit.Catalog.get_skill(state.agent, skill_name) do
       {:ok, skill} ->
         activate_skill_with_hook(state, id, skill, skill_name, arguments)
 
@@ -212,7 +212,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     }
 
     result =
-      Hooks.call(catalog(state.agent), :skill_activation, hook_context, fn ->
+      Hooks.call(state.agent, :skill_activation, hook_context, fn ->
         do_activate_skill(state, id, skill, skill_name, arguments, hook_context)
       end)
 
@@ -253,7 +253,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     }
 
     result =
-      Hooks.call(catalog(state.agent), :tool_use, hook_context, fn ->
+      Hooks.call(state.agent, :tool_use, hook_context, fn ->
         do_execute_module_skill(state, id, skill, input, hook_context)
       end)
 
@@ -304,7 +304,7 @@ defmodule SkillKit.Agent.ToolDispatch do
 
       {result, state}
     else
-      case SkillKit.Catalog.get_agent(catalog(state.agent), name) do
+      case SkillKit.Catalog.get_agent(state.agent, name) do
         {:error, :not_found} ->
           result = %ToolResult{
             tool_call_id: id,
@@ -329,7 +329,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     }
 
     result =
-      Hooks.call(catalog(state.agent), :subagent, hook_context, fn ->
+      Hooks.call(state.agent, :subagent, hook_context, fn ->
         spawn_result = do_spawn_subagent(state, id, name, task, agent_def)
         {spawn_result, Map.put(hook_context, :result, spawn_result)}
       end)
@@ -407,9 +407,5 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp notify_caller(%{agent: %{caller: pid}}, event) do
     send(pid, event)
-  end
-
-  defp catalog(agent) do
-    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
   end
 end

@@ -34,57 +34,67 @@ defmodule SkillKit.Catalog do
     GenServer.start_link(__MODULE__, {providers, scope}, gen_opts)
   end
 
-  @spec list_skills(GenServer.server()) :: [{String.t(), String.t()}]
-  def list_skills(catalog) do
-    GenServer.call(catalog, :list_skills)
+  @spec list_skills(GenServer.server() | Agent.t()) :: [{String.t(), String.t()}]
+  def list_skills(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :list_skills)
   end
 
-  @spec get_skill(GenServer.server(), String.t()) ::
+  @spec get_skill(GenServer.server() | Agent.t(), String.t()) ::
           {:ok, Skill.t()} | {:error, :not_found | :unauthorized}
-  def get_skill(catalog, name) do
-    GenServer.call(catalog, {:get_skill, name})
+  def get_skill(agent_or_catalog, name) do
+    GenServer.call(server_ref(agent_or_catalog), {:get_skill, name})
   end
 
-  @spec list_agents(GenServer.server()) :: [Agent.t()]
-  def list_agents(catalog) do
-    GenServer.call(catalog, :list_agents)
+  @spec list_agents(GenServer.server() | Agent.t()) :: [Agent.t()]
+  def list_agents(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :list_agents)
   end
 
-  @spec get_agent(GenServer.server(), String.t()) ::
+  @spec get_agent(GenServer.server() | Agent.t(), String.t()) ::
           {:ok, Agent.t()} | {:error, :not_found}
-  def get_agent(catalog, name) do
-    GenServer.call(catalog, {:get_agent, name})
+  def get_agent(agent_or_catalog, name) do
+    GenServer.call(server_ref(agent_or_catalog), {:get_agent, name})
   end
 
-  @spec agent(GenServer.server()) :: Agent.t() | nil
-  def agent(catalog) do
-    GenServer.call(catalog, :agent)
+  @spec agent(GenServer.server() | Agent.t()) :: Agent.t() | nil
+  def agent(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :agent)
   end
 
-  @spec list_hooks(GenServer.server(), SkillKit.Hook.event()) :: [SkillKit.Hook.t()]
-  def list_hooks(catalog, event) do
-    GenServer.call(catalog, {:list_hooks, event})
+  @spec list_hooks(GenServer.server() | Agent.t(), SkillKit.Hook.event()) :: [SkillKit.Hook.t()]
+  def list_hooks(agent_or_catalog, event) do
+    GenServer.call(server_ref(agent_or_catalog), {:list_hooks, event})
   end
 
-  @spec tool_definitions(GenServer.server(), keyword()) :: [Tool.t()]
-  def tool_definitions(catalog, opts \\ []) do
-    GenServer.call(catalog, {:tool_definitions, opts})
+  @spec tool_definitions(GenServer.server() | Agent.t(), keyword()) :: [Tool.t()]
+  def tool_definitions(agent_or_catalog, opts \\ []) do
+    GenServer.call(server_ref(agent_or_catalog), {:tool_definitions, opts})
   end
 
-  @spec classify(GenServer.server(), String.t(), [Skill.t()]) ::
+  @spec classify(GenServer.server() | Agent.t(), String.t(), [Skill.t()]) ::
           :tool | :activate_skill | :subagent | {:module_skill, Skill.t()}
-  def classify(catalog, tool_name, activated_skills \\ []) do
-    GenServer.call(catalog, {:classify, tool_name, activated_skills})
+  def classify(agent_or_catalog, tool_name, activated_skills \\ []) do
+    GenServer.call(server_ref(agent_or_catalog), {:classify, tool_name, activated_skills})
   end
 
   @doc """
   Returns `{tool_module, metadata}` for the first kit that declares a tool,
   or `nil` if no tool kit exists.
   """
-  @spec tool_config(GenServer.server()) :: {module(), map()} | nil
-  def tool_config(catalog) do
-    GenServer.call(catalog, :tool_config)
+  @spec tool_config(GenServer.server() | Agent.t()) :: {module(), map()} | nil
+  def tool_config(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :tool_config)
   end
+
+  # -------------------------------------------------------------------
+  # Server resolution
+  # -------------------------------------------------------------------
+
+  defp server_ref(%Agent{} = agent) do
+    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
+  end
+
+  defp server_ref(server), do: server
 
   # -------------------------------------------------------------------
   # GenServer callbacks

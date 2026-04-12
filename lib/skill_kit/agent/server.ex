@@ -56,7 +56,7 @@ defmodule SkillKit.Agent.Server do
   def init(%SkillKit.Agent{} = agent) do
     Registry.register(agent.registry, {agent.name, :server}, [])
 
-    messages = load_conversation(agent.conversation_store, agent.name, catalog(agent))
+    messages = load_conversation(agent.conversation_store, agent.name, agent)
 
     state = %__MODULE__{
       agent: agent,
@@ -65,7 +65,7 @@ defmodule SkillKit.Agent.Server do
     }
 
     try do
-      Hooks.cast(catalog(agent), :pre_agent, %{
+      Hooks.cast(agent, :pre_agent, %{
         agent_name: agent.name,
         definition: agent
       })
@@ -79,7 +79,7 @@ defmodule SkillKit.Agent.Server do
   @impl true
   def terminate(_reason, state) do
     try do
-      Hooks.cast(catalog(state.agent), :post_agent, %{
+      Hooks.cast(state.agent, :post_agent, %{
         agent_name: state.agent.name,
         definition: state.agent
       })
@@ -102,7 +102,7 @@ defmodule SkillKit.Agent.Server do
     turn_context = %{agent_name: state.agent.name, message_count: length(new_messages)}
 
     state =
-      Hooks.call(catalog(state.agent), :turn, turn_context, fn ->
+      Hooks.call(state.agent, :turn, turn_context, fn ->
         updated = run_agent_loop(state, new_messages)
         {updated, turn_context}
       end)
@@ -138,7 +138,7 @@ defmodule SkillKit.Agent.Server do
           """
         }
 
-        Hooks.cast(catalog(state.agent), :post_subagent, %{
+        Hooks.cast(state.agent, :post_subagent, %{
           name: entry.name,
           task: entry.task,
           result: result_text,
@@ -241,7 +241,7 @@ defmodule SkillKit.Agent.Server do
     state = %{state | messages: state.messages ++ new_messages}
 
     tools =
-      SkillKit.Catalog.tool_definitions(catalog(state.agent),
+      SkillKit.Catalog.tool_definitions(state.agent,
         activated_skills: state.activated_skills
       )
 
@@ -272,7 +272,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp hooked_llm_request(state, tools, llm_context) do
-    Hooks.call(catalog(state.agent), :llm_request, llm_context, fn ->
+    Hooks.call(state.agent, :llm_request, llm_context, fn ->
       result = stream(state, tools)
       {result, llm_context}
     end)
@@ -378,13 +378,13 @@ defmodule SkillKit.Agent.Server do
 
   # --- Conversation Persistence ---
 
-  defp load_conversation(nil, _agent_name, _catalog), do: []
+  defp load_conversation(nil, _agent_name, _agent), do: []
 
-  defp load_conversation({mod, config}, agent_name, catalog) do
+  defp load_conversation({mod, config}, agent_name, agent) do
     load_context = %{agent_name: agent_name}
 
     try do
-      catalog
+      agent
       |> hooked_load(load_context, mod, agent_name, config)
       |> unwrap_load_result()
     catch
@@ -392,8 +392,8 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp hooked_load(catalog, load_context, mod, agent_name, config) do
-    Hooks.call(catalog, :conversation_load, load_context, fn ->
+  defp hooked_load(agent, load_context, mod, agent_name, config) do
+    Hooks.call(agent, :conversation_load, load_context, fn ->
       messages = do_load_conversation(mod, agent_name, config)
       {messages, Map.put(load_context, :messages, messages)}
     end)
@@ -417,13 +417,9 @@ defmodule SkillKit.Agent.Server do
       message_count: length(state.messages)
     }
 
-    Hooks.call(catalog(state.agent), :conversation_save, save_context, fn ->
+    Hooks.call(state.agent, :conversation_save, save_context, fn ->
       apply(mod, :save, [state.agent.name, state.messages, config])
       {:ok, save_context}
     end)
-  end
-
-  defp catalog(%SkillKit.Agent{} = agent) do
-    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
   end
 end
