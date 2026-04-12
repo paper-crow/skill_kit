@@ -3,6 +3,36 @@ defmodule SkillKit.AgentTest do
 
   @fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "agents"])
 
+  describe "struct defaults" do
+    test "new fields have correct defaults" do
+      agent = %SkillKit.Agent{
+        name: "test",
+        description: "Test",
+        system_prompt: "Test",
+        path: "/tmp"
+      }
+
+      assert agent.skills == []
+      assert agent.runtime == {SkillKit.Runtime.Local, []}
+      assert agent.scope == nil
+      assert agent.conversation_store == nil
+      assert agent.caller == nil
+      assert agent.parent_ref == nil
+      assert agent.registry == nil
+      assert agent.depth == 0
+    end
+
+    test "parse/1 returns agent with new fields defaulted" do
+      path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
+      assert {:ok, agent} = SkillKit.Agent.parse(path)
+
+      assert agent.skills == []
+      assert agent.runtime == {SkillKit.Runtime.Local, []}
+      assert agent.scope == nil
+      assert agent.depth == 0
+    end
+  end
+
   describe "parse/1" do
     test "parses a full AGENT.md with all fields" do
       path = Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"])

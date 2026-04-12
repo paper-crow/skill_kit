@@ -3,7 +3,10 @@ defmodule SkillKit.Agent do
   Data struct and parser for AGENT.md files.
 
   An agent carries all the configuration needed to start an agent process:
-  identity, system prompt, tool restrictions, LLM model, and mailbox tuning.
+  identity, system prompt, skills, runtime, scope, and mailbox tuning.
+
+  The struct serves as the single source of truth flowing through the
+  entire supervision tree.
   """
 
   @type t :: %__MODULE__{
@@ -13,7 +16,15 @@ defmodule SkillKit.Agent do
           system_prompt: String.t(),
           path: String.t(),
           max_agent_depth: non_neg_integer(),
-          mailbox: %{max_messages: pos_integer(), flush_interval: pos_integer()}
+          mailbox: %{max_messages: pos_integer(), flush_interval: pos_integer()},
+          skills: [{module(), keyword()}],
+          runtime: {module(), keyword()},
+          scope: term(),
+          conversation_store: {module(), keyword()} | nil,
+          caller: pid() | nil,
+          parent_ref: SkillKit.AgentRef.t() | nil,
+          registry: atom() | nil,
+          depth: non_neg_integer()
         }
 
   @enforce_keys [:name, :description, :system_prompt, :path]
@@ -23,8 +34,16 @@ defmodule SkillKit.Agent do
     :model,
     :system_prompt,
     :path,
+    :scope,
+    :conversation_store,
+    :caller,
+    :parent_ref,
+    :registry,
     max_agent_depth: 1,
-    mailbox: %{max_messages: 10, flush_interval: 500}
+    mailbox: %{max_messages: 10, flush_interval: 500},
+    skills: [],
+    runtime: {SkillKit.Runtime.Local, []},
+    depth: 0
   ]
 
   @doc """
