@@ -45,23 +45,6 @@ defmodule SkillKit.Kit.ModuleBackedTest do
       refute "greet" in tool_names
     end
 
-    test "after activation, skill's tool appears in tool list", %{
-      catalog: catalog,
-      skill: skill
-    } do
-      tools = SkillKit.Catalog.tool_definitions(catalog, activated_skills: [skill])
-      tool_names = Enum.map(tools, & &1.name)
-      assert "greet" in tool_names
-    end
-
-    test "classifier routes activated skill to {:module_skill, skill}", %{
-      catalog: catalog,
-      skill: skill
-    } do
-      assert {:module_skill, ^skill} =
-               SkillKit.Catalog.classify(catalog, "greet", [skill])
-    end
-
     test "execute dispatches through Kit module", %{skill: skill} do
       execution = %ToolExecution{
         skill: skill,

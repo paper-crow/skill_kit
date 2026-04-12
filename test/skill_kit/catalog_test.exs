@@ -278,24 +278,13 @@ defmodule SkillKit.CatalogTest do
       tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))
       assert tool_def != nil
     end
-
-    test "includes activated skill tools" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      activated = [make_skill("ns:schedule", tool: Shell)]
-      tools = Catalog.tool_definitions(catalog, activated_skills: activated)
-
-      skill_tool = Enum.find(tools, &(&1.name == "schedule"))
-      assert skill_tool != nil
-    end
   end
 
   # =====================================================================
   # classify
   # =====================================================================
 
-  describe "classify/3" do
+  describe "classify/2" do
     test "classifies activate_skill" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
@@ -310,24 +299,6 @@ defmodule SkillKit.CatalogTest do
 
       catalog = start_catalog(provider)
       assert Catalog.classify(catalog, "reviewer") == :subagent
-    end
-
-    test "classifies module_skill from activated skills" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      skill = make_skill("scheduler:schedule")
-      assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
-    end
-
-    test "classifies kit skill by short name without activation" do
-      {:ok, provider} = Memory.start_link([])
-      skill = make_skill("docs:ask", tool: SkillKit.Web.DocumentKit)
-      kit = %Kit{name: "docs", skills: [skill]}
-      Memory.put_kit(provider, kit)
-
-      catalog = start_catalog(provider)
-      assert {:module_skill, ^skill} = Catalog.classify(catalog, "ask")
     end
 
     test "does not classify shell skills without activation" do
