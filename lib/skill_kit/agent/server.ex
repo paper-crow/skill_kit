@@ -1,10 +1,14 @@
 defmodule SkillKit.Agent.Server do
   @moduledoc """
-  Core agent process. Drives the LLM loop, manages subagents.
+  Core agent process. Drives the LLM loop and manages agent lifecycle.
+
+  Tool execution is delegated to `SkillKit.Agent.ToolDispatch`. The Server
+  handles message flow, LLM streaming, conversation persistence, and
+  subagent lifecycle via `:DOWN` monitoring.
 
   The loop runs synchronously within `handle_info({:mailbox_flush, ...})`.
-  Streams from `SkillKit.LLM`, decodes responses, routes tool calls,
-  and loops until no more tool calls are returned.
+  Suspended tools are resumed via `handle_cast({:respond, ...})` when the
+  caller provides input through `SkillKit.respond/3`.
   """
 
   use GenServer

@@ -31,6 +31,7 @@ defmodule SkillKit do
     * `%SkillKit.Event.ToolCallComplete{agent: name, id: id, name: name, input: input}` — tool call parsed
     * `%SkillKit.Types.AssistantMessage{agent: name, content: text}` — complete response at turn end
     * `%SkillKit.Types.ToolResult{agent: name, content: content}` — tool result
+    * `%SkillKit.Event.InputRequested{agent: name, tool_call_id: id}` — tool suspended, needs input
     * `%SkillKit.Event.Error{agent: name, reason: reason}` — LLM or execution error
 
   ## Configuration

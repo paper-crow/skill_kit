@@ -21,6 +21,8 @@ Each agent runs as an isolated OTP supervision tree with its own Registry, ensur
 - Load skills from filesystem, module-backed kits, or in-memory providers
 - Compile-time skill parsing with automatic recompilation on changes
 - Execute tools with proper authorization
+- Tool suspension and resumption for human-in-the-loop workflows
+- Pluggable runtime for agent spawning (local, FLAME)
 - Support for hooks at execution boundaries
 - Extensible through behavior-based providers
 
@@ -42,7 +44,7 @@ Agents can spawn child agents for specialized tasks, with depth controls and par
 - **Agent.Mailbox**: Buffers and batches incoming messages
 - **Catalog**: Aggregates skills from providers and manages tool definitions
 - **Registry**: Process discovery within each agent's supervision tree
-- **SubagentSupervisor**: Dynamic supervision of child agents
+- **ToolRunner**: Dynamic supervision of tool calls and child agents
 
 ## Getting Started
 

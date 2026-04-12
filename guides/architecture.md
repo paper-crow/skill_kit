@@ -72,8 +72,8 @@ graph TD
     A --> D[Agent.Core<br/>:rest_for_one]
     
     D --> E[Agent.Mailbox<br/>message buffering]
-    D --> F[Agent.Server<br/>LLM loop + tool execution]
-    D --> G[Agent.SubagentSupervisor<br/>DynamicSupervisor]
+    D --> F[Agent.Server<br/>LLM loop]
+    D --> G[Agent.ToolRunner<br/>DynamicSupervisor]
     
     G -.-> H[Subagent 1]
     G -.-> I[Subagent 2]
@@ -94,15 +94,15 @@ SkillKit.Agent.Supervisor (one_for_one)
 ├── SkillKit.Catalog      (aggregates providers, builds tool defs, classifies calls)
 └── Agent.Core            (rest_for_one)
     ├── Agent.Mailbox         (message buffering)
-    ├── Agent.Server          (LLM loop + tool execution)
-    └── Agent.SubagentSupervisor  (DynamicSupervisor)
+    ├── Agent.Server          (LLM loop)
+    └── Agent.ToolRunner          (DynamicSupervisor)
 ```
 
 **Catalog** is isolated from **Core** intentionally: a provider crash does not
 restart the conversation. Within Core, `:rest_for_one` ordering ensures that if
-Mailbox crashes, Server and SubagentSupervisor both restart (a Server without a
-Mailbox is useless); if Server crashes, SubagentSupervisor also restarts
-(orphaned subagents should not continue running).
+Mailbox crashes, Server and ToolRunner both restart (a Server without a
+Mailbox is useless); if Server crashes, ToolRunner also restarts
+(in-flight tool calls and subagents should not continue without a Server).
 
 Mailbox resolves Server via Registry lookup at flush time rather than at init,
 which avoids start-order coupling within the `:rest_for_one` chain.
@@ -125,7 +125,7 @@ Providers implement two callbacks:
 
 The Catalog unpacks kits into skills, agents, and hooks; filters skills by
 authorization scope; builds `Tool` structs for the LLM; and classifies
-each incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,
+each incoming tool call as one of: `:tool`, `:activate_skill`,
 `:subagent`, or `{:module_skill, skill}`.
 
 ## Message Flow
@@ -155,10 +155,12 @@ The Mailbox batches messages by size or time before forwarding, decoupling
 drives the entire turn synchronously inside a single `handle_info` callback —
 there is no concurrent LLM call state to manage.
 
-## Tool Execution Loop
+## Tool Execution
 
-After receiving a streamed LLM response, the Server checks for tool calls and
-loops until the model returns a response with no tools:
+After receiving a streamed LLM response, the Server delegates tool execution
+to `ToolDispatch.execute_all/2`. The dispatch classifies each tool call via
+the Catalog and executes it with appropriate hooks. The Server loops until
+the model returns a response with no tools.
 
 ```mermaid
 flowchart TD
@@ -166,31 +168,33 @@ flowchart TD
     B --> C[Call LLM, stream response to caller]
     C --> D{Tool calls<br/>present?}
     
-    D -->|No| E[Send AssistantMessage<br/>to caller]
-    E --> F[Done]
+    D -->|No, top-level| E[Send AssistantMessage<br/>to caller]
+    E --> F[Done — wait for next message]
     
-    D -->|Yes| G[Classify each call via<br/>Catalog.classify/3]
-    G --> H[Dispatch pre-boundary hooks<br/>via Hooks.call/4]
-    H --> I[Execute local tools via<br/>ToolExecution authorized by Scope]
-    I --> J[Dispatch post-boundary hooks<br/>via Hooks.cast/3]
-    J --> K[Collect results as<br/>ToolResult structs]
+    D -->|No, subagent| S[Terminate with<br/>shutdown result]
+    S --> T[Parent receives :DOWN<br/>with final AssistantMessage]
+    
+    D -->|Yes| G[ToolDispatch.execute_all/2]
+    G --> H{Any tool<br/>suspended?}
+    
+    H -->|No| K[Collect results as<br/>ToolResult structs]
     K --> L[Append results to<br/>message history]
     L --> B
     
-    classDef start fill:#e8f5e8
-    classDef decision fill:#fff3cd
-    classDef process fill:#e1f5fe
-    classDef terminal fill:#f8d7da
-    
-    class A start
-    class D decision
-    class B,C,G,H,I,J,K,L process
-    class E,F terminal
+    H -->|Yes| M[Send InputRequested<br/>to caller]
+    M --> N[Wait for respond/3]
+    N --> O[Resume via<br/>ToolExecution.resume/2]
+    O --> K
 ```
 
-The Server calls `Catalog.classify/3` before each tool execution. Local tools
-are dispatched to the configured Tool module. The loop continues until
-the LLM responds with no tool calls or a halt condition is reached.
+Tool calls are classified by `Catalog.classify/3` as one of:
+- `:tool` — shell command or registered tool module
+- `{:module_skill, skill}` — kit-provided tool with a `SkillKit.Tool` implementation
+- `:activate_skill` — renders a skill body and adds it to the conversation
+- `:subagent` — spawns a child agent via `Runtime.start_agent/1`
+
+Tools can return `{:pending, state}` to suspend execution. The caller
+receives `%Event.InputRequested{}` and responds via `SkillKit.respond/3`.
 
 ## Subagents
 
@@ -199,6 +203,12 @@ The Server looks up the child's `%Agent{}` via `Catalog.get_agent/2`, builds
 a new `%Agent{}` for the child with `parent_ref` and incremented `depth`,
 and starts it via `Runtime.start_agent/1`. The child runs its LLM loop
 independently. The parent monitors the child's Server process.
+
+When the child's LLM loop completes (final text response, no more tool
+calls), the child Server terminates with `{:shutdown, {:result, response}}`.
+The parent's `:DOWN` handler captures the final `%AssistantMessage{}` and
+injects it as a `%SystemMessage{}` into its own conversation, triggering
+the next turn.
 
 Delegation depth is enforced by comparing `depth` against
 `max_agent_depth`. Subagents inherit their parent's `skills` and `runtime`
@@ -225,6 +235,7 @@ to the callback, and wraps the result in an `AgentRef`.
 | In-memory kit provider | `SkillKit.Kit.Memory` |
 | Tool aggregation + classification | `SkillKit.Catalog` |
 | Hook dispatch at boundaries | `SkillKit.Hooks` |
+| Tool dispatch + execution | `SkillKit.Agent.ToolDispatch` |
 | Tool execution + hooks | `SkillKit.Tool` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |
