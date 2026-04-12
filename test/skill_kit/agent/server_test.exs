@@ -25,11 +25,12 @@ defmodule SkillKit.Agent.ServerTest do
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %SkillKit.Agent{
+    agent = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test agent.",
-      path: "/tmp/test"
+      path: "/tmp/test",
+      registry: registry_name
     }
 
     start_supervised!(
@@ -37,16 +38,16 @@ defmodule SkillKit.Agent.ServerTest do
        name: {:via, Registry, {registry_name, {agent_name, :catalog}}}, providers: []}
     )
 
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
+    {:ok, registry: registry_name, agent_name: agent_name, agent: agent}
   end
 
   describe "init" do
     test "registers in the agent registry", %{
       registry: registry,
       agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
-      {:ok, pid} = Server.start_link({agent_name, definition, 0, nil, nil, registry})
+      {:ok, pid} = Server.start_link(agent)
 
       assert [{^pid, _}] = Registry.lookup(registry, {agent_name, :server})
     end
@@ -54,17 +55,14 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "agent loop" do
     test "streams LLM response and appends to conversation", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       assert_response(%Text{content: "Hi there!"}, fn messages, _opts ->
         assert [%UserMessage{content: "hello"}] =
                  Enum.filter(messages, &match?(%UserMessage{}, &1))
       end)
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -79,17 +77,14 @@ defmodule SkillKit.Agent.ServerTest do
     end
 
     test "executes local tool calls and loops", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect_responses([
         %ToolCall{name: "echo", input: %{"command" => "echo hi"}},
         %Text{content: "Done."}
       ])
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -102,9 +97,7 @@ defmodule SkillKit.Agent.ServerTest do
     end
 
     test "discards empty assistant response after tool call", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       # Simulate: tool call → tool result → LLM produces empty response (no text, no tools)
       expect_responses([
@@ -112,8 +105,7 @@ defmodule SkillKit.Agent.ServerTest do
         %SkillKit.Response.Empty{}
       ])
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -139,14 +131,11 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "LLM error handling" do
     test "gracefully handles LLM stream error without crashing", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect_error(400, "credit balance too low")
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -164,12 +153,14 @@ defmodule SkillKit.Agent.ServerTest do
       registry: registry,
       agent_name: agent_name
     } do
-      definition = %SkillKit.Agent{
+      agent = %SkillKit.Agent{
         name: agent_name,
         description: "Test agent",
         system_prompt: "You are a calculator.",
         path: "/tmp/test",
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-20250514",
+        caller: self(),
+        registry: registry
       }
 
       assert_response(%Text{content: "4"}, fn _messages, opts ->
@@ -177,8 +168,7 @@ defmodule SkillKit.Agent.ServerTest do
         assert Keyword.get(opts, :model) == "claude-sonnet-4-20250514"
       end)
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(agent)
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -193,13 +183,15 @@ defmodule SkillKit.Agent.ServerTest do
       reg = :"tools_test_registry_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, keys: :unique, name: reg}, id: :tools_reg)
 
-      agent = "tools-agent-#{:erlang.unique_integer([:positive])}"
+      agent_name = "tools-agent-#{:erlang.unique_integer([:positive])}"
 
-      def_for_test = %SkillKit.Agent{
-        name: agent,
+      agent = %SkillKit.Agent{
+        name: agent_name,
         description: "Test agent",
         system_prompt: "You are a test agent.",
-        path: "/tmp/test"
+        path: "/tmp/test",
+        caller: self(),
+        registry: reg
       }
 
       {:ok, provider} = Memory.start_link([])
@@ -217,7 +209,7 @@ defmodule SkillKit.Agent.ServerTest do
 
       start_supervised!(
         {SkillKit.Catalog,
-         name: {:via, Registry, {reg, {agent, :catalog}}},
+         name: {:via, Registry, {reg, {agent_name, :catalog}}},
          providers: [{Memory, provider: provider}]},
         id: :tools_catalog
       )
@@ -228,8 +220,7 @@ defmodule SkillKit.Agent.ServerTest do
         assert Enum.any?(tools, fn t -> t.name == "activate_skill" end)
       end)
 
-      {:ok, pid} =
-        Server.start_link({agent, def_for_test, 0, nil, nil, reg, caller: self()})
+      {:ok, pid} = Server.start_link(agent)
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -240,9 +231,8 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "caller streaming" do
     test "sends delta and response events to caller pid", %{
-      registry: registry,
       agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
@@ -254,8 +244,7 @@ defmodule SkillKit.Agent.ServerTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -267,14 +256,12 @@ defmodule SkillKit.Agent.ServerTest do
     end
 
     test "sends error event to caller on LLM failure", %{
-      registry: registry,
       agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect_error(500, "internal error")
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -285,17 +272,15 @@ defmodule SkillKit.Agent.ServerTest do
     end
 
     test "streams deltas across tool call loops", %{
-      registry: registry,
       agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect_responses([
         %ToolCall{name: "echo", input: %{"command" => "echo hi"}},
         %Text{content: "Done!"}
       ])
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -308,12 +293,9 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "halted state" do
     test "halted server ignores mailbox flushes", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+      {:ok, pid} = Server.start_link(agent)
 
       :sys.replace_state(pid, fn state -> %{state | halted: true} end)
 
@@ -327,9 +309,7 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "builtins" do
     test "report_result sends to parent and halts server", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       # Set up a parent registry and register ourselves as the parent
       parent_registry = :"parent_reg_#{:erlang.unique_integer([:positive])}"
@@ -337,14 +317,18 @@ defmodule SkillKit.Agent.ServerTest do
       parent_name = "test-parent"
       Registry.register(parent_registry, {parent_name, :server}, [])
 
+      parent_ref = %SkillKit.AgentRef{
+        name: parent_name,
+        registry: parent_registry,
+        supervisor_pid: self()
+      }
+
+      agent = %{agent | depth: 1, parent_ref: parent_ref}
+
       # Mock: LLM returns a report_result tool call
       expect_response(%ToolCall{name: "report_result", input: %{"result" => "All good"}})
 
-      {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 1, parent_name, nil, registry,
-           parent_registry: parent_registry}
-        )
+      {:ok, pid} = Server.start_link(agent)
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -359,20 +343,22 @@ defmodule SkillKit.Agent.ServerTest do
     end
 
     test "report_result with missing parent emits telemetry and halts", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       parent_registry = :"orphan_reg_#{:erlang.unique_integer([:positive])}"
       start_supervised!({Registry, keys: :unique, name: parent_registry})
 
+      parent_ref = %SkillKit.AgentRef{
+        name: "gone-parent",
+        registry: parent_registry,
+        supervisor_pid: self()
+      }
+
+      agent = %{agent | depth: 1, parent_ref: parent_ref}
+
       expect_response(%ToolCall{name: "report_result", input: %{"result" => "orphaned"}})
 
-      {:ok, pid} =
-        Server.start_link(
-          {agent_name, definition, 1, "gone-parent", nil, registry,
-           parent_registry: parent_registry}
-        )
+      {:ok, pid} = Server.start_link(agent)
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -387,41 +373,32 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "authorization" do
     test "activate_skill passes scope to Catalog for authorization", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, ["limited:scope"], registry})
+      {:ok, pid} = Server.start_link(%{agent | scope: ["limited:scope"]})
 
       # Verify the server started with scope
       state = :sys.get_state(pid)
-      assert state.scope == ["limited:scope"]
+      assert state.agent.scope == ["limited:scope"]
     end
 
     test "activate_skill skips authorization when scope is nil", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry})
+      {:ok, pid} = Server.start_link(agent)
 
       state = :sys.get_state(pid)
-      assert state.scope == nil
+      assert state.agent.scope == nil
     end
   end
 
   describe "subagent lifecycle" do
     test "subagent result arrives as System message through mailbox", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent: agent
     } do
       expect_response(%Text{content: "Got it."})
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
@@ -439,9 +416,9 @@ defmodule SkillKit.Agent.ServerTest do
 
   describe "subagent result handling" do
     test "builds rich resume message with parent_intent and task", %{
-      registry: registry,
       agent_name: agent_name,
-      definition: definition
+      registry: registry,
+      agent: agent
     } do
       assert_response(%Text{content: "Fixing now."}, fn messages, _opts ->
         last = List.last(messages)
@@ -455,8 +432,7 @@ defmodule SkillKit.Agent.ServerTest do
       mailbox_config = %{max_messages: 1, flush_interval: 50}
       {:ok, _mailbox_pid} = Mailbox.start_link({agent_name, mailbox_config, registry})
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, nil, registry, caller: self()})
+      {:ok, pid} = Server.start_link(%{agent | caller: self()})
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 

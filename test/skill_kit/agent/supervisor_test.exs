@@ -10,38 +10,28 @@ defmodule SkillKit.Agent.SupervisorTest do
   setup :verify_on_exit!
 
   setup do
+    agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
     registry_name = :"agent_test_registry_#{:erlang.unique_integer([:positive])}"
 
-    agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
-
-    definition = %Agent{
+    agent = %Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",
       path: "/tmp/test",
-      mailbox: %{max_messages: 10, flush_interval: 500}
+      mailbox: %{max_messages: 10, flush_interval: 500},
+      registry: registry_name
     }
 
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
+    {:ok, agent: agent, agent_name: agent_name, registry: registry_name}
   end
 
   describe "start_link" do
     test "starts full agent tree with all components registered", %{
-      registry: registry,
+      agent: agent,
       agent_name: agent_name,
-      definition: definition
+      registry: registry
     } do
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = AgentSupervisor.start_link(opts)
+      {:ok, _sup} = AgentSupervisor.start_link(agent)
 
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
@@ -50,9 +40,9 @@ defmodule SkillKit.Agent.SupervisorTest do
     end
 
     test "mailbox can deliver messages to server", %{
-      registry: registry,
+      agent: agent,
       agent_name: agent_name,
-      definition: definition
+      registry: registry
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
@@ -63,17 +53,7 @@ defmodule SkillKit.Agent.SupervisorTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = AgentSupervisor.start_link(opts)
+      {:ok, _sup} = AgentSupervisor.start_link(agent)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
@@ -90,30 +70,35 @@ defmodule SkillKit.Agent.SupervisorTest do
     end
 
     test "server state has correct depth and scope", %{
-      registry: registry,
       agent_name: agent_name,
-      definition: definition
+      registry: registry
     } do
       scope = %SkillKit.TestScope{user: "user-1", permissions: ["admin:read"]}
 
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
+      agent = %Agent{
+        name: agent_name,
+        description: "Test agent",
+        system_prompt: "You are a test.",
+        path: "/tmp/test",
+        mailbox: %{max_messages: 10, flush_interval: 500},
+        registry: registry,
         depth: 2,
-        parent_name: "parent-agent",
-        scope: scope,
-        skills: [],
-        registry: registry
+        parent_ref: %SkillKit.AgentRef{
+          name: "parent-agent",
+          registry: registry,
+          supervisor_pid: self()
+        },
+        scope: scope
       }
 
-      {:ok, _sup} = AgentSupervisor.start_link(opts)
+      {:ok, _sup} = AgentSupervisor.start_link(agent)
 
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
       state = :sys.get_state(server_pid)
 
-      assert state.depth == 2
-      assert state.parent_name == "parent-agent"
-      assert state.scope == scope
+      assert state.agent.depth == 2
+      assert state.agent.parent_ref.name == "parent-agent"
+      assert state.agent.scope == scope
     end
   end
 end

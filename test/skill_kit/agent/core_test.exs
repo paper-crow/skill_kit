@@ -14,12 +14,13 @@ defmodule SkillKit.Agent.CoreTest do
 
     agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %SkillKit.Agent{
+    agent = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent",
       system_prompt: "You are a test.",
       path: "/tmp/test",
-      mailbox: %{max_messages: 10, flush_interval: 500}
+      mailbox: %{max_messages: 10, flush_interval: 500},
+      registry: registry_name
     }
 
     start_supervised!(
@@ -27,16 +28,16 @@ defmodule SkillKit.Agent.CoreTest do
        name: {:via, Registry, {registry_name, {agent_name, :catalog}}}, providers: []}
     )
 
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
+    {:ok, agent: agent, registry: registry_name, agent_name: agent_name}
   end
 
   describe "start_link" do
     test "starts all three children and registers them", %{
+      agent: agent,
       registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent_name: agent_name
     } do
-      {:ok, _sup} = Core.start_link({agent_name, definition, 0, nil, nil, registry})
+      {:ok, _sup} = Core.start_link(agent)
 
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
@@ -44,9 +45,9 @@ defmodule SkillKit.Agent.CoreTest do
     end
 
     test "mailbox can flush to server via registry", %{
+      agent: agent,
       registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent_name: agent_name
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
@@ -57,8 +58,7 @@ defmodule SkillKit.Agent.CoreTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      {:ok, _sup} =
-        Core.start_link({agent_name, definition, 0, nil, nil, registry})
+      {:ok, _sup} = Core.start_link(agent)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})

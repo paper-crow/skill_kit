@@ -9,7 +9,6 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
-  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
@@ -17,6 +16,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Hooks
+  alias SkillKit.Runtime
   alias SkillKit.Skill
   alias SkillKit.Telemetry
   alias SkillKit.ToolExecution
@@ -26,16 +26,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Types.ToolResult
 
   defstruct [
-    :agent_name,
-    :parent_name,
-    :definition,
-    :depth,
-    :scope,
-    :registry,
-    :caller,
-    :parent_registry,
-    :skills,
-    :conversation_store,
+    :agent,
     halted: false,
     messages: [],
     subagents: %{},
@@ -44,16 +35,7 @@ defmodule SkillKit.Agent.Server do
   ]
 
   @type t :: %__MODULE__{
-          agent_name: String.t(),
-          parent_name: String.t() | nil,
-          definition: Agent.t(),
-          depth: non_neg_integer(),
-          scope: term(),
-          registry: atom(),
-          caller: pid() | nil,
-          parent_registry: atom() | nil,
-          skills: list(),
-          conversation_store: {module(), keyword()} | nil,
+          agent: SkillKit.Agent.t(),
           halted: boolean(),
           messages: list(),
           subagents: map(),
@@ -61,48 +43,26 @@ defmodule SkillKit.Agent.Server do
           activated_skills: [SkillKit.Skill.t()]
         }
 
-  def start_link({agent_name, definition, depth, parent_name, scope, registry}) do
-    start_link({agent_name, definition, depth, parent_name, scope, registry, []})
-  end
-
-  def start_link({agent_name, definition, depth, parent_name, scope, registry, opts}) do
-    GenServer.start_link(
-      __MODULE__,
-      {agent_name, definition, depth, parent_name, scope, registry, opts}
-    )
+  def start_link(%SkillKit.Agent{} = agent) do
+    GenServer.start_link(__MODULE__, agent)
   end
 
   @impl true
-  def init({agent_name, definition, depth, parent_name, scope, registry, opts}) do
-    Registry.register(registry, {agent_name, :server}, [])
+  def init(%SkillKit.Agent{} = agent) do
+    Registry.register(agent.registry, {agent.name, :server}, [])
 
-    caller = Keyword.get(opts, :caller)
-    parent_registry = Keyword.get(opts, :parent_registry)
-    skills = Keyword.get(opts, :skills, [])
-    conversation_store = Keyword.get(opts, :conversation_store)
-
-    agent_catalog = {:via, Registry, {registry, {agent_name, :catalog}}}
-    messages = load_conversation(conversation_store, agent_name, agent_catalog)
+    messages = load_conversation(agent.conversation_store, agent.name, catalog(agent))
 
     state = %__MODULE__{
-      agent_name: agent_name,
-      parent_name: parent_name,
-      definition: definition,
-      depth: depth,
-      scope: scope,
-      registry: registry,
-      caller: caller,
-      parent_registry: parent_registry,
-      skills: skills,
-      conversation_store: conversation_store,
+      agent: agent,
       messages: messages,
       halted: false
     }
 
     try do
-      Hooks.cast(catalog(state), :pre_agent, %{
-        agent_name: agent_name,
-        definition: definition
+      Hooks.cast(catalog(agent), :pre_agent, %{
+        agent_name: agent.name,
+        definition: agent
       })
     catch
       :exit, _reason -> :ok
@@ -114,9 +74,9 @@ defmodule SkillKit.Agent.Server do
   @impl true
   def terminate(_reason, state) do
     try do
-      Hooks.cast(catalog(state), :post_agent, %{
-        agent_name: state.agent_name,
-        definition: state.definition
+      Hooks.cast(catalog(state.agent), :post_agent, %{
+        agent_name: state.agent.name,
+        definition: state.agent
       })
     catch
       :exit, _reason -> :ok
@@ -134,10 +94,10 @@ defmodule SkillKit.Agent.Server do
 
   @impl true
   def handle_info({:mailbox_flush, new_messages}, state) do
-    turn_context = %{agent_name: state.agent_name, message_count: length(new_messages)}
+    turn_context = %{agent_name: state.agent.name, message_count: length(new_messages)}
 
     state =
-      Hooks.call(catalog(state), :turn, turn_context, fn ->
+      Hooks.call(catalog(state.agent), :turn, turn_context, fn ->
         updated = run_agent_loop(state, new_messages)
         {updated, turn_context}
       end)
@@ -173,11 +133,11 @@ defmodule SkillKit.Agent.Server do
           """
         }
 
-        Hooks.cast(catalog(state), :post_subagent, %{
+        Hooks.cast(catalog(state.agent), :post_subagent, %{
           name: entry.name,
           task: entry.task,
           result: result,
-          agent_name: state.agent_name
+          agent_name: state.agent.name
         })
 
         cast_to_mailbox(state, {:message, message})
@@ -214,14 +174,14 @@ defmodule SkillKit.Agent.Server do
     state = %{state | messages: state.messages ++ new_messages}
 
     tools =
-      SkillKit.Catalog.tool_definitions(catalog(state),
-        subagent: state.depth > 0,
+      SkillKit.Catalog.tool_definitions(catalog(state.agent),
+        subagent: state.agent.depth > 0,
         activated_skills: state.activated_skills
       )
 
     llm_context = %{
-      agent_name: state.agent_name,
-      model: state.definition.model,
+      agent_name: state.agent.name,
+      model: state.agent.model,
       message_count: length(state.messages),
       tool_count: length(tools)
     }
@@ -230,7 +190,7 @@ defmodule SkillKit.Agent.Server do
 
     case llm_result do
       {:deny, reason} ->
-        notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
+        notify_caller(state, %EventError{agent: state.agent.name, reason: reason})
         state
 
       {:ok, event_stream} ->
@@ -240,13 +200,13 @@ defmodule SkillKit.Agent.Server do
         handle_response(response, state)
 
       {:error, reason} ->
-        notify_caller(state, %EventError{agent: state.agent_name, reason: reason})
+        notify_caller(state, %EventError{agent: state.agent.name, reason: reason})
         state
     end
   end
 
   defp hooked_llm_request(state, tools, llm_context) do
-    Hooks.call(catalog(state), :llm_request, llm_context, fn ->
+    Hooks.call(catalog(state.agent), :llm_request, llm_context, fn ->
       result = stream(state, tools)
       {result, llm_context}
     end)
@@ -258,7 +218,7 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%AssistantMessage{tool_calls: []} = response, state) do
-    notify_caller(state, %{response | agent: state.agent_name})
+    notify_caller(state, %{response | agent: state.agent.name})
     state
   end
 
@@ -271,7 +231,7 @@ defmodule SkillKit.Agent.Server do
   defp execute_tool_calls(tool_calls, state) do
     Enum.map_reduce(tool_calls, state, fn tc, acc ->
       {result, acc} =
-        case SkillKit.Catalog.classify(catalog(acc), tc.name, acc.activated_skills) do
+        case SkillKit.Catalog.classify(catalog(acc.agent), tc.name, acc.activated_skills) do
           :tool -> {execute_command(tc, acc), acc}
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
@@ -279,7 +239,7 @@ defmodule SkillKit.Agent.Server do
           :builtin -> handle_builtin(tc, acc)
         end
 
-      notify_caller(acc, %{result | agent: acc.agent_name})
+      notify_caller(acc, %{result | agent: acc.agent.name})
 
       {result, acc}
     end)
@@ -293,12 +253,12 @@ defmodule SkillKit.Agent.Server do
       tool: tool,
       input: input,
       skill: nil,
-      scope: state.scope,
-      agent_name: state.agent_name
+      scope: state.agent.scope,
+      agent_name: state.agent.name
     }
 
     result =
-      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+      Hooks.call(catalog(state.agent), :tool_use, hook_context, fn ->
         do_execute_command(id, tool, input, tool_context, hook_context)
       end)
 
@@ -334,16 +294,16 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp find_tool(state) do
-    case SkillKit.Catalog.tool_config(catalog(state)) do
+    case SkillKit.Catalog.tool_config(catalog(state.agent)) do
       nil -> SkillKit.Tools.Shell
       {tool, _metadata} -> tool
     end
   end
 
   defp build_tool_context(state) do
-    base_context = %{scope: state.scope}
+    base_context = %{scope: state.agent.scope}
 
-    case SkillKit.Catalog.tool_config(catalog(state)) do
+    case SkillKit.Catalog.tool_config(catalog(state.agent)) do
       nil -> base_context
       {_tool, metadata} -> merge_tool_config(base_context, metadata)
     end
@@ -394,7 +354,7 @@ defmodule SkillKit.Agent.Server do
     skill_name = Map.get(input, "name", "")
     arguments = Map.get(input, "arguments", "")
 
-    case SkillKit.Catalog.get_skill(catalog(state), skill_name) do
+    case SkillKit.Catalog.get_skill(catalog(state.agent), skill_name) do
       {:ok, skill} ->
         activate_skill_with_hook(id, skill, skill_name, arguments, state)
 
@@ -423,12 +383,12 @@ defmodule SkillKit.Agent.Server do
       skill: skill,
       skill_name: skill_name,
       arguments: arguments,
-      agent_name: state.agent_name,
-      scope: state.scope
+      agent_name: state.agent.name,
+      scope: state.agent.scope
     }
 
     result =
-      Hooks.call(catalog(state), :skill_activation, hook_context, fn ->
+      Hooks.call(catalog(state.agent), :skill_activation, hook_context, fn ->
         do_activate_skill(id, skill, skill_name, arguments, state, hook_context)
       end)
 
@@ -436,13 +396,13 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp do_activate_skill(id, skill, skill_name, arguments, state, hook_context) do
-    scope_context = %{agent: state.agent_name, skill: skill_name}
+    scope_context = %{agent: state.agent.name, skill: skill_name}
     result = render_and_activate(id, skill, arguments, state, scope_context)
     {result, Map.put(hook_context, :result, result)}
   end
 
   defp render_and_activate(id, skill, arguments, state, scope_context) do
-    rendered = Skill.render(skill, %{"arguments" => arguments}, state.scope, scope_context)
+    rendered = Skill.render(skill, %{"arguments" => arguments}, state.agent.scope, scope_context)
     handle_skill_activation(id, skill, rendered, state)
   end
 
@@ -464,12 +424,12 @@ defmodule SkillKit.Agent.Server do
       tool: skill.tool,
       input: input,
       skill: skill,
-      scope: state.scope,
-      agent_name: state.agent_name
+      scope: state.agent.scope,
+      agent_name: state.agent.name
     }
 
     result =
-      Hooks.call(catalog(state), :tool_use, hook_context, fn ->
+      Hooks.call(catalog(state.agent), :tool_use, hook_context, fn ->
         do_execute_module_skill(id, skill, input, state, hook_context)
       end)
 
@@ -480,7 +440,7 @@ defmodule SkillKit.Agent.Server do
     source_config = Map.get(skill.metadata, "source_config", [])
 
     context =
-      %{scope: state.scope, agent_name: state.agent_name}
+      %{scope: state.agent.scope, agent_name: state.agent.name}
       |> Map.merge(Map.new(source_config))
 
     execution = %ToolExecution{skill: skill, input: input, context: context}
@@ -500,17 +460,16 @@ defmodule SkillKit.Agent.Server do
   defp spawn_subagent(%ToolCall{id: id, name: name, input: input}, state) do
     task = Map.get(input, "task", "")
 
-    if state.depth >= state.definition.max_agent_depth do
+    if state.agent.depth >= state.agent.max_agent_depth do
       result = %ToolResult{
         tool_call_id: id,
-        content:
-          "Cannot spawn subagent: max depth (#{state.definition.max_agent_depth}) reached.",
+        content: "Cannot spawn subagent: max depth (#{state.agent.max_agent_depth}) reached.",
         is_error: true
       }
 
       {result, state}
     else
-      case SkillKit.Catalog.get_agent(catalog(state), name) do
+      case SkillKit.Catalog.get_agent(catalog(state.agent), name) do
         {:error, :not_found} ->
           result = %ToolResult{
             tool_call_id: id,
@@ -530,12 +489,12 @@ defmodule SkillKit.Agent.Server do
     hook_context = %{
       name: name,
       task: task,
-      agent_name: state.agent_name,
-      depth: state.depth
+      agent_name: state.agent.name,
+      depth: state.agent.depth
     }
 
     result =
-      Hooks.call(catalog(state), :subagent, hook_context, fn ->
+      Hooks.call(catalog(state.agent), :subagent, hook_context, fn ->
         spawn_result = do_spawn_subagent(id, name, task, agent_def, state)
         {spawn_result, Map.put(hook_context, :result, spawn_result)}
       end)
@@ -544,18 +503,25 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp do_spawn_subagent(id, name, task, agent_def, state) do
-    subagent_name = "#{state.agent_name}/#{name}-#{:erlang.unique_integer([:positive])}"
-    overridden_def = %{agent_def | name: subagent_name}
+    subagent_name = "#{state.agent.name}/#{name}-#{:erlang.unique_integer([:positive])}"
 
-    parent_opts = [
-      depth: state.depth,
-      parent_name: state.agent_name,
-      parent_registry: state.registry
-    ]
+    parent_ref = %SkillKit.AgentRef{
+      name: state.agent.name,
+      registry: state.agent.registry,
+      supervisor_pid: self()
+    }
 
-    spawn_opts = [skills: state.skills]
+    child_agent = %{
+      agent_def
+      | name: subagent_name,
+        depth: state.agent.depth + 1,
+        parent_ref: parent_ref,
+        skills: state.agent.skills,
+        runtime: state.agent.runtime,
+        registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
+    }
 
-    case SkillKit.start_subagent(overridden_def, parent_opts, spawn_opts) do
+    case Runtime.start_agent(child_agent) do
       {:ok, agent_ref} ->
         [{server_pid, _}] = Registry.lookup(agent_ref.registry, {subagent_name, :server})
         monitor_ref = Process.monitor(server_pid)
@@ -611,8 +577,8 @@ defmodule SkillKit.Agent.Server do
 
       :not_found ->
         Telemetry.event([:agent, :orphaned_result], %{}, %{
-          agent_name: state.agent_name,
-          parent_name: state.parent_name,
+          agent_name: state.agent.name,
+          parent_name: state.agent.parent_ref && state.agent.parent_ref.name,
           result: result
         })
     end
@@ -629,11 +595,10 @@ defmodule SkillKit.Agent.Server do
     {%ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true}, state}
   end
 
-  defp lookup_parent(%{parent_registry: nil}), do: :not_found
-  defp lookup_parent(%{parent_registry: _reg, parent_name: nil}), do: :not_found
+  defp lookup_parent(%{agent: %{parent_ref: nil}}), do: :not_found
 
-  defp lookup_parent(%{parent_registry: reg, parent_name: name}) do
-    case Registry.lookup(reg, {name, :server}) do
+  defp lookup_parent(%{agent: %{parent_ref: %SkillKit.AgentRef{} = ref}}) do
+    case Registry.lookup(ref.registry, {ref.name, :server}) do
       [{pid, _}] -> {:ok, pid}
       [] -> :not_found
     end
@@ -641,8 +606,8 @@ defmodule SkillKit.Agent.Server do
 
   defp stream(state, tools) do
     SkillKit.LLM.stream(state.messages,
-      model: state.definition.model,
-      system: state.definition.system_prompt,
+      model: state.agent.model,
+      system: state.agent.system_prompt,
       tools: tools
     )
   end
@@ -652,17 +617,17 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp process_event(%Delta{text: text}, acc, state) do
-    notify_caller(state, %Delta{text: text, agent: state.agent_name})
+    notify_caller(state, %Delta{text: text, agent: state.agent.name})
     %{acc | text: acc.text <> text}
   end
 
   defp process_event(%ToolCallStart{} = event, acc, state) do
-    notify_caller(state, %{event | agent: state.agent_name})
+    notify_caller(state, %{event | agent: state.agent.name})
     acc
   end
 
   defp process_event(%ToolCallComplete{} = event, acc, state) do
-    notify_caller(state, %{event | agent: state.agent_name})
+    notify_caller(state, %{event | agent: state.agent.name})
     tool_call = %ToolCall{id: event.id, name: event.name, input: event.input}
     %{acc | tool_calls: acc.tool_calls ++ [tool_call]}
   end
@@ -688,14 +653,14 @@ defmodule SkillKit.Agent.Server do
     }
   end
 
-  defp notify_caller(%{caller: nil}, _event), do: :ok
+  defp notify_caller(%{agent: %{caller: nil}}, _event), do: :ok
 
-  defp notify_caller(%{caller: pid}, event) do
+  defp notify_caller(%{agent: %{caller: pid}}, event) do
     send(pid, event)
   end
 
   defp cast_to_mailbox(state, message) do
-    case Registry.lookup(state.registry, {state.agent_name, :mailbox}) do
+    case Registry.lookup(state.agent.registry, {state.agent.name, :mailbox}) do
       [{pid, _}] -> GenServer.cast(pid, message)
       [] -> :ok
     end
@@ -739,21 +704,21 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  defp save_conversation(%{conversation_store: nil}), do: :ok
+  defp save_conversation(%{agent: %{conversation_store: nil}}), do: :ok
 
-  defp save_conversation(%{conversation_store: {mod, config}} = state) do
+  defp save_conversation(%{agent: %{conversation_store: {mod, config}}} = state) do
     save_context = %{
-      agent_name: state.agent_name,
+      agent_name: state.agent.name,
       message_count: length(state.messages)
     }
 
-    Hooks.call(catalog(state), :conversation_save, save_context, fn ->
-      apply(mod, :save, [state.agent_name, state.messages, config])
+    Hooks.call(catalog(state.agent), :conversation_save, save_context, fn ->
+      apply(mod, :save, [state.agent.name, state.messages, config])
       {:ok, save_context}
     end)
   end
 
-  defp catalog(state) do
-    {:via, Registry, {state.registry, {state.agent_name, :catalog}}}
+  defp catalog(%SkillKit.Agent{} = agent) do
+    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
   end
 end

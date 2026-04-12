@@ -127,7 +127,7 @@ defmodule SkillKit.TestTest do
       assert context.agent_name == "custom-agent"
 
       state = :sys.get_state(pid)
-      assert state.scope == %SkillKit.TestScope{permissions: ["test:read"]}
+      assert state.agent.scope == %SkillKit.TestScope{permissions: ["test:read"]}
     end
   end
 end

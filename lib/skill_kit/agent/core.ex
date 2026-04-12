@@ -3,8 +3,7 @@ defmodule SkillKit.Agent.Core do
   Supervisor for the core agent processes: Mailbox, Server, SubagentSupervisor.
 
   Uses `:rest_for_one` — if Mailbox crashes, Server and SubagentSupervisor
-  restart. If Server crashes, SubagentSupervisor restarts. Orphaned
-  subagents with no parent should not continue running.
+  restart. If Server crashes, SubagentSupervisor restarts.
   """
 
   use Supervisor
@@ -13,23 +12,16 @@ defmodule SkillKit.Agent.Core do
   alias SkillKit.Agent.Server
   alias SkillKit.Agent.SubagentSupervisor
 
-  def start_link({agent_name, definition, depth, parent_name, scope, registry}) do
-    start_link({agent_name, definition, depth, parent_name, scope, registry, []})
-  end
-
-  def start_link({agent_name, definition, depth, parent_name, scope, registry, opts}) do
-    Supervisor.start_link(
-      __MODULE__,
-      {agent_name, definition, depth, parent_name, scope, registry, opts}
-    )
+  def start_link(%SkillKit.Agent{} = agent) do
+    Supervisor.start_link(__MODULE__, agent)
   end
 
   @impl true
-  def init({agent_name, definition, depth, parent_name, scope, registry, opts}) do
+  def init(%SkillKit.Agent{} = agent) do
     children = [
-      {Mailbox, {agent_name, definition.mailbox, registry}},
-      {Server, {agent_name, definition, depth, parent_name, scope, registry, opts}},
-      {SubagentSupervisor, {agent_name, registry}}
+      {Mailbox, {agent.name, agent.mailbox, agent.registry}},
+      {Server, agent},
+      {SubagentSupervisor, {agent.name, agent.registry}}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

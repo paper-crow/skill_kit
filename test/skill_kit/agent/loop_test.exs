@@ -17,22 +17,23 @@ defmodule SkillKit.Agent.LoopTest do
 
     agent_name = "loop-test-agent-#{:erlang.unique_integer([:positive])}"
 
-    definition = %SkillKit.Agent{
+    agent = %SkillKit.Agent{
       name: agent_name,
       description: "Test agent for loop",
       system_prompt: "You are a helpful test agent.",
       path: "/tmp/test",
-      mailbox: %{max_messages: 10, flush_interval: 60_000}
+      mailbox: %{max_messages: 10, flush_interval: 60_000},
+      registry: registry_name
     }
 
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
+    {:ok, agent: agent, registry: registry_name, agent_name: agent_name}
   end
 
   describe "full agent tree with loop" do
     test "message flows through mailbox -> server -> LLM -> response", %{
+      agent: agent,
       registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent_name: agent_name
     } do
       expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
         assert Enum.any?(messages, fn
@@ -48,17 +49,7 @@ defmodule SkillKit.Agent.LoopTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(opts)
+      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(agent)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
@@ -81,9 +72,9 @@ defmodule SkillKit.Agent.LoopTest do
            [:skill_kit, :turn, :stop]
          ]
     test "telemetry events fire during loop", %{
+      agent: agent,
       registry: registry,
-      agent_name: agent_name,
-      definition: definition
+      agent_name: agent_name
     } do
       expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
         events = [
@@ -94,17 +85,7 @@ defmodule SkillKit.Agent.LoopTest do
         {:ok, Stream.map(events, & &1)}
       end)
 
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(opts)
+      {:ok, _sup} = SkillKit.Agent.Supervisor.start_link(agent)
 
       [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
       [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})

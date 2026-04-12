@@ -103,19 +103,19 @@ defmodule SkillKit do
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
-    agent_opts = %{
-      agent_name: agent_name,
-      definition: definition,
-      depth: 0,
-      parent_name: nil,
-      scope: scope,
-      skills: skills,
-      registry: registry_name,
-      caller: caller,
-      conversation_store: conversation_store
+    agent = %{
+      definition
+      | name: agent_name,
+        depth: 0,
+        parent_ref: nil,
+        scope: scope,
+        skills: skills,
+        registry: registry_name,
+        caller: caller,
+        conversation_store: conversation_store
     }
 
-    case AgentSupervisor.start_link(agent_opts) do
+    case AgentSupervisor.start_link(agent) do
       {:ok, sup_pid} ->
         {:ok, %AgentRef{name: agent_name, registry: registry_name, supervisor_pid: sup_pid}}
 
@@ -243,19 +243,23 @@ defmodule SkillKit do
 
     registry_name = :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
 
-    agent_opts = %{
-      agent_name: definition.name,
-      definition: definition,
-      depth: depth + 1,
-      parent_name: parent_name,
-      scope: nil,
-      skills: skills,
-      registry: registry_name,
-      caller: nil,
-      parent_registry: parent_registry
+    parent_ref = %AgentRef{
+      name: parent_name,
+      registry: parent_registry,
+      supervisor_pid: self()
     }
 
-    case AgentSupervisor.start_link(agent_opts) do
+    agent = %{
+      definition
+      | depth: depth + 1,
+        parent_ref: parent_ref,
+        scope: nil,
+        skills: skills,
+        registry: registry_name,
+        caller: nil
+    }
+
+    case AgentSupervisor.start_link(agent) do
       {:ok, sup_pid} ->
         {:ok, %AgentRef{name: definition.name, registry: registry_name, supervisor_pid: sup_pid}}
 
