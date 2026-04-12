@@ -135,10 +135,6 @@ defmodule SkillKit.Agent.ToolRunner do
     Enum.reduce(side_effects, state, &apply_effect/2)
   end
 
-  defp apply_effect({:activate_skill, skill}, state) do
-    %{state | activated_skills: [skill | state.activated_skills]}
-  end
-
   defp apply_effect({:subagent, server_pid, entry}, state) do
     monitor_ref = Process.monitor(server_pid)
     entry = Map.put(entry, :monitor_ref, monitor_ref)

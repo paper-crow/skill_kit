@@ -33,8 +33,7 @@ defmodule SkillKit.Agent.Server do
     halted: false,
     messages: [],
     subagents: %{},
-    pending_tools: %{},
-    activated_skills: []
+    pending_tools: %{}
   ]
 
   @type t :: %__MODULE__{
@@ -42,8 +41,7 @@ defmodule SkillKit.Agent.Server do
           halted: boolean(),
           messages: list(),
           subagents: map(),
-          pending_tools: map(),
-          activated_skills: [SkillKit.Skill.t()]
+          pending_tools: map()
         }
 
   def start_link(%SkillKit.Agent{} = agent) do
@@ -54,7 +52,8 @@ defmodule SkillKit.Agent.Server do
   def init(%SkillKit.Agent{} = agent) do
     Registry.register(agent.registry, {agent.name, :server}, [])
 
-    messages = load_conversation(agent.conversation_store, agent.name, agent)
+    stored = load_conversation(agent.conversation_store, agent.name, agent)
+    messages = agent.initial_messages ++ stored
 
     state = %__MODULE__{
       agent: agent,
@@ -231,10 +230,7 @@ defmodule SkillKit.Agent.Server do
   defp run_agent_loop(state, new_messages) do
     state = %{state | messages: state.messages ++ new_messages}
 
-    tools =
-      SkillKit.Catalog.tool_definitions(state.agent,
-        activated_skills: state.activated_skills
-      )
+    tools = SkillKit.Catalog.tool_definitions(state.agent)
 
     llm_context = %{
       agent_name: state.agent.name,

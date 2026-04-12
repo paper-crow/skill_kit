@@ -71,10 +71,10 @@ defmodule SkillKit.Catalog do
     GenServer.call(server_ref(agent_or_catalog), {:tool_definitions, opts})
   end
 
-  @spec classify(GenServer.server() | Agent.t(), String.t(), [Skill.t()]) ::
-          :tool | :activate_skill | :subagent | {:module_skill, Skill.t()}
-  def classify(agent_or_catalog, tool_name, activated_skills \\ []) do
-    GenServer.call(server_ref(agent_or_catalog), {:classify, tool_name, activated_skills})
+  @spec classify(GenServer.server() | Agent.t(), String.t()) ::
+          :tool | :activate_skill | :subagent
+  def classify(agent_or_catalog, tool_name) do
+    GenServer.call(server_ref(agent_or_catalog), {:classify, tool_name})
   end
 
   @doc """
@@ -156,9 +156,16 @@ defmodule SkillKit.Catalog do
     {:reply, tools, state}
   end
 
-  def handle_call({:classify, tool_name, activated_skills}, _from, state) do
+  def handle_call({:classify, tool_name}, _from, state) do
     kits = load_all_kits(state.providers)
-    result = do_classify(kits, tool_name, activated_skills)
+    result = do_classify(kits, tool_name)
+    {:reply, result, state}
+  end
+
+  # Backward compat — ignore activated_skills
+  def handle_call({:classify, tool_name, _activated_skills}, _from, state) do
+    kits = load_all_kits(state.providers)
+    result = do_classify(kits, tool_name)
     {:reply, result, state}
   end
 
@@ -261,19 +268,12 @@ defmodule SkillKit.Catalog do
   # Tool building
   # -------------------------------------------------------------------
 
-  defp build_tools(kits, state, opts) do
-    activated_skills = Keyword.get(opts, :activated_skills, [])
-
+  defp build_tools(kits, state, _opts) do
     visible_skills = filter_authorized_skills(all_skills(kits), state)
     all_agents = Enum.flat_map(kits, & &1.subagents)
 
     tool_modules = discover_tool_modules(kits)
     tool_defs = Enum.map(tool_modules, & &1.definition())
-
-    activated_tools =
-      activated_skills
-      |> Enum.filter(&Code.ensure_loaded?(&1.tool))
-      |> Enum.map(&skill_to_tool/1)
 
     tool_set = MapSet.new(tool_modules)
 
@@ -285,7 +285,7 @@ defmodule SkillKit.Catalog do
     skill_tool = build_activate_skill_tool(filterable_skills)
     agent_tools = Enum.map(all_agents, &agent_to_tool/1)
 
-    tool_defs ++ activated_tools ++ skill_tool ++ agent_tools
+    tool_defs ++ skill_tool ++ agent_tools
   end
 
   defp discover_tool_modules(kits) do
@@ -333,29 +333,6 @@ defmodule SkillKit.Catalog do
     ]
   end
 
-  defp skill_to_tool(skill) do
-    schema = skill_input_schema(skill)
-
-    %Tool{
-      name: skill_short_name(skill.name),
-      description: skill.description,
-      input_schema: schema
-    }
-  end
-
-  defp skill_input_schema(%{metadata: %{"input_schema" => schema}}) when is_map(schema) do
-    stringify_keys(schema)
-  end
-
-  defp skill_input_schema(_skill), do: %{"type" => "object"}
-
-  defp stringify_keys(map) when is_map(map) do
-    Map.new(map, fn {k, v} -> {to_string(k), stringify_keys(v)} end)
-  end
-
-  defp stringify_keys(list) when is_list(list), do: Enum.map(list, &stringify_keys/1)
-  defp stringify_keys(value), do: value
-
   defp agent_to_tool(%Agent{name: name, description: description}) do
     %Tool{
       name: name,
@@ -377,34 +354,16 @@ defmodule SkillKit.Catalog do
   # Classification
   # -------------------------------------------------------------------
 
-  defp do_classify(kits, tool_name, activated_skills) do
+  defp do_classify(kits, tool_name) do
     agent_names =
       kits
       |> Enum.flat_map(& &1.subagents)
       |> MapSet.new(& &1.name)
 
-    module_skill_map = Map.new(activated_skills, &{skill_short_name(&1.name), &1})
-
     cond do
       tool_name == "activate_skill" -> :activate_skill
       MapSet.member?(agent_names, tool_name) -> :subagent
-      Map.has_key?(module_skill_map, tool_name) -> {:module_skill, module_skill_map[tool_name]}
-      true -> find_kit_skill(kits, tool_name)
-    end
-  end
-
-  defp find_kit_skill(kits, tool_name) do
-    skill =
-      kits
-      |> Enum.flat_map(& &1.skills)
-      |> Enum.find(fn s ->
-        skill_short_name(s.name) == tool_name and s.tool != SkillKit.Tools.Shell
-      end)
-
-    if skill do
-      {:module_skill, skill}
-    else
-      :tool
+      true -> :tool
     end
   end
 

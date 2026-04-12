@@ -24,7 +24,8 @@ defmodule SkillKit.Agent do
           caller: pid() | nil,
           parent_ref: SkillKit.AgentRef.t() | nil,
           registry: atom() | nil,
-          depth: non_neg_integer()
+          depth: non_neg_integer(),
+          initial_messages: [term()]
         }
 
   @enforce_keys [:name, :description, :system_prompt, :path]
@@ -39,6 +40,7 @@ defmodule SkillKit.Agent do
     :caller,
     :parent_ref,
     :registry,
+    initial_messages: [],
     max_agent_depth: 1,
     mailbox: %{max_messages: 10, flush_interval: 500},
     skills: [],
