@@ -18,7 +18,6 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Hooks
   alias SkillKit.Runtime
   alias SkillKit.Skill
-  alias SkillKit.Telemetry
   alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
@@ -107,44 +106,6 @@ defmodule SkillKit.Agent.Server do
     {:noreply, state}
   end
 
-  # Subagent finished — inject rich resume message via mailbox
-  @impl true
-  def handle_info({:subagent_result, pid, result}, state) do
-    case Map.pop(state.subagents, pid) do
-      {nil, _} ->
-        {:noreply, state}
-
-      {entry, subagents} ->
-        Process.demonitor(entry.monitor_ref, [:flush])
-        state = %{state | subagents: subagents}
-
-        intent = entry.parent_intent || "N/A"
-
-        message = %SystemMessage{
-          content: """
-          [Subagent Complete] #{entry.name} finished the task you delegated.
-
-          **Your plan before delegating:** "#{intent}"
-          **Task you delegated:** "#{entry.task}"
-          **Result:**
-          #{result}
-
-          Continue with your plan.\
-          """
-        }
-
-        Hooks.cast(catalog(state.agent), :post_subagent, %{
-          name: entry.name,
-          task: entry.task,
-          result: result,
-          agent_name: state.agent.name
-        })
-
-        cast_to_mailbox(state, {:message, message})
-        {:noreply, state}
-    end
-  end
-
   # Subagent completed naturally — capture result from shutdown reason
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, {:shutdown, {:result, response}}}, state) do
@@ -213,7 +174,6 @@ defmodule SkillKit.Agent.Server do
 
     tools =
       SkillKit.Catalog.tool_definitions(catalog(state.agent),
-        subagent: state.agent.depth > 0,
         activated_skills: state.activated_skills
       )
 
@@ -283,7 +243,6 @@ defmodule SkillKit.Agent.Server do
           {:module_skill, skill} -> {execute_module_skill(tc, skill, acc), acc}
           :activate_skill -> activate_skill(tc, acc)
           :subagent -> spawn_subagent(tc, acc)
-          :builtin -> handle_builtin(tc, acc)
         end
 
       notify_caller(acc, %{result | agent: acc.agent.name})
@@ -613,42 +572,6 @@ defmodule SkillKit.Agent.Server do
       %AssistantMessage{content: content} when is_binary(content) -> content
       _ -> nil
     end)
-  end
-
-  defp handle_builtin(%ToolCall{id: id, name: "report_result", input: input}, state) do
-    result = Map.get(input, "result", "")
-
-    case lookup_parent(state) do
-      {:ok, parent_pid} ->
-        send(parent_pid, {:subagent_result, self(), result})
-
-      :not_found ->
-        Telemetry.event([:agent, :orphaned_result], %{}, %{
-          agent_name: state.agent.name,
-          parent_name: state.agent.parent_ref && state.agent.parent_ref.name,
-          result: result
-        })
-    end
-
-    state = %{state | halted: true}
-    {%ToolResult{tool_call_id: id, content: "Result reported successfully."}, state}
-  end
-
-  defp handle_builtin(%ToolCall{id: id, name: "report_status"}, state) do
-    {%ToolResult{tool_call_id: id, content: "Status acknowledged."}, state}
-  end
-
-  defp handle_builtin(%ToolCall{id: id, name: name}, state) do
-    {%ToolResult{tool_call_id: id, content: "Unknown builtin: #{name}", is_error: true}, state}
-  end
-
-  defp lookup_parent(%{agent: %{parent_ref: nil}}), do: :not_found
-
-  defp lookup_parent(%{agent: %{parent_ref: %SkillKit.AgentRef{} = ref}}) do
-    case Registry.lookup(ref.registry, {ref.name, :server}) do
-      [{pid, _}] -> {:ok, pid}
-      [] -> :not_found
-    end
   end
 
   defp stream(state, tools) do

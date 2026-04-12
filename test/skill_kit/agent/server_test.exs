@@ -4,7 +4,6 @@ defmodule SkillKit.Agent.ServerTest do
   import Mox
   import SkillKit.Test
 
-  alias SkillKit.Agent.Mailbox
   alias SkillKit.Agent.Server
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error, as: EventError
@@ -307,70 +306,6 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
-  describe "builtins" do
-    test "report_result sends to parent and halts server", %{
-      agent: agent
-    } do
-      # Set up a parent registry and register ourselves as the parent
-      parent_registry = :"parent_reg_#{:erlang.unique_integer([:positive])}"
-      start_supervised!({Registry, keys: :unique, name: parent_registry})
-      parent_name = "test-parent"
-      Registry.register(parent_registry, {parent_name, :server}, [])
-
-      parent_ref = %SkillKit.AgentRef{
-        name: parent_name,
-        registry: parent_registry,
-        supervisor_pid: self()
-      }
-
-      agent = %{agent | depth: 1, parent_ref: parent_ref}
-
-      # Mock: LLM returns a report_result tool call
-      expect_response(%ToolCall{name: "report_result", input: %{"result" => "All good"}})
-
-      {:ok, pid} = Server.start_link(agent)
-
-      Mox.allow(SkillKit.LLM.Mock, self(), pid)
-
-      send(pid, {:mailbox_flush, [%UserMessage{content: "report your findings"}]})
-
-      # Parent (us) should receive the result
-      assert_receive {:subagent_result, ^pid, "All good"}, 2000
-
-      # Server should be halted
-      state = :sys.get_state(pid)
-      assert state.halted == true
-    end
-
-    test "report_result with missing parent emits telemetry and halts", %{
-      agent: agent
-    } do
-      parent_registry = :"orphan_reg_#{:erlang.unique_integer([:positive])}"
-      start_supervised!({Registry, keys: :unique, name: parent_registry})
-
-      parent_ref = %SkillKit.AgentRef{
-        name: "gone-parent",
-        registry: parent_registry,
-        supervisor_pid: self()
-      }
-
-      agent = %{agent | depth: 1, parent_ref: parent_ref}
-
-      expect_response(%ToolCall{name: "report_result", input: %{"result" => "orphaned"}})
-
-      {:ok, pid} = Server.start_link(agent)
-
-      Mox.allow(SkillKit.LLM.Mock, self(), pid)
-
-      send(pid, {:mailbox_flush, [%UserMessage{content: "report"}]})
-
-      # Should not crash, should be halted
-      assert Process.alive?(pid)
-      state = :sys.get_state(pid)
-      assert state.halted == true
-    end
-  end
-
   describe "authorization" do
     test "activate_skill passes scope to Catalog for authorization", %{
       agent: agent
@@ -455,52 +390,6 @@ defmodule SkillKit.Agent.ServerTest do
       assert_receive %AssistantMessage{content: "Hello!"}, 1000
       Process.sleep(100)
       assert Process.alive?(pid)
-    end
-  end
-
-  describe "subagent result handling" do
-    test "builds rich resume message with parent_intent and task", %{
-      agent_name: agent_name,
-      registry: _registry,
-      agent: agent
-    } do
-      assert_response(%Text{content: "Fixing now."}, fn messages, _opts ->
-        last = List.last(messages)
-        assert %SystemMessage{content: content} = last
-        assert content =~ "Subagent Complete"
-        assert content =~ "review the code"
-        assert content =~ "check lib/skill_kit.ex"
-        assert content =~ "Found 2 issues"
-      end)
-
-      mailbox_agent = %{agent | mailbox: %{max_messages: 1, flush_interval: 50}}
-      {:ok, _mailbox_pid} = Mailbox.start_link(mailbox_agent)
-
-      {:ok, pid} = Server.start_link(%{agent | caller: self()})
-
-      Mox.allow(SkillKit.LLM.Mock, self(), pid)
-
-      fake_subagent_pid = spawn(fn -> :timer.sleep(:infinity) end)
-      monitor_ref = Process.monitor(fake_subagent_pid)
-
-      :sys.replace_state(pid, fn state ->
-        %{
-          state
-          | subagents:
-              Map.put(state.subagents, fake_subagent_pid, %{
-                name: "code-reviewer",
-                task: "check lib/skill_kit.ex",
-                monitor_ref: monitor_ref,
-                parent_intent: "I'll review the code",
-                agent_ref: nil
-              })
-        }
-      end)
-
-      send(pid, {:subagent_result, fake_subagent_pid, "Found 2 issues"})
-
-      assert_receive %Delta{agent: ^agent_name, text: "Fixing now."}, 2000
-      assert_receive %AssistantMessage{agent: ^agent_name, content: "Fixing now."}, 2000
     end
   end
 end

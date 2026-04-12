@@ -246,25 +246,6 @@ defmodule SkillKit.CatalogTest do
       assert activate.input_schema["properties"]["name"]["enum"] == ["ns:hello"]
     end
 
-    test "includes builtins when subagent: true" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      tools = Catalog.tool_definitions(catalog, subagent: true)
-      names = Enum.map(tools, & &1.name)
-      assert "report_status" in names
-      assert "report_result" in names
-    end
-
-    test "excludes builtins when subagent: false" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      tools = Catalog.tool_definitions(catalog, [])
-      names = Enum.map(tools, & &1.name)
-      refute "report_status" in names
-    end
-
     test "includes agent tools" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer", description: "Reviews code")
@@ -319,13 +300,6 @@ defmodule SkillKit.CatalogTest do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
       assert Catalog.classify(catalog, "activate_skill") == :activate_skill
-    end
-
-    test "classifies builtins" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-      assert Catalog.classify(catalog, "report_status") == :builtin
-      assert Catalog.classify(catalog, "report_result") == :builtin
     end
 
     test "classifies subagent" do

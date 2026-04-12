@@ -19,8 +19,6 @@ defmodule SkillKit.Catalog do
   alias SkillKit.Skill
   alias SkillKit.Tool
 
-  @subagent_builtins MapSet.new(["report_status", "report_result"])
-
   # -------------------------------------------------------------------
   # Public API
   # -------------------------------------------------------------------
@@ -74,7 +72,7 @@ defmodule SkillKit.Catalog do
   end
 
   @spec classify(GenServer.server(), String.t(), [Skill.t()]) ::
-          :tool | :activate_skill | :builtin | :subagent | {:module_skill, Skill.t()}
+          :tool | :activate_skill | :subagent | {:module_skill, Skill.t()}
   def classify(catalog, tool_name, activated_skills \\ []) do
     GenServer.call(catalog, {:classify, tool_name, activated_skills})
   end
@@ -254,7 +252,6 @@ defmodule SkillKit.Catalog do
   # -------------------------------------------------------------------
 
   defp build_tools(kits, state, opts) do
-    subagent = Keyword.get(opts, :subagent, false)
     activated_skills = Keyword.get(opts, :activated_skills, [])
 
     visible_skills = filter_authorized_skills(all_skills(kits), state)
@@ -277,9 +274,8 @@ defmodule SkillKit.Catalog do
 
     skill_tool = build_activate_skill_tool(filterable_skills)
     agent_tools = Enum.map(all_agents, &agent_to_tool/1)
-    builtins = if subagent, do: builtin_tools(), else: []
 
-    tool_defs ++ activated_tools ++ skill_tool ++ agent_tools ++ builtins
+    tool_defs ++ activated_tools ++ skill_tool ++ agent_tools
   end
 
   defp discover_tool_modules(kits) do
@@ -367,35 +363,6 @@ defmodule SkillKit.Catalog do
     }
   end
 
-  defp builtin_tools do
-    [
-      %Tool{
-        name: "report_status",
-        description:
-          "Send a progress update to the parent agent. Use to report intermediate results.",
-        input_schema: %{
-          "type" => "object",
-          "properties" => %{
-            "status" => %{"type" => "string", "description" => "Progress update message"}
-          },
-          "required" => ["status"]
-        }
-      },
-      %Tool{
-        name: "report_result",
-        description:
-          "Report the final result and complete this task. The agent stops after this.",
-        input_schema: %{
-          "type" => "object",
-          "properties" => %{
-            "result" => %{"type" => "string", "description" => "Final result of the task"}
-          },
-          "required" => ["result"]
-        }
-      }
-    ]
-  end
-
   # -------------------------------------------------------------------
   # Classification
   # -------------------------------------------------------------------
@@ -410,7 +377,6 @@ defmodule SkillKit.Catalog do
 
     cond do
       tool_name == "activate_skill" -> :activate_skill
-      MapSet.member?(@subagent_builtins, tool_name) -> :builtin
       MapSet.member?(agent_names, tool_name) -> :subagent
       Map.has_key?(module_skill_map, tool_name) -> {:module_skill, module_skill_map[tool_name]}
       true -> find_kit_skill(kits, tool_name)
