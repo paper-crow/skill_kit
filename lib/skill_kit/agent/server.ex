@@ -13,7 +13,7 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
-  alias SkillKit.Agent.ToolDispatch
+  alias SkillKit.Agent.ToolRunner
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
@@ -281,7 +281,7 @@ defmodule SkillKit.Agent.Server do
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
     state
-    |> ToolDispatch.execute_all(tool_calls)
+    |> ToolRunner.execute_all(tool_calls)
     |> append_results()
     |> run_agent_loop([])
   end

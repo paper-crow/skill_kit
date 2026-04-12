@@ -16,6 +16,7 @@ if Mix.env() == :test do
 
     alias SkillKit.Agent
     alias SkillKit.Agent.Server
+    alias SkillKit.Agent.ToolRunner
     alias SkillKit.Response.Error
 
     defmacro __using__(_opts) do
@@ -63,6 +64,8 @@ if Mix.env() == :test do
          providers: skills,
          scope: scope}
       )
+
+      ToolRunner.start_link(agent)
 
       {:ok, pid} = Server.start_link(agent)
 

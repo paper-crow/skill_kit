@@ -5,6 +5,7 @@ defmodule SkillKit.Agent.ServerTest do
   import SkillKit.Test
 
   alias SkillKit.Agent.Server
+  alias SkillKit.Agent.ToolRunner
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Kit
@@ -36,6 +37,8 @@ defmodule SkillKit.Agent.ServerTest do
       {SkillKit.Catalog,
        name: {:via, Registry, {registry_name, {agent_name, :catalog}}}, providers: []}
     )
+
+    ToolRunner.start_link(agent)
 
     {:ok, registry: registry_name, agent_name: agent_name, agent: agent}
   end

@@ -4,13 +4,14 @@ defmodule SkillKit.Agent.ToolDispatch do
   tool calls from the LLM. Handles plain tools, module skills,
   skill activation, and subagent spawning.
 
-  Execution is synchronous — `execute_all/2` blocks until all tool calls
-  complete and returns `{results, updated_state}`. This is intentional:
-  the LLM needs all results before producing its next response.
+  `execute_one/2` runs a single tool call and returns `{result, side_effects}`
+  where side effects are tagged tuples applied by ToolRunner after collection.
+  This design supports parallel execution — children can't share or modify
+  Server state, so state changes are deferred as data.
 
   Subagent delegation returns immediately (the subagent runs independently).
-  Tools that need external input should return `{:pending, state}` to
-  suspend rather than blocking.
+  Tools that need external input return `{:suspended, execution, side_effects}`
+  to suspend rather than blocking.
   """
 
   alias SkillKit.Agent.Server
@@ -22,53 +23,25 @@ defmodule SkillKit.Agent.ToolDispatch do
   alias SkillKit.Types.ToolCall
   alias SkillKit.Types.ToolResult
 
-  @spec execute_all(Server.t(), [ToolCall.t()]) :: {[ToolResult.t()], Server.t()}
-  def execute_all(state, tool_calls) do
-    Enum.map_reduce(tool_calls, state, fn tc, acc ->
-      case execute_one(acc, tc) do
-        {:suspended, execution, acc} ->
-          result = %ToolResult{
-            tool_call_id: tc.id,
-            content: "Waiting for input."
-          }
+  @type side_effect ::
+          {:activate_skill, Skill.t()}
+          | {:subagent, pid(), map()}
 
-          acc = track_suspension(acc, tc, execution)
-          notify_caller(acc, %{result | agent: acc.agent.name})
-          {result, acc}
+  @doc """
+  Executes a single tool call. Returns `{result, side_effects}` or
+  `{:suspended, execution, side_effects}`.
 
-        {result, acc} ->
-          notify_caller(acc, %{result | agent: acc.agent.name})
-          {result, acc}
-      end
-    end)
-  end
-
-  defp execute_one(state, %ToolCall{} = tc) do
+  Side effects are applied by ToolRunner after collection.
+  """
+  @spec execute_one(Server.t(), ToolCall.t()) ::
+          {ToolResult.t(), [side_effect()]} | {:suspended, ToolExecution.t(), [side_effect()]}
+  def execute_one(state, %ToolCall{} = tc) do
     case SkillKit.Catalog.classify(state.agent, tc.name, state.activated_skills) do
       :tool -> execute_command(state, tc)
       {:module_skill, skill} -> execute_module_skill(state, tc, skill)
       :activate_skill -> activate_skill(state, tc)
       :subagent -> spawn_subagent(state, tc)
     end
-  end
-
-  defp track_suspension(state, tc, execution) do
-    event = %SkillKit.Event.InputRequested{
-      agent: state.agent.name,
-      tool_call_id: tc.id,
-      tool_name: tc.name,
-      suspended_state: execution.suspended_state
-    }
-
-    notify_caller(state, event)
-
-    suspended =
-      Map.put(state.pending_tools, tc.id, %{
-        execution: execution,
-        tool_call: tc
-      })
-
-    %{state | pending_tools: suspended}
   end
 
   defp execute_command(state, %ToolCall{id: id, input: input}) do
@@ -90,13 +63,13 @@ defmodule SkillKit.Agent.ToolDispatch do
 
     case result do
       {:suspended, execution} ->
-        {:suspended, execution, state}
+        {:suspended, execution, []}
 
       {:deny, reason} ->
-        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, state}
+        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
 
       tool_result ->
-        {unwrap_tool_result(id, tool_result), state}
+        {unwrap_tool_result(id, tool_result), []}
     end
   end
 
@@ -172,12 +145,13 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp unwrap_tool_result(_id, result), do: result
 
-  defp unwrap_stateful_result(id, {:deny, reason}, state) do
-    result = %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
-    {result, state}
+  defp unwrap_result(id, {:deny, reason}) do
+    {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
   end
 
-  defp unwrap_stateful_result(_id, result, _state), do: result
+  defp unwrap_result(_id, {result, side_effects}) when is_list(side_effects) do
+    {result, side_effects}
+  end
 
   defp activate_skill(state, %ToolCall{id: id, input: input}) do
     skill_name = Map.get(input, "name", "")
@@ -194,7 +168,7 @@ defmodule SkillKit.Agent.ToolDispatch do
           is_error: true
         }
 
-        {result, state}
+        {result, []}
 
       {:error, reason} ->
         result = %ToolResult{
@@ -203,7 +177,7 @@ defmodule SkillKit.Agent.ToolDispatch do
           is_error: true
         }
 
-        {result, state}
+        {result, []}
     end
   end
 
@@ -221,7 +195,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         do_activate_skill(state, id, skill, skill_name, arguments, hook_context)
       end)
 
-    unwrap_stateful_result(id, result, state)
+    unwrap_result(id, result)
   end
 
   defp do_activate_skill(state, id, skill, _skill_name, arguments, hook_context) do
@@ -238,14 +212,14 @@ defmodule SkillKit.Agent.ToolDispatch do
   defp handle_skill_activation(state, id, skill, {:ok, rendered_body}) do
     already_activated = Enum.any?(state.activated_skills, &(&1.name == skill.name))
 
-    state =
+    side_effects =
       if skill.tool != SkillKit.Tools.Shell and not already_activated do
-        %{state | activated_skills: [skill | state.activated_skills]}
+        [{:activate_skill, skill}]
       else
-        state
+        []
       end
 
-    {%ToolResult{tool_call_id: id, content: rendered_body}, state}
+    {%ToolResult{tool_call_id: id, content: rendered_body}, side_effects}
   end
 
   defp execute_module_skill(state, %ToolCall{id: id, input: input}, skill) do
@@ -264,13 +238,13 @@ defmodule SkillKit.Agent.ToolDispatch do
 
     case result do
       {:suspended, execution} ->
-        {:suspended, execution, state}
+        {:suspended, execution, []}
 
       {:deny, reason} ->
-        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, state}
+        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
 
       tool_result ->
-        {unwrap_tool_result(id, tool_result), state}
+        {unwrap_tool_result(id, tool_result), []}
     end
   end
 
@@ -307,7 +281,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         is_error: true
       }
 
-      {result, state}
+      {result, []}
     else
       case SkillKit.Catalog.get_agent(state.agent, name) do
         {:error, :not_found} ->
@@ -317,7 +291,7 @@ defmodule SkillKit.Agent.ToolDispatch do
             is_error: true
           }
 
-          {result, state}
+          {result, []}
 
         {:ok, agent_def} ->
           spawn_subagent_with_hook(state, id, name, task, agent_def)
@@ -339,7 +313,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         {spawn_result, Map.put(hook_context, :result, spawn_result)}
       end)
 
-    unwrap_stateful_result(id, result, state)
+    unwrap_result(id, result)
   end
 
   defp do_spawn_subagent(state, id, name, task, agent_def) do
@@ -364,20 +338,15 @@ defmodule SkillKit.Agent.ToolDispatch do
     case Runtime.start_agent(child_agent) do
       {:ok, agent_ref} ->
         [{server_pid, _}] = Registry.lookup(agent_ref.registry, {subagent_name, :server})
-        monitor_ref = Process.monitor(server_pid)
 
         parent_intent = get_last_assistant_content(state.messages)
 
-        subagents =
-          Map.put(state.subagents, server_pid, %{
-            name: name,
-            task: task,
-            monitor_ref: monitor_ref,
-            parent_intent: parent_intent,
-            agent_ref: agent_ref
-          })
-
-        updated_state = %{state | subagents: subagents}
+        entry = %{
+          name: name,
+          task: task,
+          parent_intent: parent_intent,
+          agent_ref: agent_ref
+        }
 
         SkillKit.send_message(agent_ref, task)
 
@@ -386,7 +355,7 @@ defmodule SkillKit.Agent.ToolDispatch do
           content: "Delegated to #{name}. You will receive the result when it completes."
         }
 
-        {result, updated_state}
+        {result, [{:subagent, server_pid, entry}]}
 
       {:error, reason} ->
         result = %ToolResult{
@@ -395,7 +364,7 @@ defmodule SkillKit.Agent.ToolDispatch do
           is_error: true
         }
 
-        {result, state}
+        {result, []}
     end
   end
 
@@ -406,11 +375,5 @@ defmodule SkillKit.Agent.ToolDispatch do
       %AssistantMessage{content: content} when is_binary(content) -> content
       _ -> nil
     end)
-  end
-
-  defp notify_caller(%{agent: %{caller: nil}}, _event), do: :ok
-
-  defp notify_caller(%{agent: %{caller: pid}}, event) do
-    send(pid, event)
   end
 end
