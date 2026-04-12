@@ -63,17 +63,21 @@ SkillKit follows a simple three-step pattern:
 
 ```elixir
 # Module-backed kit — skills and AGENT.md compiled into the module
-SkillKit.start_agent(MyApp.AssistantKit, caller: self())
+SkillKit.start_agent(MyApp.AssistantKit)
 
 # Filesystem path — loads AGENT.md and skills/ from disk at runtime
-SkillKit.start_agent("priv/agents/assistant", caller: self())
+SkillKit.start_agent("priv/agents/assistant")
 
-# Pre-built definition — full control over the agent identity
-SkillKit.start_agent(%SkillKit.Agent{...}, skills: [...], caller: self())
+# With options — skills, scope, runtime, conversation store
+SkillKit.start_agent(MyApp.AssistantKit,
+  skills: [{MyApp.ExtraKit, []}],
+  scope: %MyApp.Scope{user: current_user}
+)
 ```
 
 When starting from a kit (module or path), the kit's skills are automatically
-included in the agent's tool pool. See the [Architecture](architecture.md) and
-[Providers](providers.md) guides for details.
+included in the agent's tool pool. The `%SkillKit.Agent{}` struct carries all
+configuration and flows through the entire supervision tree. See the
+[Architecture](architecture.md) and [Providers](providers.md) guides for details.
 
 This framework enables building sophisticated AI agents that are both powerful and reliable, leveraging Elixir's strengths in concurrent, fault-tolerant systems.

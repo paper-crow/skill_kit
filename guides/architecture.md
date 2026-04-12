@@ -195,21 +195,31 @@ the LLM responds with no tool calls or a halt condition is reached.
 ## Subagents
 
 An agent can delegate work to a child agent by invoking a subagent tool call.
-The Server looks up the child's `%Agent{}` via `Catalog.get_agent/2`,
-spawns the child under its `SubagentSupervisor`, monitors the child supervisor
-PID, and continues its own turn. When the child calls `report_result` or
-terminates, it delivers its result back to the parent Server via the parent's
-Registry. The parent resumes with a synthesised tool result in its message
-history.
+The Server looks up the child's `%Agent{}` via `Catalog.get_agent/2`, builds
+a new `%Agent{}` for the child with `parent_ref` and incremented `depth`,
+and starts it via `Runtime.start_agent/1`. The child runs its LLM loop
+independently. The parent monitors the child's Server process.
 
 Delegation depth is enforced by comparing `depth` against
-`definition.max_agent_depth`. Subagents start with `depth + 1` and have no
-direct caller process — they communicate only through the parent Registry.
+`max_agent_depth`. Subagents inherit their parent's `skills` and `runtime`
+configuration from the Agent struct.
+
+## Runtime
+
+`SkillKit.Runtime` is a behaviour that controls how agent supervision trees
+are started. The default `Runtime.Local` starts agents in the current BEAM
+node. Alternative runtimes (e.g., FLAME) can start agents on remote nodes.
+
+The behaviour defines one callback: `start_agent/2`. The public function
+`Runtime.start_agent/1` reads the runtime from the Agent struct, dispatches
+to the callback, and wraps the result in an `AgentRef`.
 
 ## Key Module Boundaries
 
 | Concern | Where to look |
 |---|---|
+| Agent identity + configuration | `SkillKit.Agent` struct |
+| Agent spawning (local, FLAME) | `SkillKit.Runtime` behaviour |
 | LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |
 | Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | In-memory kit provider | `SkillKit.Kit.Memory` |
