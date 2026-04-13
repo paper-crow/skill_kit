@@ -36,7 +36,7 @@ defmodule SkillKit.Agent.ToolDispatchTest do
   } do
     agent = %{agent | scope: nil}
     ctx = ToolDispatch.build_context(%{agent: agent})
-    assert Map.has_key?(ctx, :agent)
-    assert Map.has_key?(ctx, :scope)
+    assert ctx.agent == agent
+    assert ctx.scope == nil
   end
 end
