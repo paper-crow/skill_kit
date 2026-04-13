@@ -56,7 +56,7 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp execute_command(state, %ToolCall{id: id, input: input}) do
     tool = find_tool(state)
-    tool_context = build_tool_context(state)
+    tool_context = build_context(state)
 
     hook_context = %{
       tool: tool,
@@ -112,8 +112,17 @@ defmodule SkillKit.Agent.ToolDispatch do
     end
   end
 
-  defp build_tool_context(state) do
-    base_context = %{scope: state.agent.scope}
+  @doc """
+  Builds the `context` map passed to `Tool.execute/1`.
+
+  The context contains:
+    * `:agent` — the full agent struct (provides scope, name, and anything
+      a tool or credential provider needs to dispatch on).
+    * `:scope` — a shortcut to `agent.scope` for existing callers.
+    * `:cwd`, `:env` — merged from the tool's config metadata if present.
+  """
+  def build_context(state) do
+    base_context = %{agent: state.agent, scope: state.agent.scope}
 
     case SkillKit.Catalog.tool_config(state.agent) do
       nil -> base_context
