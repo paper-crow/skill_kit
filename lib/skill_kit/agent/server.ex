@@ -7,8 +7,8 @@ defmodule SkillKit.Agent.Server do
   subagent lifecycle via `:DOWN` monitoring.
 
   The loop runs synchronously within `handle_info({:mailbox_flush, ...})`.
-  Suspended tools are resumed via `handle_cast({:respond, ...})` when the
-  caller provides input through `SkillKit.respond/3`.
+  Tool calls — including suspended ones — are fully resolved by ToolRunner
+  before the Server continues the loop.
   """
 
   use GenServer
@@ -17,31 +17,26 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.Error, as: EventError
-  alias SkillKit.Event.InputRequested
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Hooks
-  alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
-  alias SkillKit.Types.ToolResult
 
   defstruct [
     :agent,
     halted: false,
     messages: [],
-    subagents: %{},
-    pending_tools: %{}
+    subagents: %{}
   ]
 
   @type t :: %__MODULE__{
           agent: SkillKit.Agent.t(),
           halted: boolean(),
           messages: list(),
-          subagents: map(),
-          pending_tools: map()
+          subagents: map()
         }
 
   def start_link(%SkillKit.Agent{} = agent) do
@@ -160,69 +155,6 @@ defmodule SkillKit.Agent.Server do
     end
   end
 
-  # --- Respond (resume suspended tool) ---
-
-  @impl true
-  def handle_cast({:respond, tool_call_id, answer}, state) do
-    case Map.pop(state.pending_tools, tool_call_id) do
-      {nil, _} ->
-        {:noreply, state}
-
-      {%{execution: execution, tool_call: tc}, pending_tools} ->
-        state = %{state | pending_tools: pending_tools}
-        handle_resume(state, tc, ToolExecution.resume(execution, answer))
-    end
-  end
-
-  defp handle_resume(state, tc, {:pending, resumed}) do
-    event = %InputRequested{
-      agent: state.agent.name,
-      tool_call_id: tc.id,
-      tool_name: tc.name,
-      suspended_state: resumed.suspended_state
-    }
-
-    notify_caller(state, event)
-
-    pending =
-      Map.put(state.pending_tools, tc.id, %{
-        execution: resumed,
-        tool_call: tc
-      })
-
-    {:noreply, %{state | pending_tools: pending}}
-  end
-
-  defp handle_resume(state, tc, {status, resumed}) do
-    result = build_resume_result(tc, status, resumed)
-    notify_caller(state, %{result | agent: state.agent.name})
-
-    state
-    |> append_message(result)
-    |> run_agent_loop([])
-    |> then(&{:noreply, &1})
-  end
-
-  defp build_resume_result(tc, :ok, resumed) do
-    %ToolResult{tool_call_id: tc.id, content: format_resume_result(resumed.result)}
-  end
-
-  defp build_resume_result(tc, :error, resumed) do
-    %ToolResult{
-      tool_call_id: tc.id,
-      content: "Resume failed: #{inspect(resumed.result)}",
-      is_error: true
-    }
-  end
-
-  defp append_message(state, message) do
-    %{state | messages: state.messages ++ [message]}
-  end
-
-  defp format_resume_result(result) when is_binary(result), do: result
-  defp format_resume_result({:ok, output}), do: to_string(output)
-  defp format_resume_result(other), do: inspect(other)
-
   # --- Core Loop ---
 
   defp run_agent_loop(%{halted: true} = state, _new_messages), do: state
@@ -276,14 +208,9 @@ defmodule SkillKit.Agent.Server do
   end
 
   defp handle_response(%AssistantMessage{tool_calls: tool_calls}, state) do
-    state
-    |> ToolRunner.execute_all(tool_calls)
-    |> append_results()
-    |> run_agent_loop([])
-  end
-
-  defp append_results({results, state}) do
-    %{state | messages: state.messages ++ results}
+    {results, state} = ToolRunner.execute_all(state, tool_calls)
+    state = %{state | messages: state.messages ++ results}
+    run_agent_loop(state, [])
   end
 
   defp complete_turn(_response, %{agent: %{parent_ref: nil}} = state), do: state

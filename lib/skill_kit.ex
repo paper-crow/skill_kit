@@ -203,9 +203,9 @@ defmodule SkillKit do
   """
   @spec respond(agent(), String.t(), any()) :: :ok | {:error, :not_found}
   def respond(%AgentRef{} = agent, tool_call_id, answer) do
-    case Registry.lookup(agent.registry, {agent.name, :server}) do
+    case Registry.lookup(agent.registry, {agent.name, :pending_tool, tool_call_id}) do
       [{pid, _}] ->
-        GenServer.cast(pid, {:respond, tool_call_id, answer})
+        send(pid, {:resume, answer})
         :ok
 
       [] ->

@@ -135,11 +135,8 @@ defmodule SkillKit.RespondTest do
                      },
                      2000
 
-      # Also receive the "Waiting for input." tool result
-      assert_receive %ToolResult{content: "Waiting for input."}, 2000
-
-      # Respond with the answer
-      GenServer.cast(server_pid, {:respond, tool_call_id, "us-east"})
+      # Respond with the answer — routed to blocked child via Registry
+      respond_to_tool(ctx, tool_call_id, "us-east")
 
       # Should receive the resumed tool result notification
       assert_receive %ToolResult{content: "Deployed to us-east"}, 2000
@@ -172,9 +169,8 @@ defmodule SkillKit.RespondTest do
       send(server_pid, {:mailbox_flush, [%UserMessage{content: "deploy"}]})
 
       assert_receive %InputRequested{tool_call_id: tool_call_id}, 2000
-      assert_receive %ToolResult{content: "Waiting for input."}, 2000
 
-      GenServer.cast(server_pid, {:respond, tool_call_id, "yes"})
+      respond_to_tool(ctx, tool_call_id, "yes")
 
       assert_receive %ToolResult{content: "Resume failed: \"Connection lost\"", is_error: true},
                      2000
@@ -212,10 +208,8 @@ defmodule SkillKit.RespondTest do
                      },
                      2000
 
-      assert_receive %ToolResult{content: "Waiting for input."}, 2000
-
       # Respond to first question -> re-suspends
-      GenServer.cast(server_pid, {:respond, tool_call_id, "alpha"})
+      respond_to_tool(ctx, tool_call_id, "alpha")
 
       assert_receive %InputRequested{
                        tool_call_id: ^tool_call_id,
@@ -224,21 +218,17 @@ defmodule SkillKit.RespondTest do
                      2000
 
       # Respond to second question -> completes
-      GenServer.cast(server_pid, {:respond, tool_call_id, "beta"})
+      respond_to_tool(ctx, tool_call_id, "beta")
 
       assert_receive %ToolResult{content: "Done with alpha and beta"}, 2000
       assert_receive %AssistantMessage{content: "All steps complete!"}, 2000
     end
 
-    test "ignores respond for unknown tool_call_id" do
+    test "respond returns :error for unknown tool_call_id" do
       {:ok, _pid, ctx} = start_server(caller: self())
-      server_pid = find_server(ctx)
 
-      GenServer.cast(server_pid, {:respond, "nonexistent_id", "answer"})
-
-      # Server should still be alive and unchanged
-      Process.sleep(50)
-      assert Process.alive?(server_pid)
+      assert [] =
+               Registry.lookup(ctx.registry, {ctx.agent_name, :pending_tool, "nonexistent_id"})
     end
   end
 
@@ -261,5 +251,10 @@ defmodule SkillKit.RespondTest do
   defp find_server(%{registry: registry, agent_name: name}) do
     [{pid, _}] = Registry.lookup(registry, {name, :server})
     pid
+  end
+
+  defp respond_to_tool(%{registry: registry, agent_name: name}, tool_call_id, answer) do
+    [{pid, _}] = Registry.lookup(registry, {name, :pending_tool, tool_call_id})
+    send(pid, {:resume, answer})
   end
 end

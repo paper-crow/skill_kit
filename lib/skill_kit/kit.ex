@@ -217,31 +217,9 @@ defmodule SkillKit.Kit do
 
   defp parse_skill_file(path, kit_name) do
     with {:ok, content} <- File.read(path),
-         {:ok, frontmatter, body} <- split_frontmatter(content),
-         {:ok, yaml_map} <- parse_yaml(frontmatter) do
+         {:ok, yaml_map, body} <- SkillKit.Frontmatter.parse(content) do
       build_kit_skill(yaml_map, body, path, kit_name)
     end
-  end
-
-  defp split_frontmatter(content) do
-    rest = strip_opening_delimiter(content)
-
-    case String.split(rest, ~r/\n---(\n|$)/, parts: 2) do
-      [frontmatter, body] -> {:ok, frontmatter, String.trim(body)}
-      _ -> {:error, :invalid_frontmatter}
-    end
-  end
-
-  defp strip_opening_delimiter(content) do
-    if String.starts_with?(content, "---\n") do
-      String.slice(content, 4, byte_size(content))
-    else
-      content
-    end
-  end
-
-  defp parse_yaml(yaml_str) do
-    YamlElixir.read_from_string(yaml_str, atoms: false)
   end
 
   defp build_kit_skill(yaml_map, body, source_path, kit_name) do

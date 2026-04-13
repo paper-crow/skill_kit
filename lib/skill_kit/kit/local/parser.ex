@@ -80,55 +80,9 @@ defmodule SkillKit.Kit.Local.Parser do
   @spec load_file(Path.t()) :: {:ok, Skill.t()} | {:error, term()}
   def load_file(path) do
     with {:ok, content} <- SkillKit.Storage.read(path),
-         {:ok, frontmatter, body} <- split_frontmatter(content),
-         {:ok, yaml_map} <- parse_yaml(frontmatter) do
+         {:ok, yaml_map, body} <- SkillKit.Frontmatter.parse(content) do
       build_skill(yaml_map, body, path)
     end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private: Frontmatter splitting
-  # ---------------------------------------------------------------------------
-
-  # Splits content formatted as "---\n{yaml}\n---\n{body}" into its parts.
-  #
-  # Handles the standard frontmatter convention where the file starts with "---"
-  # as the opening delimiter. The closing delimiter must be on its own line
-  # surrounded by newlines to avoid false matches on YAML content that
-  # legitimately contains "---".
-  @spec split_frontmatter(String.t()) ::
-          {:ok, String.t(), String.t()} | {:error, :invalid_frontmatter}
-  defp split_frontmatter(content) do
-    # Strip the leading "---\n" delimiter if present (standard frontmatter convention)
-    rest =
-      if String.starts_with?(content, "---\n") do
-        String.slice(content, 4, byte_size(content))
-      else
-        content
-      end
-
-    # Split on "\n---\n" to find the closing frontmatter delimiter.
-    # Using parts: 2 so we get exactly [frontmatter, body] even if body contains "---".
-    case String.split(rest, ~r/\n---(\n|$)/, parts: 2) do
-      [frontmatter, body] ->
-        {:ok, frontmatter, String.trim(body)}
-
-      _ ->
-        {:error, :invalid_frontmatter}
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Private: YAML parsing
-  # ---------------------------------------------------------------------------
-
-  # Parses a YAML string using yaml_elixir with atoms: false.
-  #
-  # atoms: false is the yaml_elixir default, but we make it explicit here as a
-  # security signal — skill files must never be allowed to grow the BEAM atom table.
-  @spec parse_yaml(String.t()) :: {:ok, map()} | {:error, term()}
-  defp parse_yaml(yaml_str) do
-    YamlElixir.read_from_string(yaml_str, atoms: false)
   end
 
   # ---------------------------------------------------------------------------

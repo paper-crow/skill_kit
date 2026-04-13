@@ -274,6 +274,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     child_agent = %{
       agent_def
       | name: subagent_name,
+        model: agent_def.model || state.agent.model,
         depth: state.agent.depth + 1,
         parent_ref: build_parent_ref(state),
         skills: state.agent.skills,
