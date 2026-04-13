@@ -30,8 +30,10 @@ defmodule SkillKit.Hooks do
   `func` must return `{result, post_context}` where `post_context` is
   passed to post-event hooks.
   """
-  @spec call(GenServer.server(), atom(), map(), (-> {term(), map()})) :: term()
-  def call(catalog, boundary, context, func) do
+  @spec call(GenServer.server() | SkillKit.Agent.t(), atom(), map(), (-> {term(), map()})) ::
+          term()
+  def call(agent_or_catalog, boundary, context, func) do
+    catalog = catalog_ref(agent_or_catalog)
     pre_event = :"pre_#{boundary}"
     post_event = :"post_#{boundary}"
 
@@ -49,15 +51,29 @@ defmodule SkillKit.Hooks do
           {{:pending, state}, %{}, Map.put(context, :status, :suspended)}
       end
     end)
+  catch
+    :exit, {reason, {GenServer, :call, _}} when reason in [:noproc, :normal, :shutdown] ->
+      func.() |> elem(0)
   end
 
   @doc """
   Fires a single hook event, fire-and-forget.
   """
-  @spec cast(GenServer.server(), Hook.event(), map()) :: :ok
-  def cast(catalog, event, context) do
+  @spec cast(GenServer.server() | SkillKit.Agent.t(), Hook.event(), map()) :: :ok
+  def cast(agent_or_catalog, event, context) do
+    catalog = catalog_ref(agent_or_catalog)
     notify(catalog, event, context)
+  catch
+    :exit, {reason, {GenServer, :call, _}} when reason in [:noproc, :normal, :shutdown] -> :ok
   end
+
+  # -- Private: catalog resolution ------------------------------------------
+
+  defp catalog_ref(%SkillKit.Agent{} = agent) do
+    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
+  end
+
+  defp catalog_ref(server), do: server
 
   # -- Private: hook dispatch -----------------------------------------------
 

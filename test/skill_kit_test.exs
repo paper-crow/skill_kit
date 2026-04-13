@@ -18,11 +18,10 @@ defmodule SkillKitTest do
 
   describe "start_agent/2 + send_message/2 + stop_agent/1" do
     test "full lifecycle with streaming deltas" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "api-test-agent",
         description: "Test agent",
         system_prompt: "You are helpful.",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -44,11 +43,10 @@ defmodule SkillKitTest do
     end
 
     test "send_message returns {:error, :not_found} for stopped agent" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "dead-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -59,11 +57,10 @@ defmodule SkillKitTest do
     end
 
     test "stop_agent cleans up registry" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "cleanup-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       {:ok, agent} = SkillKit.start_agent(definition)
@@ -82,11 +79,10 @@ defmodule SkillKitTest do
 
       store = {SkillKit.Conversation.Store.Filesystem, path: store_path}
 
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "store-test-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -116,12 +112,11 @@ defmodule SkillKitTest do
   end
 
   describe "start_agent/2 with agent as first argument" do
-    test "accepts a %Definition{} struct" do
-      definition = %SkillKit.Agent.Definition{
+    test "accepts a %Agent{} struct" do
+      definition = %SkillKit.Agent{
         name: "agent-opt-test",
         description: "Test agent",
         system_prompt: "You are helpful.",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -134,11 +129,10 @@ defmodule SkillKitTest do
 
   describe "send_message_sync/3" do
     test "blocks and returns {:ok, %AssistantMessage{}} for text response" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "sync-test-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -151,11 +145,10 @@ defmodule SkillKitTest do
     end
 
     test "returns {:error, reason} for LLM errors" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "sync-error-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       SkillKit.Test.expect_error(500, "internal error")
@@ -166,11 +159,10 @@ defmodule SkillKitTest do
     end
 
     test "deltas arrive at caller before send_message_sync returns" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "sync-delta-agent",
         description: "Test",
         system_prompt: "Test",
-        path: "/tmp/test",
         model: "test-model"
       }
 
@@ -186,11 +178,10 @@ defmodule SkillKitTest do
     end
 
     test "returns {:error, :timeout} when timeout expires" do
-      definition = %SkillKit.Agent.Definition{
+      definition = %SkillKit.Agent{
         name: "sync-timeout-agent",
         description: "Test",
-        system_prompt: "Test",
-        path: "/tmp/test"
+        system_prompt: "Test"
       }
 
       # Mock that never returns — simulate a halted server

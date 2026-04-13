@@ -47,16 +47,11 @@ defmodule SkillKit.Kit.GitHub.IntegrationTest do
     assert "activate_skill" in tool_names
   end
 
-  test "classify recognizes github skills as module_skill when activated", %{
-    cache_dir: cache_dir
-  } do
+  test "classify recognizes activate_skill tool", %{cache_dir: cache_dir} do
     providers = [{GitHub, [allowed_sources: "*", cache_dir: cache_dir]}]
     {:ok, catalog} = Catalog.start_link(providers: providers)
 
-    {:ok, skill} = Catalog.get_skill(catalog, "github:import")
-    result = Catalog.classify(catalog, "import", [skill])
-
-    assert {:module_skill, ^skill} = result
+    assert :activate_skill = Catalog.classify(catalog, "activate_skill")
   end
 
   defp populate_cache(cache_dir, owner, repo, ref) do

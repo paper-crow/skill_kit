@@ -1,119 +1,71 @@
-defmodule SkillKit.Agent.AgentTest do
+defmodule SkillKit.AgentTest do
   use ExUnit.Case, async: true
 
-  import Mox
+  @fixtures_path Path.join([__DIR__, "..", "..", "support", "fixtures", "agents"])
 
-  alias SkillKit.Agent
-  alias SkillKit.Agent.Definition
-  alias SkillKit.Types.UserMessage
+  describe "struct defaults" do
+    test "new fields have correct defaults" do
+      agent = %SkillKit.Agent{
+        name: "test",
+        description: "Test",
+        system_prompt: "Test"
+      }
 
-  setup :verify_on_exit!
+      assert agent.skills == []
+      assert agent.runtime == {SkillKit.Runtime.Local, []}
+      assert agent.scope == nil
+      assert agent.conversation_store == nil
+      assert agent.caller == nil
+      assert agent.parent_ref == nil
+      assert agent.registry == nil
+      assert agent.depth == 0
+    end
 
-  setup do
-    registry_name = :"agent_test_registry_#{:erlang.unique_integer([:positive])}"
+    test "parse/1 returns agent with new fields defaulted" do
+      path = Path.join([@fixtures_path, "valid", "simple", "AGENT.md"])
+      content = File.read!(path)
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
-    agent_name = "test-agent-#{:erlang.unique_integer([:positive])}"
-
-    definition = %Definition{
-      name: agent_name,
-      description: "Test agent",
-      system_prompt: "You are a test.",
-      path: "/tmp/test",
-      mailbox: %{max_messages: 10, flush_interval: 500}
-    }
-
-    {:ok, registry: registry_name, agent_name: agent_name, definition: definition}
+      assert agent.skills == []
+      assert agent.runtime == {SkillKit.Runtime.Local, []}
+      assert agent.scope == nil
+      assert agent.depth == 0
+    end
   end
 
-  describe "start_link" do
-    test "starts full agent tree with all components registered", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
+  describe "parse/1" do
+    test "parses a full AGENT.md with all fields" do
+      content = File.read!(Path.join([@fixtures_path, "valid", "project-a", "AGENT.md"]))
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
-      {:ok, _sup} = Agent.start_link(opts)
+      assert agent.name == "project-a"
 
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :mailbox})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :server})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :subagent_supervisor})
-      assert [{_, _}] = Registry.lookup(registry, {agent_name, :catalog})
+      assert agent.description ==
+               "Manages project A. Use when the user asks about project A."
+
+      assert agent.model == "claude-sonnet-4-6"
+      assert agent.system_prompt =~ "project A manager"
+      assert agent.max_agent_depth == 2
+      assert agent.mailbox.max_messages == 5
+      assert agent.mailbox.flush_interval == 200
     end
 
-    test "mailbox can deliver messages to server", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
-        events = [
-          %SkillKit.Event.Delta{text: "OK"},
-          %SkillKit.Event.Done{stop_reason: :end_turn}
-        ]
+    test "parses minimal AGENT.md with defaults" do
+      content = File.read!(Path.join([@fixtures_path, "valid", "simple", "AGENT.md"]))
+      assert {:ok, agent} = SkillKit.Agent.parse(content)
 
-        {:ok, Stream.map(events, & &1)}
-      end)
-
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 0,
-        parent_name: nil,
-        scope: nil,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = Agent.start_link(opts)
-
-      [{mailbox_pid, _}] = Registry.lookup(registry, {agent_name, :mailbox})
-      [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
-      Mox.allow(SkillKit.LLM.Mock, self(), server_pid)
-
-      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "hello"}})
-      GenServer.cast(mailbox_pid, {:message, %UserMessage{content: "world"}})
-      send(mailbox_pid, :flush)
-
-      Process.sleep(50)
-      state = :sys.get_state(server_pid)
-      assert Enum.any?(state.messages, &match?(%UserMessage{content: "hello"}, &1))
-      assert Enum.any?(state.messages, &match?(%UserMessage{content: "world"}, &1))
+      assert agent.name == "simple"
+      assert agent.description == "A simple agent with defaults."
+      assert agent.model == nil
+      assert agent.system_prompt =~ "Do the thing"
+      assert agent.max_agent_depth == 1
+      assert agent.mailbox.max_messages == 10
+      assert agent.mailbox.flush_interval == 500
     end
 
-    test "server state has correct depth and scope", %{
-      registry: registry,
-      agent_name: agent_name,
-      definition: definition
-    } do
-      scope = %SkillKit.TestScope{user: "user-1", permissions: ["admin:read"]}
-
-      opts = %{
-        agent_name: agent_name,
-        definition: definition,
-        depth: 2,
-        parent_name: "parent-agent",
-        scope: scope,
-        skills: [],
-        registry: registry
-      }
-
-      {:ok, _sup} = Agent.start_link(opts)
-
-      [{server_pid, _}] = Registry.lookup(registry, {agent_name, :server})
-      state = :sys.get_state(server_pid)
-
-      assert state.depth == 2
-      assert state.parent_name == "parent-agent"
-      assert state.scope == scope
+    test "returns error for missing name" do
+      content = File.read!(Path.join([@fixtures_path, "invalid", "missing-name", "AGENT.md"]))
+      assert {:error, {:missing_field, "name"}} = SkillKit.Agent.parse(content)
     end
   end
 end

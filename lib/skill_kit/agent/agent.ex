@@ -1,85 +1,95 @@
 defmodule SkillKit.Agent do
   @moduledoc """
-  Top-level supervisor for an agent.
+  Data struct and parser for AGENT.md files.
 
-  Starts three children under `:one_for_one`:
-  - `Registry` — process registry for agent components
-  - `SkillKit.Catalog` — provider aggregation, authorization, tool definitions
-  - `Agent.Core` — mailbox, server, subagent supervisor (`:rest_for_one`)
+  An agent carries all the configuration needed to start an agent process:
+  identity, system prompt, skills, runtime, scope, and mailbox tuning.
 
-  ## Starting an agent
-
-      opts = %{
-        agent_name: "project-a",
-        definition: %Agent.Definition{...},
-        depth: 0,
-        parent_name: nil,
-        scope: %MyApp.Scope{...},
-        skills: [{SkillKit.Kit.Local, dir: "skills"}],
-        registry: Agent.Registry
-      }
-
-      {:ok, pid} = SkillKit.Agent.start_link(opts)
+  The struct serves as the single source of truth flowing through the
+  entire supervision tree.
   """
 
-  use Supervisor
-
-  alias SkillKit.Agent.Core
-
-  @type opts :: %{
-          :agent_name => String.t(),
-          :definition => SkillKit.Agent.Definition.t(),
-          :depth => non_neg_integer(),
-          :parent_name => String.t() | nil,
-          :scope => term(),
-          :skills => [{module(), keyword()}],
-          :registry => atom(),
-          optional(:caller) => pid() | nil,
-          optional(:parent_registry) => atom() | nil,
-          optional(:conversation_store) => {module(), keyword()} | nil
+  @type t :: %__MODULE__{
+          name: String.t(),
+          description: String.t(),
+          model: String.t() | nil,
+          system_prompt: String.t(),
+          max_agent_depth: non_neg_integer(),
+          mailbox: %{max_messages: pos_integer(), flush_interval: pos_integer()},
+          skills: [{module(), keyword()}],
+          runtime: {module(), keyword()},
+          scope: term(),
+          conversation_store: {module(), keyword()} | nil,
+          caller: pid() | nil,
+          parent_ref: SkillKit.AgentRef.t() | nil,
+          registry: atom() | nil,
+          depth: non_neg_integer(),
+          initial_messages: [term()]
         }
 
-  @spec start_link(opts()) :: Supervisor.on_start()
-  def start_link(opts) do
-    Supervisor.start_link(__MODULE__, opts)
+  @enforce_keys [:name, :description, :system_prompt]
+  defstruct [
+    :name,
+    :description,
+    :model,
+    :system_prompt,
+    :scope,
+    :conversation_store,
+    :caller,
+    :parent_ref,
+    :registry,
+    initial_messages: [],
+    max_agent_depth: 1,
+    mailbox: %{max_messages: 10, flush_interval: 500},
+    skills: [],
+    runtime: {SkillKit.Runtime.Local, []},
+    depth: 0
+  ]
+
+  @doc """
+  Parses AGENT.md content into a `%SkillKit.Agent{}`.
+
+  Returns `{:ok, agent}` or `{:error, reason}`.
+  """
+  @spec parse(String.t()) :: {:ok, t()} | {:error, term()}
+  def parse(content) do
+    with {:ok, yaml, body} <- SkillKit.Frontmatter.parse(content) do
+      build(yaml, body)
+    end
   end
 
-  @impl true
-  def init(opts) do
-    %{
-      agent_name: agent_name,
-      definition: definition,
-      depth: depth,
-      parent_name: parent_name,
-      scope: scope,
-      skills: skills,
-      registry: registry
-    } = opts
+  defp build(yaml, body) do
+    metadata = Map.get(yaml, "metadata", %{})
 
-    caller = Map.get(opts, :caller)
-    parent_registry = Map.get(opts, :parent_registry)
-    conversation_store = Map.get(opts, :conversation_store)
+    with {:ok, name} <- fetch_required(yaml, "name"),
+         {:ok, description} <- fetch_required(yaml, "description") do
+      {:ok,
+       %__MODULE__{
+         name: name,
+         description: description,
+         model: Map.get(yaml, "model"),
+         system_prompt: body,
+         max_agent_depth: parse_int(metadata, "max_agent_depth", 1),
+         mailbox: %{
+           max_messages: parse_int(metadata, "mailbox_max_messages", 10),
+           flush_interval: parse_int(metadata, "mailbox_flush_interval", 500)
+         }
+       }}
+    end
+  end
 
-    server_opts = [skills: skills]
-    server_opts = if caller, do: Keyword.put(server_opts, :caller, caller), else: server_opts
+  defp fetch_required(yaml, key) do
+    case Map.fetch(yaml, key) do
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:missing_field, key}}
+    end
+  end
 
-    server_opts =
-      if parent_registry,
-        do: Keyword.put(server_opts, :parent_registry, parent_registry),
-        else: server_opts
-
-    server_opts =
-      if conversation_store,
-        do: Keyword.put(server_opts, :conversation_store, conversation_store),
-        else: server_opts
-
-    children = [
-      {Registry, keys: :unique, name: registry},
-      {SkillKit.Catalog,
-       name: {:via, Registry, {registry, {agent_name, :catalog}}}, providers: skills, scope: scope},
-      {Core, {agent_name, definition, depth, parent_name, scope, registry, server_opts}}
-    ]
-
-    Supervisor.init(children, strategy: :one_for_one)
+  defp parse_int(metadata, key, default) do
+    case Map.get(metadata, key) do
+      nil -> default
+      val when is_binary(val) -> String.to_integer(val)
+      val when is_integer(val) -> val
+    end
   end
 end

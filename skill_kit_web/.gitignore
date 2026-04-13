@@ -1,0 +1,6 @@
+/_build/
+/deps/
+/doc/
+/assets/node_modules/
+/dev_project/
+*.ez

@@ -9,18 +9,18 @@ defmodule SkillKit.Telemetry do
 
   Each agent boundary emits a span with `:start` and `:stop` events:
 
-  - `[:skill_kit, :tool_use, :start/:stop]`
-  - `[:skill_kit, :subagent, :start/:stop]`
-  - `[:skill_kit, :skill_activation, :start/:stop]`
-  - `[:skill_kit, :conversation_save, :start/:stop]`
-  - `[:skill_kit, :conversation_load, :start/:stop]`
-  - `[:skill_kit, :llm_request, :start/:stop]`
-  - `[:skill_kit, :turn, :start/:stop]`
-  - `[:skill_kit, :agent, :start/:stop]`
+  - `[:skill_kit, :tool_use, :start/:stop]` — individual tool execution
+  - `[:skill_kit, :tool_batch, :start/:stop]` — batch of parallel tool calls
+  - `[:skill_kit, :subagent, :start/:stop]` — spawning a subagent
+  - `[:skill_kit, :conversation_save, :start/:stop]` — persisting history
+  - `[:skill_kit, :conversation_load, :start/:stop]` — loading history
+  - `[:skill_kit, :llm_request, :start/:stop]` — LLM API request
+  - `[:skill_kit, :turn, :start/:stop]` — processing a message batch
 
   ## LLM events
 
-  - `[:skill_kit, :llm, :rate_limited]`
+  - `[:skill_kit, :llm, :stream, :start/:stop]` — LLM stream lifecycle
+  - `[:skill_kit, :llm, :stream, :error]` — model URI resolution failure
   """
 
   def attach_many(name, events, handler, opts) do

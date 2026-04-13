@@ -1,7 +1,7 @@
 defmodule SkillKit.CatalogTest do
   use ExUnit.Case, async: true
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Catalog
   alias SkillKit.Hook
   alias SkillKit.Kit
@@ -54,11 +54,10 @@ defmodule SkillKit.CatalogTest do
   end
 
   defp make_agent(name, opts \\ []) do
-    %Definition{
+    %Agent{
       name: name,
       description: Keyword.get(opts, :description, "#{name} agent"),
-      system_prompt: "You are #{name}.",
-      path: "/test/#{name}"
+      system_prompt: "You are #{name}."
     }
   end
 
@@ -246,25 +245,6 @@ defmodule SkillKit.CatalogTest do
       assert activate.input_schema["properties"]["name"]["enum"] == ["ns:hello"]
     end
 
-    test "includes builtins when subagent: true" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      tools = Catalog.tool_definitions(catalog, subagent: true)
-      names = Enum.map(tools, & &1.name)
-      assert "report_status" in names
-      assert "report_result" in names
-    end
-
-    test "excludes builtins when subagent: false" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      tools = Catalog.tool_definitions(catalog, [])
-      names = Enum.map(tools, & &1.name)
-      refute "report_status" in names
-    end
-
     test "includes agent tools" do
       {:ok, provider} = Memory.start_link([])
       agent = make_agent("reviewer", description: "Reviews code")
@@ -297,35 +277,17 @@ defmodule SkillKit.CatalogTest do
       tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))
       assert tool_def != nil
     end
-
-    test "includes activated skill tools" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-
-      activated = [make_skill("ns:schedule", tool: Shell)]
-      tools = Catalog.tool_definitions(catalog, activated_skills: activated)
-
-      skill_tool = Enum.find(tools, &(&1.name == "schedule"))
-      assert skill_tool != nil
-    end
   end
 
   # =====================================================================
   # classify
   # =====================================================================
 
-  describe "classify/3" do
+  describe "classify/2" do
     test "classifies activate_skill" do
       {:ok, provider} = Memory.start_link([])
       catalog = start_catalog(provider)
       assert Catalog.classify(catalog, "activate_skill") == :activate_skill
-    end
-
-    test "classifies builtins" do
-      {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
-      assert Catalog.classify(catalog, "report_status") == :builtin
-      assert Catalog.classify(catalog, "report_result") == :builtin
     end
 
     test "classifies subagent" do
@@ -338,12 +300,14 @@ defmodule SkillKit.CatalogTest do
       assert Catalog.classify(catalog, "reviewer") == :subagent
     end
 
-    test "classifies module_skill from activated skills" do
+    test "does not classify shell skills without activation" do
       {:ok, provider} = Memory.start_link([])
-      catalog = start_catalog(provider)
+      skill = make_skill("ns:run")
+      kit = %Kit{name: "ns", skills: [skill]}
+      Memory.put_kit(provider, kit)
 
-      skill = make_skill("scheduler:schedule")
-      assert Catalog.classify(catalog, "schedule", [skill]) == {:module_skill, skill}
+      catalog = start_catalog(provider)
+      assert Catalog.classify(catalog, "run") == :tool
     end
 
     test "classifies tool as default" do

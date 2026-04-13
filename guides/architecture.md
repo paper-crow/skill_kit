@@ -9,23 +9,51 @@ executes tools, and streams events back to the caller process.
 The public API follows a three-step pattern:
 
 ```elixir
-# Source-driven: discovers root agent from providers
-{:ok, agent} = SkillKit.start_agent(
-  skills: [{SkillKit.Kit.Local, dir: ".skills"}],
-  caller: self(),
-  scope: my_scope
-)
+# 1. Start an agent
+{:ok, agent} = SkillKit.start_agent(MyApp.AssistantKit, caller: self())
 
-# Or definition-driven: pass an agent definition directly
-{:ok, agent} = SkillKit.start_agent(definition, skills: [...], caller: self())
-
+# 2. Send messages
 :ok = SkillKit.send_message(agent, "Hello")
 # ... receive events in caller process ...
+
+# 3. Shut down
 :ok = SkillKit.stop_agent(agent)
 ```
 
-The source-driven form resolves the agent identity from the first argument,
-then delegates to the definition-driven form.
+### Agent resolution
+
+The first argument to `start_agent/2` identifies the agent. It accepts
+several forms — all resolve to a `%SkillKit.Agent{}` before the agent starts:
+
+| Form | Resolution |
+|------|------------|
+| `%Agent{}` | Used directly. |
+| `"path/to/agent"` | Shorthand for `{Kit.Local, dir: "path/to/agent"}`. |
+| `MyApp.Kit` | Bare module, shorthand for `{MyApp.Kit, []}`. |
+| `{MyApp.Kit, opts}` | Calls `module.load_kits(opts)` and extracts the first kit with a non-nil `agent` field. |
+
+### Auto-include of kit skills
+
+When the agent is loaded from a provider (string, module, or tuple form),
+SkillKit automatically adds that provider to the skills list. This means the
+kit's own skills and sub-agents are available in the agent's tool pool without
+needing to pass them separately:
+
+```elixir
+# The kit's skills are auto-included — no need to repeat in :skills
+{:ok, agent} = SkillKit.start_agent(MyApp.FilesKit, caller: self())
+
+# Additional skill sources can still be added
+{:ok, agent} = SkillKit.start_agent(MyApp.FilesKit,
+  skills: [{MyApp.ExtraKit, []}],
+  caller: self()
+)
+```
+
+When passing a `%Agent{}` directly, no auto-include happens — you must
+supply all skill sources explicitly via `:skills`.
+
+### Agent references
 
 `start_agent` builds an `AgentRef` — an opaque struct holding the agent name,
 a unique Registry name, and the supervisor PID. `send_message/2` routes to the
@@ -37,21 +65,44 @@ root supervisor, tearing down the entire tree.
 Each agent owns its own Registry and two isolated children under a top-level
 `:one_for_one` supervisor:
 
+```mermaid
+graph TD
+    A[SkillKit.Agent.Supervisor<br/>:one_for_one] --> B[Registry<br/>process discovery]
+    A --> C[SkillKit.Catalog<br/>aggregates providers]
+    A --> D[Agent.Core<br/>:rest_for_one]
+    
+    D --> E[Agent.Mailbox<br/>message buffering]
+    D --> F[Agent.Server<br/>LLM loop]
+    D --> G[Agent.ToolRunner<br/>DynamicSupervisor]
+    
+    G -.-> H[Subagent 1]
+    G -.-> I[Subagent 2]
+    G -.-> J[Subagent N]
+    
+    classDef supervisor fill:#e1f5fe
+    classDef worker fill:#f3e5f5
+    classDef dynamic fill:#fff3e0
+    
+    class A,D,G supervisor
+    class B,C,E,F worker
+    class H,I,J dynamic
 ```
-SkillKit.Agent (one_for_one)
+
+```
+SkillKit.Agent.Supervisor (one_for_one)
 ├── Registry              (process discovery for this agent)
 ├── SkillKit.Catalog      (aggregates providers, builds tool defs, classifies calls)
 └── Agent.Core            (rest_for_one)
     ├── Agent.Mailbox         (message buffering)
-    ├── Agent.Server          (LLM loop + tool execution)
-    └── Agent.SubagentSupervisor  (DynamicSupervisor)
+    ├── Agent.Server          (LLM loop)
+    └── Agent.ToolRunner          (DynamicSupervisor)
 ```
 
 **Catalog** is isolated from **Core** intentionally: a provider crash does not
 restart the conversation. Within Core, `:rest_for_one` ordering ensures that if
-Mailbox crashes, Server and SubagentSupervisor both restart (a Server without a
-Mailbox is useless); if Server crashes, SubagentSupervisor also restarts
-(orphaned subagents should not continue running).
+Mailbox crashes, Server and ToolRunner both restart (a Server without a
+Mailbox is useless); if Server crashes, ToolRunner also restarts
+(in-flight tool calls and subagents should not continue without a Server).
 
 Mailbox resolves Server via Registry lookup at flush time rather than at init,
 which avoids start-order coupling within the `:rest_for_one` chain.
@@ -74,7 +125,7 @@ Providers implement two callbacks:
 
 The Catalog unpacks kits into skills, agents, and hooks; filters skills by
 authorization scope; builds `Tool` structs for the LLM; and classifies
-each incoming tool call as one of: `:tool`, `:activate_skill`, `:builtin`,
+each incoming tool call as one of: `:tool`, `:activate_skill`,
 `:subagent`, or `{:module_skill, skill}`.
 
 ## Message Flow
@@ -104,55 +155,98 @@ The Mailbox batches messages by size or time before forwarding, decoupling
 drives the entire turn synchronously inside a single `handle_info` callback —
 there is no concurrent LLM call state to manage.
 
-## Tool Execution Loop
+## Tool Execution
 
-After receiving a streamed LLM response, the Server checks for tool calls and
-loops until the model returns a response with no tools:
+After receiving a streamed LLM response, the Server delegates tool execution
+to `ToolDispatch.execute_all/2`. The dispatch classifies each tool call via
+the Catalog and executes it with appropriate hooks. The Server loops until
+the model returns a response with no tools.
 
+Tool execution is **synchronous** — the Server blocks while tools run.
+This is intentional: the LLM needs all tool results before it can produce
+its next response, so there's nothing for the Server to do with partial
+results. Subagent delegation is the exception — it returns immediately
+with "Delegated to X" and the subagent's result arrives later via `:DOWN`.
+
+For tools that need to wait on external input (human approval, API
+callbacks), use the `{:pending, state}` / `resume/3` suspension mechanism
+rather than blocking the Server. This lets the Server stay responsive
+while the tool waits.
+
+```mermaid
+flowchart TD
+    A[Server receives<br/>mailbox flush messages] --> B[Call Catalog.tool_definitions/2]
+    B --> C[Call LLM, stream response to caller]
+    C --> D{Tool calls<br/>present?}
+    
+    D -->|No, top-level| E[Send AssistantMessage<br/>to caller]
+    E --> F[Done — wait for next message]
+    
+    D -->|No, subagent| S[Terminate with<br/>shutdown result]
+    S --> T[Parent receives :DOWN<br/>with final AssistantMessage]
+    
+    D -->|Yes| G[ToolDispatch.execute_all/2]
+    G --> H{Any tool<br/>suspended?}
+    
+    H -->|No| K[Collect results as<br/>ToolResult structs]
+    K --> L[Append results to<br/>message history]
+    L --> B
+    
+    H -->|Yes| M[Send InputRequested<br/>to caller]
+    M --> N[Wait for respond/3]
+    N --> O[Resume via<br/>ToolExecution.resume/2]
+    O --> K
 ```
-Server receives {:mailbox_flush, messages}
-  │
-  └─► call Catalog.tool_definitions/2, then call LLM, stream response to caller
-        │
-        ├─ if no tool calls → send %AssistantMessage{} to caller, done
-        │
-        └─ if tool calls present:
-               │
-               ├─ classify each call via Catalog.classify/3
-               ├─ dispatch pre-boundary hooks via Hooks.call/4
-               ├─ execute local tools via ToolExecution (authorized by Scope)
-               ├─ dispatch post-boundary hooks via Hooks.cast/3
-               ├─ collect results as %ToolResult{} structs
-               └─ append results to message history, loop ↑
-```
 
-The Server calls `Catalog.classify/3` before each tool execution. Local tools
-are dispatched to the configured Tool module. The loop continues until
-the LLM responds with no tool calls or a halt condition is reached.
+Tool calls are classified by `Catalog.classify/2` as one of:
+- `:tool` — shell command or registered tool module
+- `:activate_skill` — forks the parent context into a skill agent that runs
+  the skill in isolation with the parent's conversation history
+- `:subagent` — spawns a fresh child agent via `Runtime.start_agent/1`
+
+Tools can return `{:pending, state}` to suspend execution. The caller
+receives `%Event.InputRequested{}` and responds via `SkillKit.respond/3`.
 
 ## Subagents
 
 An agent can delegate work to a child agent by invoking a subagent tool call.
-The Server looks up the child's `Agent.Definition` via `Catalog.get_agent/2`,
-spawns the child under its `SubagentSupervisor`, monitors the child supervisor
-PID, and continues its own turn. When the child calls `report_result` or
-terminates, it delivers its result back to the parent Server via the parent's
-Registry. The parent resumes with a synthesised tool result in its message
-history.
+The Server looks up the child's `%Agent{}` via `Catalog.get_agent/2`, builds
+a new `%Agent{}` for the child with `parent_ref` and incremented `depth`,
+and starts it via `Runtime.start_agent/1`. The child runs its LLM loop
+independently. The parent monitors the child's Server process.
+
+When the child's LLM loop completes (final text response, no more tool
+calls), the child Server terminates with `{:shutdown, {:result, response}}`.
+The parent's `:DOWN` handler captures the final `%AssistantMessage{}` and
+injects it as a `%SystemMessage{}` into its own conversation, triggering
+the next turn.
 
 Delegation depth is enforced by comparing `depth` against
-`definition.max_agent_depth`. Subagents start with `depth + 1` and have no
-direct caller process — they communicate only through the parent Registry.
+`max_agent_depth`. Subagents inherit their parent's `skills` and `runtime`
+configuration from the Agent struct.
+
+## Runtime
+
+`SkillKit.Runtime` is a behaviour that controls how agent supervision trees
+are started. The default `Runtime.Local` starts agents in the current BEAM
+node. Alternative runtimes (e.g., FLAME) can start agents on remote nodes.
+
+The behaviour defines one callback: `start_agent/2`. The public function
+`Runtime.start_agent/1` reads the runtime from the Agent struct, dispatches
+to the callback, and wraps the result in an `AgentRef`.
 
 ## Key Module Boundaries
 
 | Concern | Where to look |
 |---|---|
+| Agent identity + configuration | `SkillKit.Agent` struct |
+| Agent spawning (local, FLAME) | `SkillKit.Runtime` behaviour |
 | LLM providers (Anthropic, etc.) | `SkillKit.LLM` and `SkillKit.LLM.Anthropic` |
 | Skill/kit loading (filesystem, etc.) | `SkillKit.Kit.Provider` behaviours |
 | In-memory kit provider | `SkillKit.Kit.Memory` |
 | Tool aggregation + classification | `SkillKit.Catalog` |
 | Hook dispatch at boundaries | `SkillKit.Hooks` |
+| Tool dispatch + execution | `SkillKit.Agent.ToolDispatch` |
 | Tool execution + hooks | `SkillKit.Tool` behaviour |
 | Authorization + scope | `SkillKit.Authorization` |
 | Observability | `SkillKit.Telemetry` |

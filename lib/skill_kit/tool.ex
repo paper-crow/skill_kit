@@ -21,7 +21,7 @@ defmodule SkillKit.Tool do
 
   - `{:ok, result}` — execution complete
   - `{:error, reason}` — execution failed
-  - `{:pending, state}` — needs approval; caller manages the lifecycle
+  - `{:pending, state}` — needs input; caller provides it via `SkillKit.respond/3`
   """
 
   @type t :: %__MODULE__{
@@ -39,7 +39,7 @@ defmodule SkillKit.Tool do
   @callback resume(
               execution :: SkillKit.ToolExecution.t(),
               state :: any(),
-              decision :: :approved | {:denied, any()}
+              decision :: any()
             ) ::
               {:ok, any()} | {:error, any()} | {:pending, any()}
 

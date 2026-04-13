@@ -14,12 +14,10 @@ defmodule SkillKit.Catalog do
 
   require Logger
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Authorization
   alias SkillKit.Skill
   alias SkillKit.Tool
-
-  @subagent_builtins MapSet.new(["report_status", "report_result"])
 
   # -------------------------------------------------------------------
   # Public API
@@ -36,57 +34,67 @@ defmodule SkillKit.Catalog do
     GenServer.start_link(__MODULE__, {providers, scope}, gen_opts)
   end
 
-  @spec list_skills(GenServer.server()) :: [{String.t(), String.t()}]
-  def list_skills(catalog) do
-    GenServer.call(catalog, :list_skills)
+  @spec list_skills(GenServer.server() | Agent.t()) :: [{String.t(), String.t()}]
+  def list_skills(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :list_skills)
   end
 
-  @spec get_skill(GenServer.server(), String.t()) ::
+  @spec get_skill(GenServer.server() | Agent.t(), String.t()) ::
           {:ok, Skill.t()} | {:error, :not_found | :unauthorized}
-  def get_skill(catalog, name) do
-    GenServer.call(catalog, {:get_skill, name})
+  def get_skill(agent_or_catalog, name) do
+    GenServer.call(server_ref(agent_or_catalog), {:get_skill, name})
   end
 
-  @spec list_agents(GenServer.server()) :: [Definition.t()]
-  def list_agents(catalog) do
-    GenServer.call(catalog, :list_agents)
+  @spec list_agents(GenServer.server() | Agent.t()) :: [Agent.t()]
+  def list_agents(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :list_agents)
   end
 
-  @spec get_agent(GenServer.server(), String.t()) ::
-          {:ok, Definition.t()} | {:error, :not_found}
-  def get_agent(catalog, name) do
-    GenServer.call(catalog, {:get_agent, name})
+  @spec get_agent(GenServer.server() | Agent.t(), String.t()) ::
+          {:ok, Agent.t()} | {:error, :not_found}
+  def get_agent(agent_or_catalog, name) do
+    GenServer.call(server_ref(agent_or_catalog), {:get_agent, name})
   end
 
-  @spec agent(GenServer.server()) :: Definition.t() | nil
-  def agent(catalog) do
-    GenServer.call(catalog, :agent)
+  @spec agent(GenServer.server() | Agent.t()) :: Agent.t() | nil
+  def agent(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :agent)
   end
 
-  @spec list_hooks(GenServer.server(), SkillKit.Hook.event()) :: [SkillKit.Hook.t()]
-  def list_hooks(catalog, event) do
-    GenServer.call(catalog, {:list_hooks, event})
+  @spec list_hooks(GenServer.server() | Agent.t(), SkillKit.Hook.event()) :: [SkillKit.Hook.t()]
+  def list_hooks(agent_or_catalog, event) do
+    GenServer.call(server_ref(agent_or_catalog), {:list_hooks, event})
   end
 
-  @spec tool_definitions(GenServer.server(), keyword()) :: [Tool.t()]
-  def tool_definitions(catalog, opts \\ []) do
-    GenServer.call(catalog, {:tool_definitions, opts})
+  @spec tool_definitions(GenServer.server() | Agent.t(), keyword()) :: [Tool.t()]
+  def tool_definitions(agent_or_catalog, opts \\ []) do
+    GenServer.call(server_ref(agent_or_catalog), {:tool_definitions, opts})
   end
 
-  @spec classify(GenServer.server(), String.t(), [Skill.t()]) ::
-          :tool | :activate_skill | :builtin | :subagent | {:module_skill, Skill.t()}
-  def classify(catalog, tool_name, activated_skills \\ []) do
-    GenServer.call(catalog, {:classify, tool_name, activated_skills})
+  @spec classify(GenServer.server() | Agent.t(), String.t()) ::
+          :tool | :activate_skill | :subagent
+  def classify(agent_or_catalog, tool_name) do
+    GenServer.call(server_ref(agent_or_catalog), {:classify, tool_name})
   end
 
   @doc """
   Returns `{tool_module, metadata}` for the first kit that declares a tool,
   or `nil` if no tool kit exists.
   """
-  @spec tool_config(GenServer.server()) :: {module(), map()} | nil
-  def tool_config(catalog) do
-    GenServer.call(catalog, :tool_config)
+  @spec tool_config(GenServer.server() | Agent.t()) :: {module(), map()} | nil
+  def tool_config(agent_or_catalog) do
+    GenServer.call(server_ref(agent_or_catalog), :tool_config)
   end
+
+  # -------------------------------------------------------------------
+  # Server resolution
+  # -------------------------------------------------------------------
+
+  defp server_ref(%Agent{} = agent) do
+    {:via, Registry, {agent.registry, {agent.name, :catalog}}}
+  end
+
+  defp server_ref(server), do: server
 
   # -------------------------------------------------------------------
   # GenServer callbacks
@@ -148,9 +156,9 @@ defmodule SkillKit.Catalog do
     {:reply, tools, state}
   end
 
-  def handle_call({:classify, tool_name, activated_skills}, _from, state) do
+  def handle_call({:classify, tool_name}, _from, state) do
     kits = load_all_kits(state.providers)
-    result = do_classify(kits, tool_name, activated_skills)
+    result = do_classify(kits, tool_name)
     {:reply, result, state}
   end
 
@@ -253,20 +261,12 @@ defmodule SkillKit.Catalog do
   # Tool building
   # -------------------------------------------------------------------
 
-  defp build_tools(kits, state, opts) do
-    subagent = Keyword.get(opts, :subagent, false)
-    activated_skills = Keyword.get(opts, :activated_skills, [])
-
+  defp build_tools(kits, state, _opts) do
     visible_skills = filter_authorized_skills(all_skills(kits), state)
     all_agents = Enum.flat_map(kits, & &1.subagents)
 
     tool_modules = discover_tool_modules(kits)
     tool_defs = Enum.map(tool_modules, & &1.definition())
-
-    activated_tools =
-      activated_skills
-      |> Enum.filter(&Code.ensure_loaded?(&1.tool))
-      |> Enum.map(&skill_to_tool/1)
 
     tool_set = MapSet.new(tool_modules)
 
@@ -277,9 +277,8 @@ defmodule SkillKit.Catalog do
 
     skill_tool = build_activate_skill_tool(filterable_skills)
     agent_tools = Enum.map(all_agents, &agent_to_tool/1)
-    builtins = if subagent, do: builtin_tools(), else: []
 
-    tool_defs ++ activated_tools ++ skill_tool ++ agent_tools ++ builtins
+    tool_defs ++ skill_tool ++ agent_tools
   end
 
   defp discover_tool_modules(kits) do
@@ -305,8 +304,8 @@ defmodule SkillKit.Catalog do
       %Tool{
         name: "activate_skill",
         description:
-          "Load a skill's instructions into your context. Use when you need specialized guidelines " <>
-            "for a task (e.g. code review, style conventions). Available skills:\n#{skill_descriptions}",
+          "Activate a skill to handle the current task. The skill runs with full " <>
+            "conversation context in an isolated agent. Available skills:\n#{skill_descriptions}",
         input_schema: %{
           "type" => "object",
           "properties" => %{
@@ -314,11 +313,6 @@ defmodule SkillKit.Catalog do
               "type" => "string",
               "description" => "The skill name to activate",
               "enum" => skill_names
-            },
-            "arguments" => %{
-              "type" => "string",
-              "description" =>
-                "Arguments to pass to the skill (space-separated, accessible as $ARGUMENTS, $0, $1, etc.)"
             }
           },
           "required" => ["name"]
@@ -327,15 +321,7 @@ defmodule SkillKit.Catalog do
     ]
   end
 
-  defp skill_to_tool(skill) do
-    %Tool{
-      name: skill_short_name(skill.name),
-      description: skill.description,
-      input_schema: %{"type" => "object"}
-    }
-  end
-
-  defp agent_to_tool(%Definition{name: name, description: description}) do
+  defp agent_to_tool(%Agent{name: name, description: description}) do
     %Tool{
       name: name,
       description: description,
@@ -352,52 +338,19 @@ defmodule SkillKit.Catalog do
     }
   end
 
-  defp builtin_tools do
-    [
-      %Tool{
-        name: "report_status",
-        description:
-          "Send a progress update to the parent agent. Use to report intermediate results.",
-        input_schema: %{
-          "type" => "object",
-          "properties" => %{
-            "status" => %{"type" => "string", "description" => "Progress update message"}
-          },
-          "required" => ["status"]
-        }
-      },
-      %Tool{
-        name: "report_result",
-        description:
-          "Report the final result and complete this task. The agent stops after this.",
-        input_schema: %{
-          "type" => "object",
-          "properties" => %{
-            "result" => %{"type" => "string", "description" => "Final result of the task"}
-          },
-          "required" => ["result"]
-        }
-      }
-    ]
-  end
-
   # -------------------------------------------------------------------
   # Classification
   # -------------------------------------------------------------------
 
-  defp do_classify(kits, tool_name, activated_skills) do
+  defp do_classify(kits, tool_name) do
     agent_names =
       kits
       |> Enum.flat_map(& &1.subagents)
       |> MapSet.new(& &1.name)
 
-    module_skill_map = Map.new(activated_skills, &{skill_short_name(&1.name), &1})
-
     cond do
       tool_name == "activate_skill" -> :activate_skill
-      MapSet.member?(@subagent_builtins, tool_name) -> :builtin
       MapSet.member?(agent_names, tool_name) -> :subagent
-      Map.has_key?(module_skill_map, tool_name) -> {:module_skill, module_skill_map[tool_name]}
       true -> :tool
     end
   end

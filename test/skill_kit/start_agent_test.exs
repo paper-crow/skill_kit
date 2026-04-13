@@ -1,7 +1,7 @@
 defmodule SkillKit.StartAgentTest do
   use ExUnit.Case, async: false
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Kit.Local
   alias SkillKit.Storage
 
@@ -48,10 +48,10 @@ defmodule SkillKit.StartAgentTest do
     end
   end
 
-  describe "start_agent/2 with %Definition{}" do
-    test "accepts a %Definition{} struct" do
-      {:ok, definition} =
-        Definition.parse(Path.join(@fixtures_path, "AGENT.md"))
+  describe "start_agent/2 with %Agent{}" do
+    test "accepts a %Agent{} struct" do
+      {:ok, content} = Storage.read(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, definition} = Agent.parse(content)
 
       assert {:ok, agent} = SkillKit.start_agent(definition, caller: self())
 
@@ -60,8 +60,8 @@ defmodule SkillKit.StartAgentTest do
     end
 
     test "overrides agent name" do
-      {:ok, definition} =
-        Definition.parse(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, content} = Storage.read(Path.join(@fixtures_path, "AGENT.md"))
+      {:ok, definition} = Agent.parse(content)
 
       assert {:ok, agent} =
                SkillKit.start_agent(definition, name: "overridden", caller: self())

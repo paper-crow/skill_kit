@@ -14,8 +14,9 @@ if Mix.env() == :test do
     This imports `SkillKit.Test` and sets up `Mox.verify_on_exit!/1`.
     """
 
-    alias SkillKit.Agent.Definition
+    alias SkillKit.Agent
     alias SkillKit.Agent.Server
+    alias SkillKit.Agent.ToolRunner
     alias SkillKit.Response.Error
 
     defmacro __using__(_opts) do
@@ -39,35 +40,37 @@ if Mix.env() == :test do
       caller = Keyword.get(opts, :caller, self())
       scope = Keyword.get(opts, :scope)
       skills = Keyword.get(opts, :skills, [])
+      registry_name = :"test_registry_#{:erlang.unique_integer([:positive])}"
 
-      definition =
-        Keyword.get_lazy(opts, :definition, fn ->
-          %Definition{
+      ExUnit.Callbacks.start_supervised!({Registry, keys: :unique, name: registry_name})
+
+      agent =
+        Keyword.get_lazy(opts, :agent, fn ->
+          %Agent{
             name: agent_name,
             description: "Test agent",
             system_prompt: "You are a test agent.",
-            path: "/tmp/test"
+            caller: caller,
+            scope: scope,
+            skills: skills,
+            registry: registry_name
           }
         end)
 
-      registry_name = :"test_registry_#{:erlang.unique_integer([:positive])}"
-      ExUnit.Callbacks.start_supervised!({Registry, keys: :unique, name: registry_name})
-
       ExUnit.Callbacks.start_supervised!(
         {SkillKit.Catalog,
-         name: {:via, Registry, {registry_name, {agent_name, :catalog}}},
+         name: {:via, Registry, {registry_name, {agent.name, :catalog}}},
          providers: skills,
          scope: scope}
       )
 
-      server_opts = [caller: caller, skills: skills]
+      ToolRunner.start_link(agent)
 
-      {:ok, pid} =
-        Server.start_link({agent_name, definition, 0, nil, scope, registry_name, server_opts})
+      {:ok, pid} = Server.start_link(agent)
 
       Mox.allow(SkillKit.LLM.Mock, self(), pid)
 
-      context = %{registry: registry_name, agent_name: agent_name, definition: definition}
+      context = %{registry: registry_name, agent_name: agent.name, agent: agent}
       {:ok, pid, context}
     end
 
@@ -145,6 +148,11 @@ if Mix.env() == :test do
         %SkillKit.Event.Done{stop_reason: :tool_use}
       ]
 
+      {:ok, Stream.map(events, & &1)}
+    end
+
+    defp build_event_stream(%SkillKit.Response.Empty{}) do
+      events = [%SkillKit.Event.Done{stop_reason: :end_turn}]
       {:ok, Stream.map(events, & &1)}
     end
 

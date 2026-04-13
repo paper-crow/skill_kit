@@ -26,18 +26,27 @@ suspended.
 
 | Event | Kind | Description |
 |---|---|---|
-| `[:skill_kit, :tool_use, :start/:stop]` | span | OS command or module-skill tool execution |
+| `[:skill_kit, :tool_use, :start/:stop]` | span | Individual tool execution |
+| `[:skill_kit, :tool_batch, :start/:stop]` | span | Batch of parallel tool calls (wraps all `:tool_use` spans in one LLM turn) |
 | `[:skill_kit, :subagent, :start/:stop]` | span | Spawning a subagent |
-| `[:skill_kit, :skill_activation, :start/:stop]` | span | Activating a skill |
 | `[:skill_kit, :conversation_save, :start/:stop]` | span | Persisting conversation history |
 | `[:skill_kit, :conversation_load, :start/:stop]` | span | Loading conversation history |
 | `[:skill_kit, :llm_request, :start/:stop]` | span | Sending a request to the LLM |
 | `[:skill_kit, :turn, :start/:stop]` | span | Processing a batch of messages |
-| `[:skill_kit, :agent, :start/:stop]` | span | Agent process lifecycle |
 
 Each span emits a `:start` event (with `:system_time`) and a `:stop` event
 (with `:duration`). The metadata map contains the boundary context keys
 described in the [Hooks guide](hooks-and-execution.md#hook-context).
+
+The `:tool_batch` span wraps the entire parallel execution of tool calls
+returned by a single LLM response. Its metadata includes:
+
+- `:agent_name` — the agent executing the batch
+- `:tool_count` — number of tool calls in the batch
+- `:tool_names` — list of tool names being executed
+
+If any tool in the batch suspends (via `{:pending, state}`), the
+`:tool_batch` span includes the time waiting for `SkillKit.respond/3`.
 
 To observe every tool-use boundary crossing:
 
@@ -50,6 +59,20 @@ SkillKit.Telemetry.attach_many(
   ],
   fn event, measurements, meta, _ ->
     IO.inspect({List.last(event), meta.agent_name, meta.tool})
+  end,
+  %{}
+)
+```
+
+To measure total batch execution time (including suspension waits):
+
+```elixir
+SkillKit.Telemetry.attach_many(
+  :tool_batch_spans,
+  [[:skill_kit, :tool_batch, :stop]],
+  fn _event, %{duration: d}, meta, _ ->
+    ms = System.convert_time_unit(d, :native, :millisecond)
+    IO.puts("[#{meta.agent_name}] #{meta.tool_count} tools completed in #{ms}ms")
   end,
   %{}
 )
@@ -70,12 +93,6 @@ SkillKit.Telemetry.attach_many(
 | `:stream, :start` | `:system_time` | `:provider` (module), `:model` (string) |
 | `:stream, :stop` | `:duration` | `:provider`, `:model`, `:error` (on failure) |
 | `:stream, :error` | `%{}` | `:error` (the `{:error, _}` tuple), `:model` (string) |
-
-### Agent events
-
-| Event | Kind | Description |
-|---|---|---|
-| `[:skill_kit, :agent, :orphaned_result]` | point | A subagent tried to report but its parent was not found |
 
 ---
 

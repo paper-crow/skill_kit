@@ -9,7 +9,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   use Mix.Task
 
-  alias SkillKit.Agent.Definition
+  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error
   alias SkillKit.Event.ToolCallComplete
@@ -39,7 +39,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
       exit({:shutdown, 1})
     end
 
-    {:ok, definition} = Definition.parse(agent_md)
+    {:ok, definition} = Agent.parse(agent_md)
 
     {:ok, agent} =
       SkillKit.start_agent(definition,
@@ -99,7 +99,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
   defp agent_description(agents_dir, name) do
     agent_md = Path.join([agents_dir, name, "AGENT.md"])
 
-    case Definition.parse(agent_md) do
+    case Agent.parse(agent_md) do
       {:ok, d} -> d.description
       _ -> ""
     end

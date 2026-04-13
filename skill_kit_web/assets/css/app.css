@@ -1,0 +1,128 @@
+@import "highlight.js/styles/atom-one-dark.css" layer(base);
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  /* Editor prose styling — applied to Earmark HTML output */
+  .prose-editor h1 {
+    @apply font-heading text-3xl tracking-tight mb-6 text-editor-text;
+  }
+
+  .prose-editor h2 {
+    @apply text-xs font-semibold text-editor-accent-muted uppercase tracking-widest mt-10 mb-4;
+  }
+
+  .prose-editor h3 {
+    @apply font-heading text-xl mb-3 mt-6 text-editor-text;
+  }
+
+  .prose-editor h4 {
+    @apply font-heading text-lg mb-2 mt-4 text-editor-text;
+  }
+
+  .prose-editor p {
+    @apply text-base text-editor-text-muted leading-[1.9] mb-4;
+  }
+
+  .prose-editor strong {
+    @apply font-semibold text-editor-text;
+  }
+
+  .prose-editor em {
+    @apply italic;
+  }
+
+  .prose-editor a {
+    @apply text-editor-accent hover:underline;
+  }
+
+  .prose-editor code {
+    @apply font-mono text-sm bg-editor-accent-faint px-1.5 py-0.5 rounded text-editor-text;
+  }
+
+  .prose-editor pre {
+    @apply bg-editor-accent-faint rounded-lg p-4 my-4 overflow-x-auto;
+  }
+
+  .prose-editor pre code {
+    @apply bg-transparent px-0 py-0 text-[15px];
+  }
+
+  .prose-editor ul {
+    @apply list-disc pl-6 mb-4 space-y-1;
+  }
+
+  .prose-editor ol {
+    @apply list-decimal pl-6 mb-4 space-y-1;
+  }
+
+  .prose-editor li {
+    @apply text-base text-editor-text-muted leading-[1.9];
+  }
+
+  .prose-editor hr {
+    @apply border-editor-divider my-8;
+  }
+
+  .prose-editor blockquote {
+    @apply border-l-2 border-editor-accent-muted pl-4 my-4 italic text-editor-text-faint text-base;
+  }
+
+  .prose-editor table {
+    @apply w-full text-base my-4 border-collapse;
+  }
+
+  .prose-editor thead th {
+    @apply text-left text-editor-accent-muted text-sm font-semibold uppercase tracking-wider
+           pb-2 border-b border-editor-border;
+  }
+
+  .prose-editor tbody td {
+    @apply text-editor-text-muted py-2 border-b border-editor-divider;
+  }
+
+  .prose-editor tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .prose-editor img {
+    @apply rounded my-4 max-w-full;
+  }
+
+  /* Inline thread selection highlight */
+  mark.inline-thread-highlight {
+    @apply bg-editor-accent-faint rounded-sm;
+    border-bottom: 2px solid var(--editor-accent);
+  }
+
+  /* Onboarding — Typeform-style question flow */
+  @keyframes onboarding-word-reveal {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes onboarding-page-exit {
+    to { opacity: 0; }
+  }
+
+  @keyframes onboarding-fade-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes editor-page-enter {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Chat prose styling — compact Earmark output for chat messages */
+  .prose-chat p { @apply mb-2 last:mb-0; }
+  .prose-chat code { @apply font-mono text-sm bg-editor-accent-faint px-1 py-0.5 rounded; }
+  .prose-chat pre { @apply bg-editor-accent-faint rounded p-3 my-2 overflow-x-auto; }
+  .prose-chat pre code { @apply bg-transparent px-0 py-0 text-sm; }
+  .prose-chat ul { @apply list-disc pl-4 mb-2; }
+  .prose-chat ol { @apply list-decimal pl-4 mb-2; }
+  .prose-chat li { @apply leading-relaxed; }
+}

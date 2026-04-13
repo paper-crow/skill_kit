@@ -139,8 +139,10 @@ with a `"namespace:skill"` name are grouped into a kit named by the namespace.
 
 ## Module-backed Kits
 
-`use SkillKit.Kit` turns an Elixir module into a provider that loads skill files
-from a `skills/` directory co-located with the module's source file.
+`use SkillKit.Kit` turns an Elixir module into a provider that reads and parses
+all `SKILL.md` and `AGENT.md` files **at compile time** — no runtime filesystem
+access is needed. The module implements both `SkillKit.Kit.Provider` (to supply
+skills) and `SkillKit.Tool` (to execute them).
 
 ```elixir
 defmodule MyApp.FilesKit do
@@ -153,16 +155,57 @@ defmodule MyApp.FilesKit do
 end
 ```
 
-The kit name is inferred from the last module segment, downcased and underscored
-(`FilesKit` → `"files_kit"`). Override either option:
+### Directory layout
 
-```elixir
-use SkillKit.Kit, name: "files", skills_dir: "/abs/path/to/skills"
+The kit root is the directory containing the module's source file by default.
+Skills live in a `skills/` subdirectory; an optional `AGENT.md` at the root
+defines the kit's agent identity:
+
+```
+lib/my_app/files_kit/
+  files_kit.ex               ← defmodule MyApp.FilesKit
+  AGENT.md                   ← root agent definition (optional)
+  skills/
+    read/SKILL.md
+    write/SKILL.md
 ```
 
-`use SkillKit.Kit` implements both `SkillKit.Kit.Provider` (to load skills) and
-`SkillKit.Tool` (to execute them). The macro generates default
-`definition/0` and `resume/3` implementations; you must supply `execute/1`.
+### Options
+
+| Option   | Default                          | Description |
+|----------|----------------------------------|-------------|
+| `:path`  | directory of the source file     | Absolute path to the kit root. Skills are loaded from `<path>/skills/` and AGENT.md from `<path>/AGENT.md`. |
+| `:name`  | last module segment, underscored | Override the inferred kit name. |
+
+```elixir
+use SkillKit.Kit, name: "files", path: "/abs/path/to/kit"
+```
+
+### Compile-time loading
+
+All `SKILL.md` and `AGENT.md` files are read and parsed during compilation.
+Parsed structs are stored as module attributes and served from memory at
+runtime. Each file is registered as an `@external_resource`, so the module
+recompiles automatically when any skill or agent file changes during
+development.
+
+### `agent_definition/0`
+
+Kit modules expose an `agent_definition/0` function that returns the parsed
+`%SkillKit.Agent{}` from the kit's `AGENT.md`, or `nil` if no
+agent file exists. This is useful for passing a kit's agent definition
+directly to `SkillKit.start_agent/2`:
+
+```elixir
+definition = MyApp.FilesKit.agent_definition()
+{:ok, agent} = SkillKit.start_agent(definition, caller: self())
+```
+
+### Generated callbacks
+
+The macro generates default implementations for `definition/0`, `resume/3`,
+`load_kits/1`, `list_kits/1`, `get_kit/2`, and `agent_definition/0`. All are
+overridable. You must supply `execute/1`.
 
 ---
 
