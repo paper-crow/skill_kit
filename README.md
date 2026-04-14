@@ -230,7 +230,7 @@ drops any key that doesn't return `{:ok, value}` from the child's
 environment.
 
 Every `fetch/3` call emits a `[:skill_kit, :credential, :fetch]` telemetry
-event with `key`, `tool`, `agent_id`, `scope`, and `outcome` metadata —
+event with `key`, `tool`, `agent`, `scope`, and `outcome` metadata —
 values are never included. Attach a handler for audit logging.
 
 Without a configured provider, the `SkillKit.CredentialProvider` module

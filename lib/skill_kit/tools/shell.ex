@@ -142,7 +142,7 @@ defmodule SkillKit.Tools.Shell do
       %{
         key: key,
         tool: __MODULE__,
-        agent_id: agent.name,
+        agent: agent.name,
         scope: agent.scope,
         outcome: outcome(result)
       }

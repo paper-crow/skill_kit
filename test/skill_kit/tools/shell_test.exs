@@ -315,7 +315,7 @@ defmodule SkillKit.Tools.ShellTest do
       assert measurements.duration_us >= 0
       assert meta.key == "GITHUB_TOKEN"
       assert meta.tool == SkillKit.Tools.Shell
-      assert meta.agent_id == "test"
+      assert meta.agent == "test"
       assert meta.scope == :test_scope
       assert meta.outcome == :ok
       refute Map.has_key?(meta, :value)
