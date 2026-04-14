@@ -270,6 +270,78 @@ defmodule SkillKit.Tools.ShellTest do
     end
   end
 
+  describe "telemetry" do
+    setup do
+      test_pid = self()
+
+      handler_id = "shell-credential-test-#{:erlang.unique_integer([:positive])}"
+
+      handler = fn event, measurements, metadata, _config ->
+        send(test_pid, {:telemetry, event, measurements, metadata})
+      end
+
+      :telemetry.attach(handler_id, [:skill_kit, :credential, :fetch], handler, nil)
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      :ok
+    end
+
+    test "emits :ok outcome for successful fetches" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["GITHUB_TOKEN"] end)
+
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "GITHUB_TOKEN" ->
+        {:ok, "value"}
+      end)
+
+      assert {:ok, _} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "true"},
+                 context: %{agent: agent}
+               })
+
+      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], measurements, meta}
+      assert is_integer(measurements.duration_us)
+      assert meta.key == "GITHUB_TOKEN"
+      assert meta.tool == SkillKit.Tools.Shell
+      assert meta.agent_id == "test"
+      assert meta.outcome == :ok
+      refute Map.has_key?(meta, :value)
+    end
+
+    test "emits :empty outcome when provider returns {:ok, nil}" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["MISSING"] end)
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "MISSING" -> {:ok, nil} end)
+
+      assert {:ok, _} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "true"},
+                 context: %{agent: agent}
+               })
+
+      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, %{outcome: :empty}}
+    end
+
+    test "emits :error outcome when provider returns :error" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["BROKEN"] end)
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "BROKEN" -> :error end)
+
+      assert {:ok, _} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "true"},
+                 context: %{agent: agent}
+               })
+
+      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, %{outcome: :error}}
+    end
+  end
+
   describe "load_kits/1 (Backend)" do
     test "returns a kit named shell" do
       assert {:ok, [kit]} = Shell.load_kits([])

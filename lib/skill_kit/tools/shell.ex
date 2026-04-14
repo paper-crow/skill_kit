@@ -124,12 +124,36 @@ defmodule SkillKit.Tools.Shell do
   defp fetch_credentials(_context), do: %{}
 
   defp maybe_put_credential(key, acc, provider, agent) do
-    case apply(provider, :fetch, [__MODULE__, agent, key]) do
+    case fetch_one(provider, agent, key) do
       {:ok, value} when is_binary(value) -> Map.put(acc, key, value)
       {:ok, nil} -> acc
       :error -> acc
     end
   end
+
+  defp fetch_one(provider, agent, key) do
+    start = System.monotonic_time(:microsecond)
+    result = apply(provider, :fetch, [__MODULE__, agent, key])
+    duration_us = System.monotonic_time(:microsecond) - start
+
+    SkillKit.Telemetry.event(
+      [:credential, :fetch],
+      %{duration_us: duration_us},
+      %{
+        key: key,
+        tool: __MODULE__,
+        agent_id: agent.name,
+        scope: agent.scope,
+        outcome: outcome(result)
+      }
+    )
+
+    result
+  end
+
+  defp outcome({:ok, value}) when is_binary(value), do: :ok
+  defp outcome({:ok, nil}), do: :empty
+  defp outcome(:error), do: :error
 
   defp format_env_pair({key, value}), do: "#{key}=#{value}"
 
