@@ -105,8 +105,10 @@ defmodule SkillKit.Tools.Shell do
     config_env = Map.get(context, :env, %{})
     env_map = Map.merge(base, config_env)
 
-    ["-i"] ++ Enum.map(env_map, fn {k, v} -> "#{k}=#{v}" end)
+    ["-i"] ++ Enum.map(env_map, &format_env_pair/1)
   end
+
+  defp format_env_pair({key, value}), do: "#{key}=#{value}"
 
   defp cwd_opt(%{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd}]
   defp cwd_opt(_context), do: [{:cd, File.cwd!()}]

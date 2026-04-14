@@ -111,7 +111,7 @@ defmodule SkillKit.Tools.ShellTest do
                  context: %{agent: test_agent()}
                })
 
-      assert String.trim(output) == System.get_env("HOME")
+      assert String.trim(output) == (System.get_env("HOME") || "")
     end
 
     test "tool-config :env map is injected into the child env" do
