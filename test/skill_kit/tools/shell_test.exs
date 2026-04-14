@@ -22,7 +22,7 @@ defmodule SkillKit.Tools.ShellTest do
   end
 
   defp test_agent do
-    %SkillKit.Agent{name: "test", description: "t", system_prompt: "s"}
+    %SkillKit.Agent{name: "test", description: "t", system_prompt: "s", scope: :test_scope}
   end
 
   defp restore_credential_provider(nil),
@@ -303,10 +303,11 @@ defmodule SkillKit.Tools.ShellTest do
                })
 
       assert_receive {:telemetry, [:skill_kit, :credential, :fetch], measurements, meta}
-      assert is_integer(measurements.duration_us)
+      assert measurements.duration_us >= 0
       assert meta.key == "GITHUB_TOKEN"
       assert meta.tool == SkillKit.Tools.Shell
       assert meta.agent_id == "test"
+      assert meta.scope == :test_scope
       assert meta.outcome == :ok
       refute Map.has_key?(meta, :value)
     end
@@ -323,7 +324,9 @@ defmodule SkillKit.Tools.ShellTest do
                  context: %{agent: agent}
                })
 
-      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, %{outcome: :empty}}
+      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, meta}
+      assert meta.outcome == :empty
+      refute Map.has_key?(meta, :value)
     end
 
     test "emits :error outcome when provider returns :error" do
@@ -338,7 +341,9 @@ defmodule SkillKit.Tools.ShellTest do
                  context: %{agent: agent}
                })
 
-      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, %{outcome: :error}}
+      assert_receive {:telemetry, [:skill_kit, :credential, :fetch], _m, meta}
+      assert meta.outcome == :error
+      refute Map.has_key?(meta, :value)
     end
   end
 
