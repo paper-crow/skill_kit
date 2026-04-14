@@ -9,6 +9,15 @@ defmodule SkillKit.Tools.ShellTest do
 
   setup :verify_on_exit!
 
+  setup_all do
+    original = Application.get_env(:skill_kit, :credential_provider)
+    Application.put_env(:skill_kit, :credential_provider, SkillKit.CredentialProvider.Mock)
+
+    on_exit(fn -> restore_credential_provider(original) end)
+
+    :ok
+  end
+
   setup do
     # Default credential provider to a no-op so pre-credential-era tests
     # don't need to know about the provider. Individual tests override via
