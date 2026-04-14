@@ -27,8 +27,8 @@ defmodule SkillKit.Tools.Shell do
 
     1. Hardcoded base: `PATH=/usr/bin:/bin` and `HOME` copied from BEAM.
     2. The tool-config `:env` map (non-secret ambient vars).
-    3. Credentials returned by the configured `SkillKit.CredentialProvider`
-       (integrated in a later task). Credentials win on key collision.
+    3. Credentials returned by the configured `SkillKit.CredentialProvider`.
+       Credentials win on key collision.
 
   BEAM's own environment (including `ANTHROPIC_API_KEY` and anything else
   the host app has set) does not leak into the child.
@@ -118,12 +118,12 @@ defmodule SkillKit.Tools.Shell do
 
     provider
     |> apply(:list, [__MODULE__, agent])
-    |> Enum.reduce(%{}, &maybe_put_credential(&2, provider, agent, &1))
+    |> Enum.reduce(%{}, &maybe_put_credential(&1, &2, provider, agent))
   end
 
   defp fetch_credentials(_context), do: %{}
 
-  defp maybe_put_credential(acc, provider, agent, key) do
+  defp maybe_put_credential(key, acc, provider, agent) do
     case apply(provider, :fetch, [__MODULE__, agent, key]) do
       {:ok, value} when is_binary(value) -> Map.put(acc, key, value)
       {:ok, nil} -> acc

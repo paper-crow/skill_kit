@@ -10,8 +10,13 @@ defmodule SkillKit.Tools.ShellTest do
   setup :verify_on_exit!
 
   setup do
+    # Default credential provider to a no-op so pre-credential-era tests
+    # don't need to know about the provider. Individual tests override via
+    # expect/3.
     stub(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> [] end)
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, _ -> {:ok, nil} end)
+
+    # Storage.Memory is required by Shell's execution path.
     start_supervised!(Storage.Memory)
     :ok
   end
@@ -19,6 +24,12 @@ defmodule SkillKit.Tools.ShellTest do
   defp test_agent do
     %SkillKit.Agent{name: "test", description: "t", system_prompt: "s"}
   end
+
+  defp restore_credential_provider(nil),
+    do: Application.delete_env(:skill_kit, :credential_provider)
+
+  defp restore_credential_provider(val),
+    do: Application.put_env(:skill_kit, :credential_provider, val)
 
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do
@@ -234,7 +245,7 @@ defmodule SkillKit.Tools.ShellTest do
       original = Application.get_env(:skill_kit, :credential_provider)
       Application.put_env(:skill_kit, :credential_provider, SkillKit.CredentialProvider)
 
-      on_exit(fn -> Application.put_env(:skill_kit, :credential_provider, original) end)
+      on_exit(fn -> restore_credential_provider(original) end)
 
       assert {:ok, output} =
                Shell.execute(%ToolExecution{
