@@ -1,11 +1,17 @@
 defmodule SkillKit.Tools.ShellTest do
   use ExUnit.Case, async: false
 
+  import Mox
+
   alias SkillKit.Storage
   alias SkillKit.ToolExecution
   alias SkillKit.Tools.Shell
 
+  setup :verify_on_exit!
+
   setup do
+    stub(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> [] end)
+    stub(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, _ -> {:ok, nil} end)
     start_supervised!(Storage.Memory)
     :ok
   end
@@ -147,6 +153,109 @@ defmodule SkillKit.Tools.ShellTest do
                })
 
       assert String.trim(output) == "works from #{resolved_tmp}"
+    end
+  end
+
+  describe "execute/1 with CredentialProvider integration" do
+    test "injects credentials returned by the provider" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn SkillKit.Tools.Shell, ^agent ->
+        ["GITHUB_TOKEN"]
+      end)
+
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn
+        SkillKit.Tools.Shell, ^agent, "GITHUB_TOKEN" -> {:ok, "ghp_secret"}
+      end)
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo $GITHUB_TOKEN"},
+                 context: %{agent: agent}
+               })
+
+      assert String.trim(output) == "ghp_secret"
+    end
+
+    test "{:ok, nil} from provider drops the key from env" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["MISSING_KEY"] end)
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "MISSING_KEY" -> {:ok, nil} end)
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo ${MISSING_KEY:-absent}"},
+                 context: %{agent: agent}
+               })
+
+      assert String.trim(output) == "absent"
+    end
+
+    test ":error from provider drops the key from env" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["BROKEN_KEY"] end)
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "BROKEN_KEY" -> :error end)
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo ${BROKEN_KEY:-absent}"},
+                 context: %{agent: agent}
+               })
+
+      assert String.trim(output) == "absent"
+    end
+
+    test "credentials take precedence over tool-config env on key collision" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> ["GITHUB_TOKEN"] end)
+
+      expect(SkillKit.CredentialProvider.Mock, :fetch, fn _, _, "GITHUB_TOKEN" ->
+        {:ok, "from_provider"}
+      end)
+
+      context = %{
+        env: %{"GITHUB_TOKEN" => "from_config"},
+        agent: agent
+      }
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo $GITHUB_TOKEN"},
+                 context: context
+               })
+
+      assert String.trim(output) == "from_provider"
+    end
+
+    test "null default provider injects nothing" do
+      original = Application.get_env(:skill_kit, :credential_provider)
+      Application.put_env(:skill_kit, :credential_provider, SkillKit.CredentialProvider)
+
+      on_exit(fn -> Application.put_env(:skill_kit, :credential_provider, original) end)
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo ${GITHUB_TOKEN:-absent}"},
+                 context: %{agent: test_agent()}
+               })
+
+      assert String.trim(output) == "absent"
+    end
+
+    test "provider is not called when list/2 returns []" do
+      agent = test_agent()
+
+      expect(SkillKit.CredentialProvider.Mock, :list, fn _, _ -> [] end)
+      # No expect/stub for :fetch — if Shell calls it, Mox fails the test.
+
+      assert {:ok, _} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "true"},
+                 context: %{agent: agent}
+               })
     end
   end
 

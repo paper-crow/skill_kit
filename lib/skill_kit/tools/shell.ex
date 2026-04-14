@@ -103,9 +103,32 @@ defmodule SkillKit.Tools.Shell do
     }
 
     config_env = Map.get(context, :env, %{})
-    env_map = Map.merge(base, config_env)
+    creds = fetch_credentials(context)
+
+    env_map =
+      base
+      |> Map.merge(config_env)
+      |> Map.merge(creds)
 
     ["-i"] ++ Enum.map(env_map, &format_env_pair/1)
+  end
+
+  defp fetch_credentials(%{agent: agent}) do
+    provider = Application.get_env(:skill_kit, :credential_provider, SkillKit.CredentialProvider)
+
+    provider
+    |> apply(:list, [__MODULE__, agent])
+    |> Enum.reduce(%{}, &maybe_put_credential(&2, provider, agent, &1))
+  end
+
+  defp fetch_credentials(_context), do: %{}
+
+  defp maybe_put_credential(acc, provider, agent, key) do
+    case apply(provider, :fetch, [__MODULE__, agent, key]) do
+      {:ok, value} when is_binary(value) -> Map.put(acc, key, value)
+      {:ok, nil} -> acc
+      :error -> acc
+    end
   end
 
   defp format_env_pair({key, value}), do: "#{key}=#{value}"
