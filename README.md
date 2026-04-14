@@ -185,6 +185,58 @@ config :skill_kit, SkillKit.LLM,
   default_provider: :anthropic
 ```
 
+## Credentials
+
+`SkillKit.Tools.Shell` runs commands in a hermetic child environment
+(`env -i`) so arbitrary BEAM env vars do not leak into LLM-driven shell
+sessions. To expose secrets to the shell, implement a
+`SkillKit.CredentialProvider` and configure it:
+
+```elixir
+# config/config.exs
+config :skill_kit, credential_provider: MyApp.Credentials
+```
+
+```elixir
+# lib/my_app/credentials.ex
+defmodule MyApp.Credentials do
+  @behaviour SkillKit.CredentialProvider
+
+  @allowlist %{
+    "GITHUB_TOKEN" => "GITHUB_PAT",
+    "NPM_TOKEN" => "NPM_PUBLISH_TOKEN"
+  }
+
+  @impl true
+  def list(SkillKit.Tools.Shell, _agent), do: Map.keys(@allowlist)
+  def list(_tool, _agent), do: []
+
+  @impl true
+  def fetch(SkillKit.Tools.Shell, _agent, key) do
+    case Map.fetch(@allowlist, key) do
+      {:ok, env_var} -> {:ok, System.get_env(env_var)}
+      :error -> {:ok, nil}
+    end
+  end
+
+  def fetch(_tool, _agent, _key), do: {:ok, nil}
+end
+```
+
+The agent struct is passed to every call so implementations can gate
+access on `agent.scope` or any other field. Return `{:ok, nil}` to deny
+a key cleanly, or `:error` to signal provider failure. `Tools.Shell`
+drops any key that doesn't return `{:ok, value}` from the child's
+environment.
+
+Every `fetch/3` call emits a `[:skill_kit, :credential, :fetch]` telemetry
+event with `key`, `tool`, `agent_id`, `scope`, and `outcome` metadata —
+values are never included. Attach a handler for audit logging.
+
+Without a configured provider, the `SkillKit.CredentialProvider` module
+itself acts as a null provider — `Tools.Shell` runs with only `PATH` and
+`HOME` in the child environment, no credentials.
+
 ## Telemetry
 
 SkillKit emits [`:telemetry`](https://hexdocs.pm/telemetry) events for
