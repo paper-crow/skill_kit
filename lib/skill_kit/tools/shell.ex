@@ -1,12 +1,13 @@
 defmodule SkillKit.Tools.Shell do
   @moduledoc """
-  Shell tool — provides bash command execution.
+  Shell tool — provides bash command execution in a hermetic child
+  environment.
 
   Registered through `skills:` like any other kit:
 
       SkillKit.start_agent(
         skills: [
-          {SkillKit.Tools.Shell, cwd: File.cwd!()},
+          {SkillKit.Tools.Shell, cwd: File.cwd!(), env: %{"LANG" => "en_US.UTF-8"}},
           {SkillKit.Kit.Local, dir: ".skills"}
         ]
       )
@@ -14,12 +15,30 @@ defmodule SkillKit.Tools.Shell do
   ## Options
 
     * `:cwd` — working directory for commands (default: `File.cwd!()`)
-    * `:env` — list of `{key, value}` environment variables
+    * `:env` — map of non-secret ambient env vars to inject into the child
+      process (`%{"LANG" => "en_US.UTF-8"}`). NOT a secret channel — use
+      `SkillKit.CredentialProvider` for secrets.
+
+  ## Hermetic execution
+
+  Commands run under `/usr/bin/env -i`, which starts the child with an
+  empty environment. SkillKit then sets exactly what the child should
+  see, in this order:
+
+    1. Hardcoded base: `PATH=/usr/bin:/bin` and `HOME` copied from BEAM.
+    2. The tool-config `:env` map (non-secret ambient vars).
+    3. Credentials returned by the configured `SkillKit.CredentialProvider`
+       (integrated in a later task). Credentials win on key collision.
+
+  BEAM's own environment (including `ANTHROPIC_API_KEY` and anything else
+  the host app has set) does not leak into the child.
   """
 
   use SkillKit.Kit, name: "shell"
 
   alias SkillKit.ToolExecution
+
+  @env_executable "/usr/bin/env"
 
   @impl SkillKit.Kit.Provider
   def load_kits(config) do
@@ -30,12 +49,13 @@ defmodule SkillKit.Tools.Shell do
 
   @impl SkillKit.Tool
   def execute(%ToolExecution{input: %{"command" => command}, context: context}) do
-    opts = [:binary, :exit_status, :stderr_to_stdout] ++ port_opts(context)
+    env_args = build_env_args(context)
+    port_opts = [:binary, :exit_status, :stderr_to_stdout] ++ cwd_opt(context)
 
     port =
       Port.open(
-        {:spawn_executable, System.find_executable("sh")},
-        [args: ["-c", command]] ++ opts
+        {:spawn_executable, @env_executable},
+        [args: env_args ++ ["sh", "-c", command]] ++ port_opts
       )
 
     collect(port, [])
@@ -75,25 +95,21 @@ defmodule SkillKit.Tools.Shell do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  defp port_opts(context) do
-    []
-    |> maybe_add_cd(context)
-    |> maybe_add_env(context)
+  # Builds the ["-i", "KEY=VAL", ...] arg list passed to /usr/bin/env.
+  defp build_env_args(context) do
+    base = %{
+      "PATH" => "/usr/bin:/bin",
+      "HOME" => System.get_env("HOME") || ""
+    }
+
+    config_env = Map.get(context, :env, %{})
+    env_map = Map.merge(base, config_env)
+
+    ["-i"] ++ Enum.map(env_map, fn {k, v} -> "#{k}=#{v}" end)
   end
 
-  defp maybe_add_cd(opts, %{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd} | opts]
-  defp maybe_add_cd(opts, _context), do: [{:cd, File.cwd!()} | opts]
-
-  defp maybe_add_env(opts, %{env: env}) when is_list(env) do
-    merged =
-      System.get_env()
-      |> Map.merge(Map.new(env))
-      |> Enum.map(fn {k, v} -> {String.to_charlist(k), String.to_charlist(v)} end)
-
-    [{:env, merged} | opts]
-  end
-
-  defp maybe_add_env(opts, _context), do: opts
+  defp cwd_opt(%{cwd: cwd}) when is_binary(cwd), do: [{:cd, cwd}]
+  defp cwd_opt(_context), do: [{:cd, File.cwd!()}]
 
   defp collect(port, acc) do
     receive do

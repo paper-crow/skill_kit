@@ -10,15 +10,25 @@ defmodule SkillKit.Tools.ShellTest do
     :ok
   end
 
+  defp test_agent do
+    %SkillKit.Agent{name: "test", description: "t", system_prompt: "s"}
+  end
+
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do
       assert {:ok, "hello\n"} =
-               Shell.execute(%ToolExecution{input: %{"command" => "echo hello"}, context: %{}})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo hello"},
+                 context: %{agent: test_agent()}
+               })
     end
 
     test "returns {:error, {output, exit_code}} for failing command" do
       assert {:error, {_output, exit_code}} =
-               Shell.execute(%ToolExecution{input: %{"command" => "exit 1"}, context: %{}})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "exit 1"},
+                 context: %{agent: test_agent()}
+               })
 
       assert exit_code != 0
     end
@@ -27,7 +37,7 @@ defmodule SkillKit.Tools.ShellTest do
       assert {:ok, output} =
                Shell.execute(%ToolExecution{
                  input: %{"command" => "echo hello world"},
-                 context: %{}
+                 context: %{agent: test_agent()}
                })
 
       assert String.trim(output) == "hello world"
@@ -37,7 +47,7 @@ defmodule SkillKit.Tools.ShellTest do
       assert {:ok, output} =
                Shell.execute(%ToolExecution{
                  input: %{"command" => "echo out && echo err >&2"},
-                 context: %{}
+                 context: %{agent: test_agent()}
                })
 
       assert String.contains?(output, "out")
@@ -48,58 +58,86 @@ defmodule SkillKit.Tools.ShellTest do
   describe "execute/1 with context options" do
     test "runs command in specified working directory" do
       tmp = System.tmp_dir!() |> String.trim_trailing("/")
-      # Resolve any symlinks (e.g. macOS /var -> /private/var) so comparison works
       {resolved_tmp, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved_tmp)
 
       assert {:ok, output} =
-               Shell.execute(%ToolExecution{input: %{"command" => "pwd"}, context: %{cwd: tmp}})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "pwd"},
+                 context: %{cwd: tmp, agent: test_agent()}
+               })
 
       assert String.trim(output) == resolved_tmp
     end
 
     test "inherits BEAM cwd when :cwd not in context" do
       assert {:ok, output} =
-               Shell.execute(%ToolExecution{input: %{"command" => "pwd"}, context: %{}})
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "pwd"},
+                 context: %{agent: test_agent()}
+               })
 
-      # Should succeed — just proves it doesn't crash without :cwd
       assert is_binary(output)
     end
 
-    test "passes environment variables to the command" do
-      context = %{env: [{"SKILL_KIT_TEST_VAR", "hello_from_skill"}]}
+    test "child env does NOT inherit arbitrary BEAM env vars" do
+      System.put_env("SKILL_KIT_LEAK_TEST", "should_not_appear")
 
       assert {:ok, output} =
                Shell.execute(%ToolExecution{
-                 input: %{"command" => "echo $SKILL_KIT_TEST_VAR"},
-                 context: context
+                 input: %{"command" => "echo ${SKILL_KIT_LEAK_TEST:-absent}"},
+                 context: %{agent: test_agent()}
                })
 
-      assert String.trim(output) == "hello_from_skill"
+      assert String.trim(output) == "absent"
+    after
+      System.delete_env("SKILL_KIT_LEAK_TEST")
     end
 
-    test "preserves existing environment when adding vars" do
-      context = %{env: [{"SKILL_KIT_EXTRA", "extra"}]}
+    test "child env includes hardcoded PATH" do
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo $PATH"},
+                 context: %{agent: test_agent()}
+               })
 
+      assert String.trim(output) == "/usr/bin:/bin"
+    end
+
+    test "child env includes HOME copied from parent" do
       assert {:ok, output} =
                Shell.execute(%ToolExecution{
                  input: %{"command" => "echo $HOME"},
+                 context: %{agent: test_agent()}
+               })
+
+      assert String.trim(output) == System.get_env("HOME")
+    end
+
+    test "tool-config :env map is injected into the child env" do
+      context = %{
+        env: %{"LANG" => "en_US.UTF-8", "PROJECT_DIR" => "/tmp/work"},
+        agent: test_agent()
+      }
+
+      assert {:ok, output} =
+               Shell.execute(%ToolExecution{
+                 input: %{"command" => "echo $LANG $PROJECT_DIR"},
                  context: context
                })
 
-      # HOME should still be set — env merges, not replaces
-      assert String.trim(output) == System.get_env("HOME")
+      assert String.trim(output) == "en_US.UTF-8 /tmp/work"
     end
 
     test "supports cwd and env together" do
       tmp = System.tmp_dir!()
-      # Resolve any symlinks (e.g. macOS /var -> /private/var) so comparison works
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
 
       context = %{
         cwd: tmp,
-        env: [{"SKILL_KIT_COMBO", "works"}]
+        env: %{"SKILL_KIT_COMBO" => "works"},
+        agent: test_agent()
       }
 
       assert {:ok, output} =
@@ -124,19 +162,26 @@ defmodule SkillKit.Tools.ShellTest do
     end
 
     test "stores env in metadata when provided" do
-      assert {:ok, [kit]} = Shell.load_kits(env: [{"FOO", "bar"}])
-      assert kit.metadata.env == [{"FOO", "bar"}]
+      assert {:ok, [kit]} = Shell.load_kits(env: %{"FOO" => "bar"})
+      assert kit.metadata.env == %{"FOO" => "bar"}
     end
   end
 
   describe "resume/3" do
     test "delegates to execute/1 on approval" do
-      exec = %ToolExecution{input: %{"command" => "echo resumed"}, context: %{}}
+      exec = %ToolExecution{
+        input: %{"command" => "echo resumed"},
+        context: %{agent: test_agent()}
+      }
+
       assert {:ok, "resumed\n"} = Shell.resume(exec, %{}, :approved)
     end
 
     test "returns denial error on {:denied, reason}" do
-      exec = %ToolExecution{input: %{"command" => "echo nope"}, context: %{}}
+      exec = %ToolExecution{
+        input: %{"command" => "echo nope"},
+        context: %{agent: test_agent()}
+      }
 
       assert {:error, {:denied, "not allowed"}} =
                Shell.resume(exec, %{}, {:denied, "not allowed"})
@@ -144,10 +189,14 @@ defmodule SkillKit.Tools.ShellTest do
 
     test "resume with :approved respects cwd in context" do
       tmp = System.tmp_dir!()
-      # Resolve symlinks for macOS
       {resolved, 0} = System.cmd("sh", ["-c", "cd '#{tmp}' && pwd -P"])
       resolved_tmp = String.trim(resolved)
-      exec = %ToolExecution{input: %{"command" => "pwd"}, context: %{cwd: tmp}}
+
+      exec = %ToolExecution{
+        input: %{"command" => "pwd"},
+        context: %{cwd: tmp, agent: test_agent()}
+      }
+
       assert {:ok, output} = Shell.resume(exec, %{}, :approved)
       assert String.trim(output) == resolved_tmp
     end
