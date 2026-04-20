@@ -77,72 +77,28 @@ Implement `execute/1`, optionally override `resume/3` and `definition/0`.
 add an event ingress layer to SkillKit.
 
 The adapter (a Plug, a `GenServer`, a `Task`, a Broadway pipeline) lives in
-the host application or a companion package. It owns its own process tree.
-When an event arrives, it resolves an `AgentRef` and dispatches. The agent
-is the brain; the adapter is the nervous system.
+the host application or a companion package. It owns its own process tree
+and — if durability matters — its own persistence. When an event arrives,
+the adapter resolves an `AgentRef`, renders a prompt from the event
+payload, and dispatches via `send_message/2`. The agent is the brain; the
+adapter is the nervous system.
 
-**Worked example: webhook adapter (no framework changes).**
+Keep two concerns separate:
 
-```elixir
-# In the host app (or a companion package like skill_kit_web):
+1. **Agent discovery.** The adapter needs to map some stable identifier
+   (agent name, tenant id, URL segment) to a live `AgentRef` at event
+   time. That mapping is adapter-internal state. It may require its own
+   process, its own ETS table, or its own persistence — none of which
+   belong in SkillKit.
+2. **Event-to-target binding.** How an inbound event chooses which
+   agent, skill, or prompt to invoke is also adapter state. It may need
+   to outlive any single agent process.
 
-defmodule MyApp.WebhookPlug do
-  @behaviour Plug
-  import Plug.Conn
-
-  def init(opts), do: opts
-
-  def call(%Plug.Conn{path_info: [id]} = conn, _opts) do
-    case MyApp.WebhookRegistry.lookup(id) do
-      {:ok, %{agent_name: name, registry: reg, prompt: prompt}} ->
-        payload = read_payload(conn)
-        rendered = render(prompt, payload)
-
-        case Registry.lookup(reg, {name, :mailbox}) do
-          [{pid, _}] ->
-            GenServer.cast(pid, {:message, %SkillKit.Types.UserMessage{content: rendered}})
-            send_resp(conn, 202, "")
-          [] ->
-            send_resp(conn, 503, "agent not running")
-        end
-
-      :error ->
-        send_resp(conn, 404, "")
-    end
-  end
-end
-```
-
-And a kit-side tool that registers on activation:
-
-```elixir
-defmodule MyApp.Skills.Webhooks do
-  use SkillKit.Kit, name: "webhooks"
-
-  @impl SkillKit.Tool
-  def execute(%SkillKit.ToolExecution{input: input, context: ctx}) do
-    id = MyApp.WebhookRegistry.register(%{
-      agent_name: ctx.agent_name,
-      registry:   ctx.registry,
-      prompt:     input["prompt"]
-    })
-    {:ok, "Webhook URL: #{MyApp.WebhookRegistry.url_for(id)}"}
-  end
-end
-```
-
-Notes on this pattern:
-- Registration is keyed by agent name. If the agent isn't running when a
-  request arrives, the adapter returns 503. That is the contract.
-- The kit does not touch `%Skill{}`, `%Agent{}`, `Catalog`, or any private
-  internals. It only uses `ToolExecution.context` and the public registry
-  atom in the `AgentRef`.
-- Durability, if needed, belongs in the host-side registry (not in
-  SkillKit).
-- The `agent_name` and `registry` arrive through `context`. Populate
-  context from the agent struct in your kit's `execute/1` wrapper or
-  from the `%ToolExecution{}` passed in — they're already there via the
-  agent's Server state.
+If the adapter needs to expose a registration API to agents (e.g. a
+skill that subscribes the calling agent to a stream), ship it as a kit
+with a `Tool` whose `execute/1` mutates the adapter's state. Skills then
+drive registration through ordinary activation; no new SkillKit public
+API is required.
 
 ### Q4. Does the feature gate an existing action (tool use, subagent, skill activation, conversation save, LLM request)?
 → **Declare a hook in a skill's frontmatter.** Do not hardcode new gate
