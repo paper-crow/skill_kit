@@ -9,9 +9,15 @@ defmodule SkillKit.AgentRef do
   @type t :: %__MODULE__{
           name: String.t(),
           registry: atom(),
-          supervisor_pid: pid()
+          supervisor_pid: pid() | nil
         }
 
   @enforce_keys [:name, :registry, :supervisor_pid]
   defstruct [:name, :registry, :supervisor_pid]
+
+  @doc "Builds an `AgentRef` from an `%Agent{}` struct (registry already set)."
+  @spec from_agent(SkillKit.Agent.t()) :: t()
+  def from_agent(%SkillKit.Agent{name: name, registry: registry}) do
+    %__MODULE__{name: name, registry: registry, supervisor_pid: nil}
+  end
 end
