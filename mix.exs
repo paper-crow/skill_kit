@@ -44,6 +44,8 @@ defmodule SkillKit.MixProject do
       {:stream_data, "~> 1.2", only: [:dev, :test]},
       {:req, "~> 0.5"},
       {:telemetry, "~> 1.0"},
+      {:plug, "~> 1.16"},
+      {:jason, "~> 1.4"},
       {:mox, "~> 1.2", only: :test},
       {:bypass, "~> 2.1", only: :test}
     ]
