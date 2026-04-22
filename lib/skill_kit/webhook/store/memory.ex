@@ -1,18 +1,9 @@
 defmodule SkillKit.Webhook.Store.Memory do
   @moduledoc false
   @behaviour SkillKit.Webhook.Store
+  use Agent
 
   def start_link(opts), do: Agent.start_link(fn -> %{} end, opts)
-
-  def child_spec(opts) do
-    %{
-      id: __MODULE__,
-      start: {__MODULE__, :start_link, [opts]},
-      type: :worker,
-      restart: :permanent,
-      shutdown: 500
-    }
-  end
 
   @impl true
   def put(_config, _webhook), do: :ok
