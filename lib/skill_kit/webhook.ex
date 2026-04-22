@@ -25,4 +25,6 @@ defmodule SkillKit.Webhook do
 
   @enforce_keys [:id, :agent_name, :prompt, :verifier, :inserted_at]
   defstruct [:id, :agent_name, :prompt, :verifier, :idempotency, :inserted_at]
+
+  defdelegate child_spec(opts), to: SkillKit.Webhook.Supervisor
 end
