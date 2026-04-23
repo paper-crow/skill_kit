@@ -35,7 +35,15 @@ defmodule SkillKit.Webhook.Plug do
 
   @impl true
   def call(%Plug.Conn{path_info: [id]} = conn, opts) do
-    dispatch_outcome(resolve(conn, id, opts), conn, opts)
+    SkillKit.Telemetry.span(
+      [:webhook, :request],
+      %{id: id},
+      fn ->
+        result = resolve(conn, id, opts)
+        final_conn = dispatch_outcome(result, conn, opts)
+        {final_conn, %{outcome: request_outcome(result), status: final_conn.status}}
+      end
+    )
   end
 
   def call(%Plug.Conn{} = conn, _opts) do
@@ -104,6 +112,11 @@ defmodule SkillKit.Webhook.Plug do
   defp dispatch_outcome({:handshake, conn}, _conn, _opts), do: conn
 
   # -- Helpers --------------------------------------------------------------
+
+  defp request_outcome({:ok, _, _, _}), do: :dispatched
+  defp request_outcome({:error, reason}), do: reason
+  defp request_outcome(:duplicate), do: :duplicate
+  defp request_outcome({:handshake, _conn}), do: :handshake
 
   defp registry_name(opts),
     do: WebhookSupervisor.registry_name(Keyword.fetch!(opts, :supervisor))

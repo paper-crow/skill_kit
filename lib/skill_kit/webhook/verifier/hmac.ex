@@ -27,7 +27,14 @@ defmodule SkillKit.Webhook.Verifier.Hmac do
   @impl true
   def verify(raw_body, conn, config, %SkAgent{} = agent)
       when is_binary(raw_body) and is_map(config) do
-    check(raw_body, conn, config, agent)
+    SkillKit.Telemetry.span(
+      [:webhook, :verification],
+      %{verifier_mod: __MODULE__},
+      fn ->
+        result = check(raw_body, conn, config, agent)
+        {result, %{outcome: verification_outcome(result)}}
+      end
+    )
   end
 
   defp check(raw_body, conn, config, agent) do
@@ -108,4 +115,8 @@ defmodule SkillKit.Webhook.Verifier.Hmac do
 
   defp ok_or_invalid(true), do: :ok
   defp ok_or_invalid(false), do: {:error, :invalid_signature}
+
+  defp verification_outcome(:ok), do: :ok
+  defp verification_outcome({:error, reason}), do: reason
+  defp verification_outcome({:handshake, _conn}), do: :handshake
 end
