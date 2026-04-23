@@ -5,6 +5,18 @@ defmodule Mix.Tasks.SkillKit.Chat do
       mix skill_kit.chat            # select agent interactively
       mix skill_kit.chat neve       # start specific agent
       mix skill_kit.chat researcher
+
+  ## Webhook dev server
+
+  Each chat session starts `SkillKit.Webhook` and an HTTP listener on
+  `SKILL_KIT_WEBHOOK_PORT` (default 4001). Agents loaded with the
+  `SkillKit.Tools.Webhook` kit can register endpoints through the
+  `webhook:register` skill:
+
+      you> add a webhook with verifier type "none" that echoes the body
+      agent> Webhook registered. URL: http://localhost:4001/<id>
+      $ curl -d "hi" http://localhost:4001/<id>
+      # agent receives "hi" as a user message and responds in the chat.
   """
 
   use Mix.Task
@@ -18,12 +30,15 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   @shortdoc "Start an interactive agent chat session"
 
+  @default_webhook_port 4001
+
   @impl true
   def run(args) do
     Mix.Task.run("app.start")
 
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
+    webhook_port = webhook_port()
 
     agent_name =
       case args do
@@ -41,15 +56,52 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
     {:ok, definition} = Agent.parse(agent_md)
 
+    {:ok, webhook_sup} = SkillKit.Webhook.Supervisor.start_link([])
+    {:ok, http_sup} = start_webhook_server(webhook_port)
+    configure_webhook_base_url(webhook_port)
+
+    {:ok, printer} = Task.start_link(fn -> printer_loop(definition.name) end)
+
     {:ok, agent} =
       SkillKit.start_agent(definition,
         skills: [
           {SkillKit.Kit.Local, dir: skills_dir},
-          {SkillKit.Tools.Shell, []}
+          {SkillKit.Tools.Shell, []},
+          {SkillKit.Tools.Webhook, []}
         ],
-        caller: self()
+        caller: printer
       )
 
+    print_banner(definition, webhook_port)
+
+    chat_loop(agent, definition.name)
+
+    SkillKit.stop_agent(agent)
+    Process.exit(printer, :shutdown)
+    Process.exit(http_sup, :shutdown)
+    Process.exit(webhook_sup, :shutdown)
+  end
+
+  defp webhook_port do
+    case System.get_env("SKILL_KIT_WEBHOOK_PORT") do
+      nil ->
+        @default_webhook_port
+
+      raw ->
+        {port, ""} = Integer.parse(raw)
+        port
+    end
+  end
+
+  defp start_webhook_server(port) do
+    Bandit.start_link(plug: Mix.Tasks.SkillKit.Chat.WebhookHost, port: port, scheme: :http)
+  end
+
+  defp configure_webhook_base_url(port) do
+    Application.put_env(:skill_kit, :webhook_base_url, "http://localhost:#{port}")
+  end
+
+  defp print_banner(definition, webhook_port) do
     IO.puts(
       IO.ANSI.format([
         :bright,
@@ -60,11 +112,15 @@ defmodule Mix.Tasks.SkillKit.Chat do
       ])
     )
 
+    IO.puts(
+      IO.ANSI.format([
+        :faint,
+        "webhooks listening on http://localhost:#{webhook_port}",
+        :reset
+      ])
+    )
+
     IO.puts(IO.ANSI.format([:faint, "type 'exit' to quit\n"]))
-
-    chat_loop(agent, definition.name)
-
-    SkillKit.stop_agent(agent)
   end
 
   defp select_agent(agents_dir) do
@@ -135,61 +191,79 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
       input ->
         prompt = String.trim(input)
-
-        cond do
-          prompt == "exit" ->
-            IO.puts("Goodbye.")
-
-          prompt == "" ->
-            chat_loop(agent, agent_name)
-
-          true ->
-            :ok = SkillKit.send_message(agent, prompt)
-            receive_response(agent_name)
-            chat_loop(agent, agent_name)
-        end
+        handle_prompt(prompt, agent, agent_name)
     end
   end
 
-  defp receive_response(agent_name) do
+  defp handle_prompt("exit", _agent, _agent_name), do: IO.puts("Goodbye.")
+
+  defp handle_prompt("", agent, agent_name), do: chat_loop(agent, agent_name)
+
+  defp handle_prompt(prompt, agent, agent_name) do
+    :ok = SkillKit.send_message(agent, prompt)
+    chat_loop(agent, agent_name)
+  end
+
+  # Printer Task — receives all agent events and prints as they arrive,
+  # independent of the chat loop's stdin blocking. Resolves the race
+  # where inbound webhook messages would otherwise queue until the user
+  # hit Enter.
+  defp printer_loop(agent_name) do
     receive do
       %Delta{agent: ^agent_name, text: text} ->
         IO.write(text)
-        receive_response(agent_name)
 
       %ToolCallComplete{agent: ^agent_name, name: name, input: input} ->
         IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
-        receive_response(agent_name)
 
       %ToolResult{agent: ^agent_name} ->
-        receive_response(agent_name)
+        :ok
 
       %AssistantMessage{agent: ^agent_name} ->
         IO.puts("\n")
-        wait_for_follow_up(agent_name)
 
       %Error{agent: ^agent_name, reason: reason} ->
         IO.puts("\n[error] #{inspect(reason)}\n")
-    after
-      120_000 ->
-        IO.puts("\n[timeout]\n")
+
+      _other ->
+        :ok
     end
+
+    printer_loop(agent_name)
   end
 
   defp format_input("bash", %{"command" => cmd}), do: cmd
   defp format_input("activate_skill", %{"name" => name}), do: name
   defp format_input(_name, input) when map_size(input) == 0, do: ""
   defp format_input(_name, input), do: inspect(input, limit: 3)
+end
 
-  defp wait_for_follow_up(agent_name) do
-    receive do
-      %Delta{agent: ^agent_name} = msg ->
-        IO.puts("--- subagent result arrived ---")
-        send(self(), msg)
-        receive_response(agent_name)
-    after
-      5_000 ->
-        :ok
+defmodule Mix.Tasks.SkillKit.Chat.WebhookHost do
+  @moduledoc false
+  # Top-level Plug for the chat dev server. Reads the raw body into
+  # `conn.assigns.raw_body` (required by HMAC verifiers) and hands the
+  # conn to `SkillKit.Webhook.Plug`.
+
+  @behaviour Plug
+
+  alias SkillKit.Webhook.Plug, as: WebhookPlug
+
+  @impl true
+  def init(_opts), do: []
+
+  @impl true
+  def call(conn, _opts) do
+    case Plug.Conn.read_body(conn, []) do
+      {:ok, body, conn} ->
+        conn
+        |> Plug.Conn.assign(:raw_body, body)
+        |> WebhookPlug.call(WebhookPlug.init([]))
+
+      {:more, _partial, conn} ->
+        Plug.Conn.send_resp(conn, 413, "request body too large")
+
+      {:error, _reason} ->
+        Plug.Conn.send_resp(conn, 400, "")
     end
   end
 end
