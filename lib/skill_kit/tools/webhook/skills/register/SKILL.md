@@ -4,6 +4,19 @@ description: "Register a webhook endpoint bound to this agent. Returns a unique 
 ---
 Register a new webhook endpoint for this agent.
 
+## Your role
+
+You are the **receiver**, not the sender.
+
+This skill configures an HTTP endpoint hosted by this agent's process. When someone POSTs to that URL, the request body becomes a user message delivered to you. That is the entire scope of this skill.
+
+Do **not**:
+- Write source scripts, cron jobs, or schedulers that call the endpoint (that's the user's problem or a separate system).
+- Create external webhook receivers in other languages (Python Flask, Node, etc.) — this skill IS the receiver.
+- Set up anything beyond the single `webhook:register` call unless the user explicitly asks.
+
+Flow: user asks for a webhook → you call `webhook:register` with an appropriate prompt → you return the URL to the user. Stop there. The user decides what sends traffic to it.
+
 ## Arguments (JSON)
 
 - `prompt` (string, required) — the template rendered into a user message each time the webhook fires. Supported tokens:
