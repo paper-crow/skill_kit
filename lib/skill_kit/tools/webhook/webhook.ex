@@ -88,27 +88,30 @@ defmodule SkillKit.Tools.Webhook do
     %SkillKit.Tool{
       name: "webhook",
       description:
-        "Register, unregister, or list HTTP webhook endpoints bound to this agent. " <>
+        "Register, update, unregister, or list HTTP webhook endpoints bound to this agent. " <>
           "Registered endpoints are hosted by this process; inbound requests are " <>
           "verified and delivered as user messages. Use operation=register to create, " <>
+          "operation=update to modify an existing webhook (URL preserved), " <>
           "operation=unregister to delete, operation=list to view.",
       input_schema: %{
         "type" => "object",
         "properties" => %{
           "operation" => %{
             "type" => "string",
-            "enum" => ["register", "unregister", "list"]
+            "enum" => ["register", "update", "unregister", "list"]
           },
           "prompt" => %{
             "type" => "string",
             "description" =>
-              "register only. Template rendered into a user message on each inbound hit. " <>
-                "Tokens: $WEBHOOK_BODY, $WEBHOOK_METHOD, $WEBHOOK_HEADERS, $WEBHOOK_QUERY."
+              "register (required) / update (optional). Template rendered into a user message " <>
+                "on each inbound hit. Tokens: $WEBHOOK_BODY, $WEBHOOK_METHOD, " <>
+                "$WEBHOOK_HEADERS, $WEBHOOK_QUERY."
           },
           "verifier" => %{
             "type" => "object",
             "description" =>
-              "register only. Keys: type (stripe|github|slack|none), secret_key, optional max_skew.",
+              "register (required) / update (optional). Keys: type (stripe|github|slack|none), " <>
+                "secret_key, optional max_skew.",
             "properties" => %{
               "type" => %{"type" => "string", "enum" => ["stripe", "github", "slack", "none"]},
               "secret_key" => %{"type" => "string"},
@@ -123,7 +126,7 @@ defmodule SkillKit.Tools.Webhook do
           },
           "id" => %{
             "type" => "string",
-            "description" => "unregister only. The webhook id returned at registration."
+            "description" => "update / unregister. The webhook id returned at registration."
           }
         },
         "required" => ["operation"]
@@ -166,6 +169,7 @@ defmodule SkillKit.Tools.Webhook do
   def execute(%ToolExecution{}), do: {:error, "missing required field: operation"}
 
   defp dispatch("register", exec), do: register(exec)
+  defp dispatch("update", exec), do: update(exec)
   defp dispatch("unregister", exec), do: unregister(exec)
   defp dispatch("list", exec), do: list(exec)
   defp dispatch(op, _exec), do: {:error, "unknown webhook operation: #{inspect(op)}"}
@@ -263,6 +267,43 @@ defmodule SkillKit.Tools.Webhook do
     do: "unknown verifier type: #{type}; available types are passed in the agent's kit config"
 
   defp format_error({:invalid, field}), do: "invalid value for field: #{field}"
+
+  # -- update ---------------------------------------------------------------
+
+  defp update(%ToolExecution{input: %{"id" => id} = input, context: ctx}) when is_binary(id) do
+    case Webhook.get(id, supervisor: ctx.supervisor) do
+      {:ok, webhook} -> apply_update(webhook, input, ctx)
+      {:error, :not_found} -> {:error, "webhook not found: #{id}"}
+    end
+  end
+
+  defp update(_exec), do: {:error, "missing required field: id"}
+
+  defp apply_update(webhook, input, ctx) do
+    with {:ok, prompt} <- updated_prompt(webhook, input),
+         {:ok, verifier} <- updated_verifier(webhook, input, ctx) do
+      updated = %{webhook | prompt: prompt, verifier: verifier}
+      :ok = Webhook.register(updated, supervisor: ctx.supervisor)
+      {:ok, "Webhook updated. URL: " <> Url.url(updated)}
+    else
+      {:error, reason} -> {:error, format_error(reason)}
+    end
+  end
+
+  defp updated_prompt(webhook, input) do
+    case Map.fetch(input, "prompt") do
+      :error -> {:ok, webhook.prompt}
+      {:ok, value} when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
+      _ -> {:error, {:invalid, "prompt"}}
+    end
+  end
+
+  defp updated_verifier(webhook, input, ctx) do
+    case Map.fetch(input, "verifier") do
+      :error -> {:ok, webhook.verifier}
+      {:ok, _value} -> resolve_verifier(input, ctx)
+    end
+  end
 
   # -- unregister -----------------------------------------------------------
 

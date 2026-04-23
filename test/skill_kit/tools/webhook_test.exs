@@ -64,6 +64,105 @@ defmodule SkillKit.Tools.WebhookTest do
     end
   end
 
+  describe "execute/1 :: update" do
+    test "changes prompt while preserving id, agent_name, and URL", %{supervisor: sup} do
+      {:ok, _} =
+        WebhookKit.execute(
+          exec(
+            "register",
+            %{
+              "prompt" => "original",
+              "verifier" => %{"type" => "stripe", "secret_key" => "S"}
+            },
+            sup
+          )
+        )
+
+      [%Webhook{id: id, inserted_at: inserted_at, verifier: original_verifier}] =
+        fetch_webhooks(sup)
+
+      assert {:ok, reply} =
+               WebhookKit.execute(exec("update", %{"id" => id, "prompt" => "updated"}, sup))
+
+      assert reply =~ "Webhook updated. URL:"
+
+      assert {:ok,
+              %Webhook{
+                id: ^id,
+                agent_name: "kit-agent",
+                prompt: "updated",
+                verifier: ^original_verifier,
+                inserted_at: ^inserted_at
+              }} = Webhook.get(id, supervisor: sup)
+    end
+
+    test "changes verifier while preserving prompt", %{supervisor: sup} do
+      {:ok, _} =
+        WebhookKit.execute(
+          exec(
+            "register",
+            %{
+              "prompt" => "keep-me",
+              "verifier" => %{"type" => "stripe", "secret_key" => "OLD"}
+            },
+            sup
+          )
+        )
+
+      [%Webhook{id: id}] = fetch_webhooks(sup)
+
+      assert {:ok, _reply} =
+               WebhookKit.execute(
+                 exec(
+                   "update",
+                   %{
+                     "id" => id,
+                     "verifier" => %{"type" => "stripe", "secret_key" => "NEW"}
+                   },
+                   sup
+                 )
+               )
+
+      assert {:ok,
+              %Webhook{
+                prompt: "keep-me",
+                verifier: {Stripe, %{secret_key: "NEW"}}
+              }} = Webhook.get(id, supervisor: sup)
+    end
+
+    test "returns error when id is unknown", %{supervisor: sup} do
+      assert {:error, msg} =
+               WebhookKit.execute(
+                 exec("update", %{"id" => "does-not-exist", "prompt" => "x"}, sup)
+               )
+
+      assert msg =~ "webhook not found"
+    end
+
+    test "errors when id is missing", %{supervisor: sup} do
+      assert {:error, "missing required field: id"} =
+               WebhookKit.execute(exec("update", %{"prompt" => "x"}, sup))
+    end
+
+    test "rejects empty prompt", %{supervisor: sup} do
+      {:ok, _} =
+        WebhookKit.execute(
+          exec(
+            "register",
+            %{"prompt" => "p", "verifier" => %{"type" => "stripe", "secret_key" => "S"}},
+            sup
+          )
+        )
+
+      [%Webhook{id: id}] = fetch_webhooks(sup)
+
+      assert {:error, msg} =
+               WebhookKit.execute(exec("update", %{"id" => id, "prompt" => ""}, sup))
+
+      assert msg =~ "prompt"
+    end
+  end
+
   describe "execute/1 :: unregister" do
     test "removes by id", %{supervisor: sup} do
       {:ok, _} =
