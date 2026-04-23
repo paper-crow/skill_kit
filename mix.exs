@@ -45,6 +45,7 @@ defmodule SkillKit.MixProject do
       {:req, "~> 0.5"},
       {:telemetry, "~> 1.0"},
       {:plug, "~> 1.16"},
+      {:bandit, "~> 1.5"},
       {:jason, "~> 1.4"},
       {:mox, "~> 1.2", only: :test},
       {:bypass, "~> 2.1", only: :test}
