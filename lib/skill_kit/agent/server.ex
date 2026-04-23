@@ -13,6 +13,7 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
+  alias SkillKit.Agent.StreamAccumulator
   alias SkillKit.Agent.ToolRunner
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
@@ -185,8 +186,8 @@ defmodule SkillKit.Agent.Server do
         state
 
       {:ok, event_stream} ->
-        acc = Enum.reduce(event_stream, new_accumulator(), &process_event(&1, &2, state))
-        response = finalize_response(acc)
+        acc = Enum.reduce(event_stream, StreamAccumulator.new(), &process_event(&1, &2, state))
+        response = StreamAccumulator.finalize(acc)
         state = %{state | messages: state.messages ++ [response]}
         handle_response(response, state)
 
@@ -236,10 +237,6 @@ defmodule SkillKit.Agent.Server do
     )
   end
 
-  defp new_accumulator do
-    %{text: "", tool_calls: [], usage: %{input_tokens: 0, output_tokens: 0}}
-  end
-
   defp process_event(%Delta{text: text}, acc, state) do
     notify_caller(state, %Delta{text: text, agent: state.agent.name})
     %{acc | text: acc.text <> text}
@@ -267,15 +264,6 @@ defmodule SkillKit.Agent.Server do
 
   defp process_event(%Done{}, acc, _state), do: acc
   defp process_event(_other, acc, _state), do: acc
-
-  defp finalize_response(acc) do
-    content = if acc.text == "", do: nil, else: acc.text
-
-    %AssistantMessage{
-      content: content,
-      tool_calls: acc.tool_calls
-    }
-  end
 
   # --- Helpers ---
 

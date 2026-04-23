@@ -1,17 +1,18 @@
 defmodule SkillKit.Agent.ToolDispatch do
   @moduledoc """
   Tool execution dispatch. Classifies, executes, and returns results for
-  tool calls from the LLM. Handles plain tools, skill activation (via
-  child agent forking), and subagent spawning.
+  tool calls from the LLM. Handles plain tools, skill activation, and
+  subagent spawning.
 
   `execute_one/2` runs a single tool call and returns `{result, side_effects}`
   where side effects are tagged tuples applied by ToolRunner after collection.
   This design supports parallel execution — children can't share or modify
   Server state, so state changes are deferred as data.
 
-  Skill activation forks the parent agent's context into a child agent that
-  runs autonomously with the skill's instructions and tools. The parent
-  receives the result via `:DOWN` monitoring, avoiding state leaks.
+  Skill activation runs the skill as a forked sub-conversation in the
+  parent agent's process via `SkillKit.Agent.SkillActivation`. The parent
+  receives the sub-loop's final text as the `activate_skill` tool's
+  result. No child agent supervision tree is spawned.
 
   Subagent delegation returns immediately (the subagent runs independently).
   Tools that need external input return `{:suspended, execution, side_effects}`
@@ -19,6 +20,7 @@ defmodule SkillKit.Agent.ToolDispatch do
   """
 
   alias SkillKit.Agent.Server
+  alias SkillKit.Agent.SkillActivation
   alias SkillKit.Hooks
   alias SkillKit.Runtime
   alias SkillKit.Skill
@@ -174,76 +176,27 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp unwrap_tool_result(_id, result), do: result
 
-  # --- Skill Activation (fork into child agent) ---
+  # --- Skill Activation (in-process sub-loop) ---
 
   defp activate_skill(state, %ToolCall{id: id, input: input}) do
     skill_name = Map.get(input, "name", "")
 
+    case resolve_and_render_skill(state, skill_name) do
+      {:ok, skill, body} -> {SkillActivation.run(state, skill, body, id), []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_and_render_skill(state, skill_name) do
     with {:ok, skill} <- SkillKit.Catalog.get_skill(state.agent, skill_name),
-         {:ok, body} <- render_skill(skill, state),
-         {:ok, agent} <- build_skill_agent(skill, body, state) do
-      start_skill_agent(agent, skill, state, id)
+         {:ok, body} <- render_skill(skill, state) do
+      {:ok, skill, body}
     end
   end
 
   defp render_skill(skill, state) do
     scope_context = %{agent: state.agent.name, skill: skill.name}
     Skill.render(skill, %{}, state.agent.scope, scope_context)
-  end
-
-  defp build_skill_agent(skill, body, state) do
-    {:ok,
-     %{
-       state.agent
-       | name: "#{state.agent.name}/skill:#{skill.name}-#{:erlang.unique_integer([:positive])}",
-         system_prompt: state.agent.system_prompt <> "\n\n" <> body,
-         tools: inherited_tools_for_skill(state.agent.tools, skill),
-         skills: [],
-         depth: state.agent.depth + 1,
-         parent_ref: build_parent_ref(state),
-         registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}",
-         conversation_store: nil,
-         initial_messages: state.messages
-     }}
-  end
-
-  # The child agent forked from `activate_skill` inherits the parent's
-  # `tools` and adds the skill's underlying tool module (if not already
-  # present), so the child has a direct way to execute the skill.
-  defp inherited_tools_for_skill(parent_tools, %{tool: tool_module}) do
-    if Enum.any?(parent_tools, fn {module, _opts} -> module == tool_module end) do
-      parent_tools
-    else
-      parent_tools ++ [{tool_module, []}]
-    end
-  end
-
-  defp start_skill_agent(agent, skill, state, id) do
-    case Runtime.start_agent(agent) do
-      {:ok, agent_ref} ->
-        [{server_pid, _}] = Registry.lookup(agent_ref.registry, {agent.name, :server})
-
-        entry = %{
-          name: skill.name,
-          task: "skill:#{skill.name}",
-          parent_intent: get_last_assistant_content(state.messages),
-          agent_ref: agent_ref
-        }
-
-        result = %ToolResult{
-          tool_call_id: id,
-          content: "Running skill #{skill.name}..."
-        }
-
-        {result, [{:subagent, server_pid, entry}]}
-
-      {:error, reason} ->
-        {%ToolResult{
-           tool_call_id: id,
-           content: "Failed to start skill agent: #{inspect(reason)}",
-           is_error: true
-         }, []}
-    end
   end
 
   # --- Subagent Spawning ---
