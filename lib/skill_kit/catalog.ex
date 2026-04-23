@@ -23,15 +23,29 @@ defmodule SkillKit.Catalog do
   # Public API
   # -------------------------------------------------------------------
 
-  @doc "Starts the catalog GenServer."
+  @doc """
+  Starts the catalog GenServer.
+
+  Accepts two provider lists:
+    * `:tools` — kit providers whose `definition/0` becomes a first-class
+      tool the LLM can call directly.
+    * `:skills` — kit providers whose skills appear in the `activate_skill`
+      enum. Skills are not callable directly; activation forks a child
+      agent that has the skill's underlying tool module added to its
+      tools list.
+
+  Backward-compatible: a single `:providers` keyword (the pre-split API)
+  is accepted and treated as `:skills`.
+  """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
-    providers = Keyword.fetch!(opts, :providers)
+    tools = Keyword.get(opts, :tools, [])
+    skills = Keyword.get(opts, :skills) || Keyword.get(opts, :providers) || []
     scope = Keyword.get(opts, :scope)
     name = Keyword.get(opts, :name)
 
     gen_opts = if name, do: [name: name], else: []
-    GenServer.start_link(__MODULE__, {providers, scope}, gen_opts)
+    GenServer.start_link(__MODULE__, {tools, skills, scope}, gen_opts)
   end
 
   @spec list_skills(GenServer.server() | Agent.t()) :: [{String.t(), String.t()}]
@@ -78,12 +92,13 @@ defmodule SkillKit.Catalog do
   end
 
   @doc """
-  Returns `{tool_module, metadata}` for the first kit that declares a tool,
-  or `nil` if no tool kit exists.
+  Returns `{tool_module, metadata}` for the given tool name, or `nil` if
+  no matching tool is registered.
   """
-  @spec tool_config(GenServer.server() | Agent.t()) :: {module(), map()} | nil
-  def tool_config(agent_or_catalog) do
-    GenServer.call(server_ref(agent_or_catalog), :tool_config)
+  @spec tool_config(GenServer.server() | Agent.t(), String.t()) ::
+          {module(), map()} | nil
+  def tool_config(agent_or_catalog, tool_name) do
+    GenServer.call(server_ref(agent_or_catalog), {:tool_config, tool_name})
   end
 
   # -------------------------------------------------------------------
@@ -101,45 +116,52 @@ defmodule SkillKit.Catalog do
   # -------------------------------------------------------------------
 
   @impl true
-  def init({providers, scope}) do
+  def init({tools, skills, scope}) do
     permissions = resolve_permissions(scope)
-    {:ok, %{providers: providers, scope: scope, permissions: permissions}}
+
+    {:ok,
+     %{
+       tools_providers: tools,
+       skill_providers: skills,
+       scope: scope,
+       permissions: permissions
+     }}
   end
 
   @impl true
   def handle_call(:list_skills, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
     skills = filter_authorized_skills(all_skills(kits), state)
     tuples = Enum.map(skills, &{&1.name, &1.description})
     {:reply, tuples, state}
   end
 
   def handle_call({:get_skill, name}, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
     result = find_and_authorize_skill(all_skills(kits), name, state)
     {:reply, result, state}
   end
 
   def handle_call(:list_agents, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
     agents = Enum.flat_map(kits, & &1.subagents)
     {:reply, agents, state}
   end
 
   def handle_call({:get_agent, name}, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
     result = find_subagent(kits, name)
     {:reply, result, state}
   end
 
   def handle_call(:agent, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
     agent = find_agent_definition(kits)
     {:reply, agent, state}
   end
 
   def handle_call({:list_hooks, event}, _from, state) do
-    kits = load_all_kits(state.providers)
+    kits = load_all_kits(state.skill_providers)
 
     hooks =
       kits
@@ -151,20 +173,22 @@ defmodule SkillKit.Catalog do
   end
 
   def handle_call({:tool_definitions, opts}, _from, state) do
-    kits = load_all_kits(state.providers)
-    tools = build_tools(kits, state, opts)
+    tool_kits = load_all_kits(state.tools_providers)
+    skill_kits = load_all_kits(state.skill_providers)
+    tools = build_tools(tool_kits, skill_kits, state, opts)
     {:reply, tools, state}
   end
 
   def handle_call({:classify, tool_name}, _from, state) do
-    kits = load_all_kits(state.providers)
-    result = do_classify(kits, tool_name)
+    tool_kits = load_all_kits(state.tools_providers)
+    skill_kits = load_all_kits(state.skill_providers)
+    result = do_classify(tool_kits, skill_kits, tool_name)
     {:reply, result, state}
   end
 
-  def handle_call(:tool_config, _from, state) do
-    kits = load_all_kits(state.providers)
-    result = find_tool_config(kits)
+  def handle_call({:tool_config, tool_name}, _from, state) do
+    kits = load_all_kits(state.tools_providers)
+    result = find_tool_config(kits, tool_name)
     {:reply, result, state}
   end
 
@@ -261,37 +285,60 @@ defmodule SkillKit.Catalog do
   # Tool building
   # -------------------------------------------------------------------
 
-  defp build_tools(kits, state, _opts) do
-    visible_skills = filter_authorized_skills(all_skills(kits), state)
-    all_agents = Enum.flat_map(kits, & &1.subagents)
-
-    tool_modules = discover_tool_modules(kits)
+  defp build_tools(tool_kits, skill_kits, state, _opts) do
+    tool_modules = discover_tool_modules(tool_kits)
     tool_defs = Enum.map(tool_modules, & &1.definition())
 
-    tool_set = MapSet.new(tool_modules)
+    visible_skills = filter_authorized_skills(all_skills(skill_kits), state)
 
     filterable_skills =
       Enum.filter(visible_skills, fn skill ->
-        MapSet.member?(tool_set, skill.tool) or Code.ensure_loaded?(skill.tool)
+        Code.ensure_loaded?(skill.tool)
       end)
 
     skill_tool = build_activate_skill_tool(filterable_skills)
-    agent_tools = Enum.map(all_agents, &agent_to_tool/1)
+
+    agent_tools =
+      skill_kits
+      |> Enum.flat_map(& &1.subagents)
+      |> Enum.map(&agent_to_tool/1)
 
     tool_defs ++ skill_tool ++ agent_tools
   end
 
   defp discover_tool_modules(kits) do
     kits
-    |> Enum.filter(&Map.has_key?(&1.metadata, :tool))
-    |> Enum.map(& &1.metadata.tool)
+    |> Enum.map(&tool_module_for_kit/1)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
   end
 
-  defp find_tool_config(kits) do
-    case Enum.find(kits, &Map.has_key?(&1.metadata, :tool)) do
-      nil -> nil
-      kit -> {kit.metadata.tool, kit.metadata}
+  # A kit in the `:tools` list contributes a tool module. Prefer the
+  # explicit `metadata.tool` if set; otherwise fall back to the kit's
+  # own module (a kit without skills/subagents is itself the tool,
+  # matching the pattern used by SkillKit.Tools.Shell).
+  defp tool_module_for_kit(%SkillKit.Kit{metadata: %{tool: tool}}), do: tool
+  defp tool_module_for_kit(_), do: nil
+
+  defp find_tool_config(kits, tool_name) do
+    kit = Enum.find(kits, &kit_tool_named?(&1, tool_name))
+    to_tool_config(kit)
+  end
+
+  defp kit_tool_named?(kit, tool_name) do
+    case tool_module_for_kit(kit) do
+      nil -> false
+      module -> tool_definition_name(module) == tool_name
     end
+  end
+
+  defp to_tool_config(nil), do: nil
+  defp to_tool_config(%SkillKit.Kit{metadata: meta} = _kit), do: {meta.tool, meta}
+
+  defp tool_definition_name(module) do
+    module.definition().name
+  rescue
+    _ -> nil
   end
 
   defp build_activate_skill_tool([]), do: []
@@ -342,17 +389,15 @@ defmodule SkillKit.Catalog do
   # Classification
   # -------------------------------------------------------------------
 
-  defp do_classify(kits, tool_name) do
+  defp do_classify(_tool_kits, _skill_kits, "activate_skill"), do: :activate_skill
+
+  defp do_classify(_tool_kits, skill_kits, tool_name) do
     agent_names =
-      kits
+      skill_kits
       |> Enum.flat_map(& &1.subagents)
       |> MapSet.new(& &1.name)
 
-    cond do
-      tool_name == "activate_skill" -> :activate_skill
-      MapSet.member?(agent_names, tool_name) -> :subagent
-      true -> :tool
-    end
+    if MapSet.member?(agent_names, tool_name), do: :subagent, else: :tool
   end
 
   @doc """

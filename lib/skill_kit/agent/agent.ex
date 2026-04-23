@@ -16,6 +16,7 @@ defmodule SkillKit.Agent do
           system_prompt: String.t(),
           max_agent_depth: non_neg_integer(),
           mailbox: %{max_messages: pos_integer(), flush_interval: pos_integer()},
+          tools: [{module(), keyword()}],
           skills: [{module(), keyword()}],
           runtime: {module(), keyword()},
           scope: term(),
@@ -41,6 +42,7 @@ defmodule SkillKit.Agent do
     initial_messages: [],
     max_agent_depth: 1,
     mailbox: %{max_messages: 10, flush_interval: 500},
+    tools: [],
     skills: [],
     runtime: {SkillKit.Runtime.Local, []},
     depth: 0

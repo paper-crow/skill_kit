@@ -65,10 +65,8 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
     {:ok, agent} =
       SkillKit.start_agent(definition,
-        skills: [
-          {SkillKit.Tools.Shell, []},
-          {SkillKit.Tools.Webhook, []}
-        ],
+        tools: [{SkillKit.Tools.Shell, []}],
+        skills: [{SkillKit.Tools.Webhook, []}],
         caller: printer
       )
 

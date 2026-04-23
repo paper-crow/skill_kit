@@ -209,7 +209,8 @@ defmodule SkillKit.Agent.ServerTest do
       start_supervised!(
         {SkillKit.Catalog,
          name: {:via, Registry, {reg, {agent_name, :catalog}}},
-         providers: [{Memory, provider: provider}]},
+         tools: [{Memory, provider: provider}],
+         skills: [{Memory, provider: provider}]},
         id: :tools_catalog
       )
 

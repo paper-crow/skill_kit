@@ -1,32 +1,42 @@
 defmodule SkillKit.Tools.Webhook do
   @moduledoc """
-  Kit that lets agents register webhook endpoints through skill activation.
+  Kit that lets agents register webhook endpoints via skill activation.
 
   Host wiring:
 
       SkillKit.start_agent("agents/support",
+        tools: [{SkillKit.Tools.Shell, []}],
         skills: [
           {SkillKit.Tools.Webhook,
             verifiers: %{
               "stripe" => SkillKit.Webhook.Verifier.Stripe,
               "github" => SkillKit.Webhook.Verifier.Github,
-              "slack"  => SkillKit.Webhook.Verifier.Slack
+              "slack"  => SkillKit.Webhook.Verifier.Slack,
+              "none"   => SkillKit.Webhook.Verifier.None
             }}
         ])
 
-  `load_kits/1` does three things:
+  The webhook kit lives in `skills:`, not `tools:`. The parent LLM sees
+  `activate_skill(name: "webhook:register" | "webhook:unregister" | "webhook:list")`
+  and activates one of the skills. `activate_skill` forks a child agent
+  that inherits the parent's `tools:` AND has `SkillKit.Tools.Webhook`
+  added as a first-class tool in the child. The child reads the skill
+  body and calls the `webhook` tool directly with structured args.
 
-  1. Stashes the configured `verifiers` map, agent-scoped `supervisor`
-     name, and kit metadata into each skill's `metadata` — flows through
+  `load_kits/1`:
+
+  1. Stashes the configured `verifiers` map and agent-scoped
+     `supervisor` name into kit + skill `metadata` — flowing through
      `ToolExecution.context` at activation time.
-  2. Injects a `:pre_agent` `%Hook{}` onto every skill so that when the
-     agent boots, `SkillKit.Webhook.Lifecycle` attaches it to the
-     `Webhook.Registry`.
-  3. Otherwise lets the compiled skills pass through unchanged.
+  2. Sets `metadata.tool = __MODULE__` so when this kit is added to the
+     child agent's `tools:` list, the Catalog exposes the `webhook`
+     tool. (At the parent level this has no effect because the kit is
+     in `skills:`, not `tools:`.)
+  3. Injects a `:pre_agent` `%Hook{}` onto every skill so
+     `SkillKit.Webhook.Lifecycle` attaches the agent to the
+     `Webhook.Registry` when it boots.
 
-  `execute/1` dispatches by skill name (`webhook:register`,
-  `webhook:unregister`, `webhook:list`) onto a `dispatch/2` helper with
-  function heads.
+  `execute/1` dispatches on `input["operation"]`.
   """
 
   use SkillKit.Kit, name: "webhook"
@@ -63,8 +73,62 @@ defmodule SkillKit.Tools.Webhook do
         patch_skill(skill, hook, supervisor, verifiers)
       end)
 
-    metadata = Map.merge(kit.metadata, %{supervisor: supervisor, verifiers: verifiers})
+    metadata =
+      Map.merge(kit.metadata, %{
+        tool: __MODULE__,
+        supervisor: supervisor,
+        verifiers: verifiers
+      })
+
     {:ok, [%{kit | skills: skills, metadata: metadata}]}
+  end
+
+  @impl SkillKit.Tool
+  def definition do
+    %SkillKit.Tool{
+      name: "webhook",
+      description:
+        "Register, unregister, or list HTTP webhook endpoints bound to this agent. " <>
+          "Registered endpoints are hosted by this process; inbound requests are " <>
+          "verified and delivered as user messages. Use operation=register to create, " <>
+          "operation=unregister to delete, operation=list to view.",
+      input_schema: %{
+        "type" => "object",
+        "properties" => %{
+          "operation" => %{
+            "type" => "string",
+            "enum" => ["register", "unregister", "list"]
+          },
+          "prompt" => %{
+            "type" => "string",
+            "description" =>
+              "register only. Template rendered into a user message on each inbound hit. " <>
+                "Tokens: $WEBHOOK_BODY, $WEBHOOK_METHOD, $WEBHOOK_HEADERS, $WEBHOOK_QUERY."
+          },
+          "verifier" => %{
+            "type" => "object",
+            "description" =>
+              "register only. Keys: type (stripe|github|slack|none), secret_key, optional max_skew.",
+            "properties" => %{
+              "type" => %{"type" => "string", "enum" => ["stripe", "github", "slack", "none"]},
+              "secret_key" => %{"type" => "string"},
+              "max_skew" => %{"type" => "integer"}
+            },
+            "required" => ["type", "secret_key"]
+          },
+          "idempotency" => %{
+            "type" => "object",
+            "description" =>
+              "register only, optional. Keys: key ({header: ...} or {json_path: $.field}) and ttl."
+          },
+          "id" => %{
+            "type" => "string",
+            "description" => "unregister only. The webhook id returned at registration."
+          }
+        },
+        "required" => ["operation"]
+      }
+    }
   end
 
   defp lifecycle_hook(supervisor) do
@@ -95,14 +159,16 @@ defmodule SkillKit.Tools.Webhook do
   # -- Tool callback --------------------------------------------------------
 
   @impl SkillKit.Tool
-  def execute(%ToolExecution{skill: %{name: name}} = exec) do
-    dispatch(name, exec)
+  def execute(%ToolExecution{input: %{"operation" => op}} = exec) do
+    dispatch(op, exec)
   end
 
-  defp dispatch("webhook:register", exec), do: register(exec)
-  defp dispatch("webhook:unregister", exec), do: unregister(exec)
-  defp dispatch("webhook:list", exec), do: list(exec)
-  defp dispatch(name, _exec), do: {:error, "unknown webhook skill: #{inspect(name)}"}
+  def execute(%ToolExecution{}), do: {:error, "missing required field: operation"}
+
+  defp dispatch("register", exec), do: register(exec)
+  defp dispatch("unregister", exec), do: unregister(exec)
+  defp dispatch("list", exec), do: list(exec)
+  defp dispatch(op, _exec), do: {:error, "unknown webhook operation: #{inspect(op)}"}
 
   # -- register -------------------------------------------------------------
 

@@ -13,11 +13,13 @@ This skill configures an HTTP endpoint hosted by this agent's process. When some
 Do **not**:
 - Write source scripts, cron jobs, or schedulers that call the endpoint (that's the user's problem or a separate system).
 - Create external webhook receivers in other languages (Python Flask, Node, etc.) — this skill IS the receiver.
-- Set up anything beyond the single `webhook:register` call unless the user explicitly asks.
+- Set up anything beyond the single `webhook` tool call unless the user explicitly asks.
 
-Flow: user asks for a webhook → you call `webhook:register` with an appropriate prompt → you return the URL to the user. Stop there. The user decides what sends traffic to it.
+Flow: user asks for a webhook → you call the `webhook` tool with `operation: "register"` and the appropriate args → you return the URL to the user. Stop there. The user decides what sends traffic to it.
 
-## Arguments (JSON)
+## How to call it
+
+Use the `webhook` tool available in this turn. Set `operation: "register"` plus the following fields:
 
 - `prompt` (string, required) — the template rendered into a user message each time the webhook fires. Supported tokens:
     - `$WEBHOOK_BODY` — raw request body
@@ -45,6 +47,7 @@ Simplest echo with no signature:
 
 ```json
 {
+  "operation": "register",
   "prompt": "Webhook fired: $WEBHOOK_BODY",
   "verifier": {"type": "none", "secret_key": "_"}
 }
@@ -54,6 +57,7 @@ Signed GitHub push webhook:
 
 ```json
 {
+  "operation": "register",
   "prompt": "GitHub push: $WEBHOOK_BODY",
   "verifier": {"type": "github", "secret_key": "GITHUB_WEBHOOK_SECRET"}
 }

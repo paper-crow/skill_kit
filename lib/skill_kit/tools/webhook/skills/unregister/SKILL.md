@@ -4,7 +4,7 @@ description: "Remove a previously registered webhook. The URL immediately stops 
 ---
 Delete a webhook registration by id.
 
-Provide:
+Call the `webhook` tool with `operation: "unregister"` and:
 
 - `id` (string, required) — the id returned at registration (the tail segment of the webhook URL).
 

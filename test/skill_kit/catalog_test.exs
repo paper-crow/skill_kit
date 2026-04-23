@@ -36,9 +36,10 @@ defmodule SkillKit.CatalogTest do
 
   defp start_catalog(provider, opts \\ []) do
     scope = Keyword.get(opts, :scope)
+    tools = Keyword.get(opts, :tools, [])
     extra_providers = Keyword.get(opts, :extra_providers, [])
-    providers = [{Memory, provider: provider} | extra_providers]
-    start_supervised!({Catalog, providers: providers, scope: scope})
+    skills = [{Memory, provider: provider} | extra_providers]
+    start_supervised!({Catalog, tools: tools, skills: skills, scope: scope})
   end
 
   defp make_skill(name, opts \\ []) do
@@ -260,7 +261,7 @@ defmodule SkillKit.CatalogTest do
       assert agent_tool.input_schema["required"] == ["task"]
     end
 
-    test "includes tool definitions from kit metadata" do
+    test "includes tool definitions from tool providers" do
       {:ok, provider} = Memory.start_link([])
 
       kit = %Kit{
@@ -271,7 +272,7 @@ defmodule SkillKit.CatalogTest do
 
       Memory.put_kit(provider, kit)
 
-      catalog = start_catalog(provider)
+      catalog = start_catalog(provider, tools: [{Memory, provider: provider}])
       tools = Catalog.tool_definitions(catalog, [])
 
       tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))

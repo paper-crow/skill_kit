@@ -4,7 +4,6 @@ defmodule SkillKit.Tools.WebhookTest do
   import Mox
 
   alias SkillKit.Agent, as: SkAgent
-  alias SkillKit.Skill
   alias SkillKit.ToolExecution
   alias SkillKit.Tools.Webhook, as: WebhookKit
   alias SkillKit.Webhook
@@ -19,11 +18,10 @@ defmodule SkillKit.Tools.WebhookTest do
     {:ok, supervisor: name}
   end
 
-  defp exec(skill_name, input, supervisor) do
+  defp exec(operation, input, supervisor) do
     %ToolExecution{
-      skill: %Skill{name: "webhook:" <> skill_name, metadata: %{}},
       tool: WebhookKit,
-      input: input,
+      input: Map.put(input, "operation", operation),
       context: %{
         supervisor: supervisor,
         verifiers: %{"stripe" => Stripe},

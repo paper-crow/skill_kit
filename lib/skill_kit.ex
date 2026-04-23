@@ -52,7 +52,7 @@ defmodule SkillKit do
 
   @type agent :: AgentRef.t()
 
-  @valid_opts [:skills, :runtime, :scope, :conversation_store, :caller, :name]
+  @valid_opts [:tools, :skills, :runtime, :scope, :conversation_store, :caller, :name]
 
   @doc """
   Starts a new agent.
@@ -70,7 +70,13 @@ defmodule SkillKit do
 
   ## Options
 
-    * `:skills` — list of skill sources (default: `[]`)
+    * `:tools` — list of tool providers (default: `[]`). Tools are always
+      available to the LLM — called directly, no activation needed.
+      Examples: `[{SkillKit.Tools.Shell, cwd: "."}]`.
+    * `:skills` — list of skill providers (default: `[]`). Skills appear
+      only in `activate_skill`'s enum. When the LLM activates a skill,
+      a child agent is forked with the skill's underlying tool module
+      added to its `:tools` list, so the child can execute it directly.
     * `:runtime` — `{module, config}` for agent spawning (default: `{Runtime.Local, []}`)
     * `:scope` — authorization scope (default: `nil`)
     * `:conversation_store` — `{module, config}` for persistence (default: `nil`)
@@ -97,13 +103,15 @@ defmodule SkillKit do
     Keyword.validate!(opts, @valid_opts)
 
     agent = resolve_agent(source)
-    skills = normalize_skills(Keyword.get(opts, :skills, []))
+    tools = normalize_providers(Keyword.get(opts, :tools, []))
+    skills = normalize_providers(Keyword.get(opts, :skills, []))
     agent_provider = agent_as_provider(source)
     all_skills = merge_agent_provider(agent_provider, skills)
 
     %{
       agent
       | name: Keyword.get(opts, :name, agent.name),
+        tools: tools,
         skills: all_skills,
         runtime: Keyword.get(opts, :runtime, agent.runtime),
         scope: Keyword.get(opts, :scope, agent.scope),
@@ -150,13 +158,13 @@ defmodule SkillKit do
   # Skills normalization (string/module/tuple sugar)
   # -------------------------------------------------------------------
 
-  defp normalize_skills(skills) do
-    Enum.map(skills, &normalize_skill_entry/1)
+  defp normalize_providers(providers) do
+    Enum.map(providers, &normalize_provider_entry/1)
   end
 
-  defp normalize_skill_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
-  defp normalize_skill_entry(module) when is_atom(module), do: {module, []}
-  defp normalize_skill_entry({module, config}), do: {module, config}
+  defp normalize_provider_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp normalize_provider_entry(module) when is_atom(module), do: {module, []}
+  defp normalize_provider_entry({module, config}), do: {module, config}
 
   # -------------------------------------------------------------------
   # Auto-include agent kit's tools

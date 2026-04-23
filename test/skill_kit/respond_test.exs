@@ -119,7 +119,7 @@ defmodule SkillKit.RespondTest do
 
       {:ok, _pid, ctx} =
         start_server(
-          skills: [{Memory, provider: mem}],
+          tools: [{Memory, provider: mem}],
           caller: self()
         )
 
@@ -160,7 +160,7 @@ defmodule SkillKit.RespondTest do
 
       {:ok, _pid, ctx} =
         start_server(
-          skills: [{Memory, provider: mem}],
+          tools: [{Memory, provider: mem}],
           caller: self()
         )
 
@@ -193,7 +193,7 @@ defmodule SkillKit.RespondTest do
 
       {:ok, _pid, ctx} =
         start_server(
-          skills: [{Memory, provider: mem}],
+          tools: [{Memory, provider: mem}],
           caller: self()
         )
 

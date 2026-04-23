@@ -54,9 +54,20 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp wrap_error(result, _id), do: result
 
-  defp execute_command(state, %ToolCall{id: id, input: input}) do
-    tool = find_tool(state)
-    tool_context = build_context(state)
+  defp execute_command(state, %ToolCall{id: id, name: name, input: input}) do
+    dispatch_known_tool(find_tool(state, name), state, id, name, input)
+  end
+
+  defp dispatch_known_tool(nil, _state, id, name, _input) do
+    {%ToolResult{
+       tool_call_id: id,
+       content: "Unknown tool: #{name}",
+       is_error: true
+     }, []}
+  end
+
+  defp dispatch_known_tool(tool, state, id, name, input) do
+    tool_context = build_context(state, name)
 
     hook_context = %{
       tool: tool,
@@ -71,17 +82,16 @@ defmodule SkillKit.Agent.ToolDispatch do
         do_execute_command(id, tool, input, tool_context, hook_context)
       end)
 
-    case result do
-      {:suspended, execution} ->
-        {:suspended, execution, []}
-
-      {:deny, reason} ->
-        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
-
-      tool_result ->
-        {unwrap_tool_result(id, tool_result), []}
-    end
+    dispatch_hook_result(result, id)
   end
+
+  defp dispatch_hook_result({:suspended, execution}, _id), do: {:suspended, execution, []}
+
+  defp dispatch_hook_result({:deny, reason}, id) do
+    {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
+  end
+
+  defp dispatch_hook_result(tool_result, id), do: {unwrap_tool_result(id, tool_result), []}
 
   defp do_execute_command(id, tool, input, tool_context, hook_context) do
     exec = %ToolExecution{tool: tool, input: input, context: tool_context}
@@ -105,42 +115,31 @@ defmodule SkillKit.Agent.ToolDispatch do
     end
   end
 
-  defp find_tool(state) do
-    case SkillKit.Catalog.tool_config(state.agent) do
-      nil -> SkillKit.Tools.Shell
+  defp find_tool(state, tool_name) do
+    case SkillKit.Catalog.tool_config(state.agent, tool_name) do
+      nil -> nil
       {tool, _metadata} -> tool
     end
   end
 
   @doc """
-  Builds the `context` map passed to `Tool.execute/1`.
+  Builds the `context` map passed to `Tool.execute/1` for a given tool
+  call name.
 
   The context contains:
-    * `:agent` — the full agent struct (provides scope, name, and anything
-      a tool or credential provider needs to dispatch on).
-    * `:scope` — a shortcut to `agent.scope` for existing callers.
-    * `:cwd`, `:env` — merged from the tool's config metadata if present.
+    * `:agent` — the full agent struct (scope, name, etc.).
+    * `:scope` — shortcut to `agent.scope`.
+    * Tool-specific metadata merged in (e.g., `:cwd`, `:env` for Shell;
+      `:supervisor`, `:verifiers` for Webhook).
   """
-  def build_context(state) do
+  def build_context(state, tool_name) do
     base_context = %{agent: state.agent, scope: state.agent.scope}
 
-    case SkillKit.Catalog.tool_config(state.agent) do
+    case SkillKit.Catalog.tool_config(state.agent, tool_name) do
       nil -> base_context
-      {_tool, metadata} -> merge_tool_config(base_context, metadata)
+      {_tool, metadata} -> Map.merge(base_context, Map.delete(metadata, :tool))
     end
   end
-
-  defp merge_tool_config(context, metadata) do
-    context
-    |> maybe_put_cwd(metadata)
-    |> maybe_put_env(metadata)
-  end
-
-  defp maybe_put_cwd(context, %{cwd: cwd}), do: Map.put(context, :cwd, cwd)
-  defp maybe_put_cwd(context, _metadata), do: context
-
-  defp maybe_put_env(context, %{env: env}), do: Map.put(context, :env, env)
-  defp maybe_put_env(context, _metadata), do: context
 
   defp extract_output({:ok, output}), do: ensure_non_empty(output)
   defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
@@ -187,7 +186,8 @@ defmodule SkillKit.Agent.ToolDispatch do
        state.agent
        | name: "#{state.agent.name}/skill:#{skill.name}-#{:erlang.unique_integer([:positive])}",
          system_prompt: state.agent.system_prompt <> "\n\n" <> body,
-         skills: skill_providers(skill),
+         tools: inherited_tools_for_skill(state.agent.tools, skill),
+         skills: [],
          depth: state.agent.depth + 1,
          parent_ref: build_parent_ref(state),
          registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}",
@@ -196,11 +196,16 @@ defmodule SkillKit.Agent.ToolDispatch do
      }}
   end
 
-  defp skill_providers(%{tool: tool}) when tool != SkillKit.Tools.Shell do
-    [{tool, []}]
+  # The child agent forked from `activate_skill` inherits the parent's
+  # `tools` and adds the skill's underlying tool module (if not already
+  # present), so the child has a direct way to execute the skill.
+  defp inherited_tools_for_skill(parent_tools, %{tool: tool_module}) do
+    if Enum.any?(parent_tools, fn {module, _opts} -> module == tool_module end) do
+      parent_tools
+    else
+      parent_tools ++ [{tool_module, []}]
+    end
   end
-
-  defp skill_providers(_skill), do: []
 
   defp start_skill_agent(agent, skill, state, id) do
     case Runtime.start_agent(agent) do
@@ -286,6 +291,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         model: agent_def.model || state.agent.model,
         depth: state.agent.depth + 1,
         parent_ref: build_parent_ref(state),
+        tools: state.agent.tools,
         skills: state.agent.skills,
         runtime: state.agent.runtime,
         registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"

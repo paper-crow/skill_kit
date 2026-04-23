@@ -25,19 +25,19 @@ defmodule SkillKit.Agent.ToolDispatchTest do
     {:ok, agent: agent}
   end
 
-  test "build_context/1 returns the full context map", %{agent: agent} do
-    assert ToolDispatch.build_context(%{agent: agent}) == %{
+  test "build_context/2 returns the full context map", %{agent: agent} do
+    assert ToolDispatch.build_context(%{agent: agent}, "bash") == %{
              agent: agent,
              scope: :my_scope
            }
   end
 
-  test "build_context/1 returns a context map with nil scope when the agent has none", %{
+  test "build_context/2 returns a context map with nil scope when the agent has none", %{
     agent: agent
   } do
     agent = %{agent | scope: nil}
 
-    assert ToolDispatch.build_context(%{agent: agent}) == %{
+    assert ToolDispatch.build_context(%{agent: agent}, "bash") == %{
              agent: agent,
              scope: nil
            }

@@ -34,10 +34,8 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
     {:ok, agent} =
       SkillKit.start_agent(definition,
-        skills: [
-          {SkillKit.Kit.Local, dir: skills_dir},
-          {SkillKit.Tools.Shell, []}
-        ],
+        tools: [{SkillKit.Tools.Shell, []}],
+        skills: [{SkillKit.Kit.Local, dir: skills_dir}],
         caller: self()
       )
 
