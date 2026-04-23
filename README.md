@@ -279,6 +279,44 @@ deltas to caller -> execute tools -> loop until done -> send `AssistantMessage`.
 See the [Architecture guide](guides/architecture.md) for the full supervision
 tree, message flow, and module boundaries.
 
+## Webhooks
+
+Agents can register HTTP webhook endpoints through the `SkillKit.Tools.Webhook`
+kit. The adapter ships a Plug for the host to mount, a Registry that
+tracks running agents by name, and vendor verifier modules for GitHub,
+Stripe, and Slack.
+
+Host wiring:
+
+```elixir
+# Application tree:
+children = [{SkillKit.Webhook, []}]
+
+# Phoenix/Plug router:
+forward "/webhooks", to: SkillKit.Webhook.Plug
+
+# Per agent:
+SkillKit.start_agent("agents/support",
+  skills: [{SkillKit.Tools.Webhook,
+            verifiers: %{
+              "stripe" => SkillKit.Webhook.Verifier.Stripe,
+              "github" => SkillKit.Webhook.Verifier.Github,
+              "slack"  => SkillKit.Webhook.Verifier.Slack
+            }}])
+```
+
+Also add a `Plug.Parsers` body-reader so HMAC can verify the raw bytes:
+
+```elixir
+plug Plug.Parsers,
+  parsers: [:json, :urlencoded],
+  body_reader: {SkillKit.Webhook.BodyReader, :read_body, []},
+  json_decoder: Jason
+```
+
+See `docs/superpowers/specs/2026-04-21-webhook-adapter-design.md` for the
+full design.
+
 ## Guides
 
 - [Examples](guides/examples.md) — persona chat walkthrough, sample agents, directory structures
