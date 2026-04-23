@@ -34,6 +34,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   @impl true
   def run(args) do
+    load_dotenv()
     Mix.Task.run("app.start")
 
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
@@ -82,6 +83,53 @@ defmodule Mix.Tasks.SkillKit.Chat do
     Process.exit(http_sup, :shutdown)
     Process.exit(webhook_sup, :shutdown)
   end
+
+  # Loads KEY=value pairs from a project-root `.env` into the process
+  # environment. Lines starting with `#` are ignored. Existing env vars
+  # take precedence (so a shell export can override the file).
+  defp load_dotenv do
+    case File.read(".env") do
+      {:ok, content} -> apply_dotenv(content)
+      {:error, _} -> :ok
+    end
+  end
+
+  defp apply_dotenv(content) do
+    content
+    |> String.split("\n")
+    |> Enum.each(&put_env_line/1)
+  end
+
+  defp put_env_line(line) do
+    trimmed = String.trim(line)
+    put_env_kv(trimmed)
+  end
+
+  defp put_env_kv(""), do: :ok
+  defp put_env_kv("#" <> _), do: :ok
+
+  defp put_env_kv(line) do
+    case String.split(line, "=", parts: 2) do
+      [key, value] -> put_env_if_missing(String.trim(key), unquote_value(value))
+      _ -> :ok
+    end
+  end
+
+  defp put_env_if_missing(key, value) do
+    case System.get_env(key) do
+      nil -> System.put_env(key, value)
+      _existing -> :ok
+    end
+  end
+
+  defp unquote_value(value) do
+    trimmed = String.trim(value)
+    strip_quotes(trimmed)
+  end
+
+  defp strip_quotes(<<?", rest::binary>>), do: String.trim_trailing(rest, ~s("))
+  defp strip_quotes(<<?', rest::binary>>), do: String.trim_trailing(rest, "'")
+  defp strip_quotes(value), do: value
 
   defp webhook_port do
     case System.get_env("SKILL_KIT_WEBHOOK_PORT") do
