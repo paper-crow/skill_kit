@@ -128,18 +128,29 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   The context contains:
     * `:agent` — the full agent struct (scope, name, etc.).
+    * `:agent_name` — the root agent's name. For an activate_skill child
+      this is the parent's name, not the ephemeral child name — so
+      state that outlives the child (e.g. a webhook registration) is
+      bound to the right agent.
     * `:scope` — shortcut to `agent.scope`.
     * Tool-specific metadata merged in (e.g., `:cwd`, `:env` for Shell;
       `:supervisor`, `:verifiers` for Webhook).
   """
   def build_context(state, tool_name) do
-    base_context = %{agent: state.agent, scope: state.agent.scope}
+    base_context = %{
+      agent: state.agent,
+      agent_name: root_agent_name(state.agent),
+      scope: state.agent.scope
+    }
 
     case SkillKit.Catalog.tool_config(state.agent, tool_name) do
       nil -> base_context
       {_tool, metadata} -> Map.merge(base_context, Map.delete(metadata, :tool))
     end
   end
+
+  defp root_agent_name(%{parent_ref: %SkillKit.AgentRef{name: name}}), do: name
+  defp root_agent_name(%{name: name}), do: name
 
   defp extract_output({:ok, output}), do: ensure_non_empty(output)
   defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)

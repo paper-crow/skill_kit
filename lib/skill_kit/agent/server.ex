@@ -144,6 +144,12 @@ defmodule SkillKit.Agent.Server do
       {entry, subagents} ->
         state = %{state | subagents: subagents}
 
+        require Logger
+
+        Logger.warning(
+          "Subagent crashed: name=#{entry.name} task=#{entry.task} reason=#{inspect(reason, pretty: true, limit: :infinity)}"
+        )
+
         message = %SystemMessage{
           content:
             "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
