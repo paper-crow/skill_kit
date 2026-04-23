@@ -255,38 +255,48 @@ defmodule Mix.Tasks.SkillKit.Chat do
   end
 
   # Printer Task — receives all agent events and prints as they arrive,
-  # independent of the chat loop's stdin blocking. Resolves the race
-  # where inbound webhook messages would otherwise queue until the user
-  # hit Enter.
-  defp printer_loop(agent_name) do
+  # independent of the chat loop's stdin blocking. Matches on the root
+  # agent name as a prefix so events from activate_skill child agents
+  # (named "<root>/skill:<skill_name>-<n>") are also displayed.
+  defp printer_loop(root_name) do
     receive do
-      %Delta{agent: ^agent_name, text: text} ->
-        IO.write(text)
+      %Delta{agent: agent, text: text} ->
+        if belongs_to?(agent, root_name), do: IO.write(text)
 
-      %ToolCallComplete{agent: ^agent_name, name: name, input: input} ->
-        IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
+      %ToolCallComplete{agent: agent, name: name, input: input} ->
+        if belongs_to?(agent, root_name) do
+          IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
+        end
 
-      %ToolResult{agent: ^agent_name} = result ->
-        print_tool_result(result)
+      %ToolResult{agent: agent} = result ->
+        if belongs_to?(agent, root_name), do: print_tool_result(result)
 
-      %AssistantMessage{agent: ^agent_name} ->
-        IO.puts("\n")
+      %AssistantMessage{agent: agent} ->
+        if belongs_to?(agent, root_name), do: IO.puts("\n")
 
-      %Error{agent: ^agent_name, reason: reason} ->
-        IO.puts("\n[error] #{inspect(reason)}\n")
+      %Error{agent: agent, reason: reason} ->
+        if belongs_to?(agent, root_name) do
+          IO.puts("\n[error] #{inspect(reason)}\n")
+        end
 
       _other ->
         :ok
     end
 
-    printer_loop(agent_name)
+    printer_loop(root_name)
+  end
+
+  defp belongs_to?(agent_name, root_name) do
+    agent_name == root_name or String.starts_with?(agent_name, root_name <> "/")
   end
 
   defp print_tool_result(%ToolResult{is_error: true, content: content}) do
     IO.puts(IO.ANSI.format([:red, "  ← error: ", :reset, truncate(content)]))
   end
 
-  defp print_tool_result(%ToolResult{}), do: :ok
+  defp print_tool_result(%ToolResult{content: content}) do
+    IO.puts(IO.ANSI.format([:faint, "  ← ", truncate(content)]))
+  end
 
   defp truncate(content) when is_binary(content) do
     if String.length(content) > 240, do: String.slice(content, 0, 240) <> "…", else: content
