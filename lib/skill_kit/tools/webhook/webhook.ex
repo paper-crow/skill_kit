@@ -37,13 +37,15 @@ defmodule SkillKit.Tools.Webhook do
   alias SkillKit.Webhook.Lifecycle
   alias SkillKit.Webhook.Url
   alias SkillKit.Webhook.Verifier.Github
+  alias SkillKit.Webhook.Verifier.None
   alias SkillKit.Webhook.Verifier.Slack
   alias SkillKit.Webhook.Verifier.Stripe
 
   @default_verifiers %{
     "stripe" => Stripe,
     "github" => Github,
-    "slack" => Slack
+    "slack" => Slack,
+    "none" => None
   }
 
   @impl SkillKit.Kit.Provider
