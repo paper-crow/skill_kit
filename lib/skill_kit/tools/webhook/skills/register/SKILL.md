@@ -4,27 +4,44 @@ description: "Register a webhook endpoint bound to this agent. Returns a unique 
 ---
 Register a new webhook endpoint for this agent.
 
-Provide the following arguments as JSON:
+## Arguments (JSON)
 
-- `prompt` (string, required) — the template that renders into a user message when the webhook fires. Supports these tokens:
-    - `$WEBHOOK_BODY` — raw request body (string).
-    - `$WEBHOOK_METHOD` — HTTP method (usually `POST`).
-    - `$WEBHOOK_HEADERS` — JSON-encoded header map.
-    - `$WEBHOOK_QUERY` — JSON-encoded query params.
-- `verifier` (object, required) — signature verifier config.
-    - `type` (string, required) — one of the vendor types this agent is configured with (see below).
-    - `secret_key` (string, required) — the name of the credential (in the app's `SkillKit.CredentialProvider`) that holds the shared secret.
-    - `max_skew` (int, optional) — timestamp tolerance in seconds for schemes that include one.
-- `idempotency` (object, optional) — duplicate-detection config.
-    - `key` (object, required) — one of `{"header": "x-github-delivery"}` or `{"json_path": "$.id"}`.
+- `prompt` (string, required) — the template rendered into a user message each time the webhook fires. Supported tokens:
+    - `$WEBHOOK_BODY` — raw request body
+    - `$WEBHOOK_METHOD` — HTTP method (usually `POST`)
+    - `$WEBHOOK_HEADERS` — JSON-encoded header map
+    - `$WEBHOOK_QUERY` — JSON-encoded query params
+- `verifier` (object, required)
+    - `type` (string, required) — one of `stripe`, `github`, `slack`, or `none`.
+      - `stripe` / `github` / `slack` — HMAC-SHA256 with vendor-specific signing template and header format. Requires `secret_key` to point at a real credential.
+      - `none` — no signature check; relies on URL entropy (~192 bits) + transport-level trust. Still requires `secret_key` for API consistency; use any non-empty placeholder (the credential is not read).
+    - `secret_key` (string, required) — name of a credential registered in the app's `SkillKit.CredentialProvider`. The host is responsible for knowing which keys are available; ask the user if unsure.
+    - `max_skew` (int, optional) — timestamp tolerance in seconds; only used by vendors that sign timestamps.
+- `idempotency` (object, optional)
+    - `key` (object, required) — either `{"header": "x-github-delivery"}` or `{"json_path": "$.id"}`.
     - `ttl` (int, optional) — dedup window in seconds. Default 86400 (24h).
 
-Call this skill and the system will respond with `"Webhook registered. URL: <full URL>"`. Hand that URL to the user (or configure it in the external system) — inbound HTTP requests to that URL will deliver messages to this agent.
+## Response
 
-## Available verifier types
+- Success: `"Webhook registered. URL: <full URL>"`. Hand the URL to the user and tell them inbound HTTP requests to that URL will deliver messages to this agent.
+- Failure: an error string describing the specific reason (missing field, unknown verifier type, etc.).
 
-$WEBHOOK_VERIFIER_TYPES
+## Examples
 
-## Available credential keys
+Simplest echo with no signature:
 
-$WEBHOOK_CREDENTIAL_KEYS
+```json
+{
+  "prompt": "Webhook fired: $WEBHOOK_BODY",
+  "verifier": {"type": "none", "secret_key": "_"}
+}
+```
+
+Signed GitHub push webhook:
+
+```json
+{
+  "prompt": "GitHub push: $WEBHOOK_BODY",
+  "verifier": {"type": "github", "secret_key": "GITHUB_WEBHOOK_SECRET"}
+}
+```

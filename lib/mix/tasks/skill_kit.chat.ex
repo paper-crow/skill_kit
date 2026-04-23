@@ -38,7 +38,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     Mix.Task.run("app.start")
 
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
-    skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
     webhook_port = webhook_port()
 
     agent_name =
@@ -67,7 +66,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, agent} =
       SkillKit.start_agent(definition,
         skills: [
-          {SkillKit.Kit.Local, dir: skills_dir},
           {SkillKit.Tools.Shell, []},
           {SkillKit.Tools.Webhook, []}
         ],
@@ -270,8 +268,8 @@ defmodule Mix.Tasks.SkillKit.Chat do
       %ToolCallComplete{agent: ^agent_name, name: name, input: input} ->
         IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
 
-      %ToolResult{agent: ^agent_name} ->
-        :ok
+      %ToolResult{agent: ^agent_name} = result ->
+        print_tool_result(result)
 
       %AssistantMessage{agent: ^agent_name} ->
         IO.puts("\n")
@@ -285,6 +283,18 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
     printer_loop(agent_name)
   end
+
+  defp print_tool_result(%ToolResult{is_error: true, content: content}) do
+    IO.puts(IO.ANSI.format([:red, "  ← error: ", :reset, truncate(content)]))
+  end
+
+  defp print_tool_result(%ToolResult{}), do: :ok
+
+  defp truncate(content) when is_binary(content) do
+    if String.length(content) > 240, do: String.slice(content, 0, 240) <> "…", else: content
+  end
+
+  defp truncate(content), do: inspect(content, limit: 4)
 
   defp format_input("bash", %{"command" => cmd}), do: cmd
   defp format_input("activate_skill", %{"name" => name}), do: name
