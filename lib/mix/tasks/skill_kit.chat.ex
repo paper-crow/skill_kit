@@ -54,7 +54,8 @@ defmodule Mix.Tasks.SkillKit.Chat do
       exit({:shutdown, 1})
     end
 
-    {:ok, definition} = Agent.parse(agent_md)
+    {:ok, content} = File.read(agent_md)
+    {:ok, definition} = Agent.parse(content)
 
     {:ok, webhook_sup} = SkillKit.Webhook.Supervisor.start_link([])
     {:ok, http_sup} = start_webhook_server(webhook_port)
@@ -154,12 +155,17 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   defp agent_description(agents_dir, name) do
     agent_md = Path.join([agents_dir, name, "AGENT.md"])
+    describe(read_and_parse(agent_md))
+  end
 
-    case Agent.parse(agent_md) do
-      {:ok, d} -> d.description
-      _ -> ""
+  defp read_and_parse(agent_md) do
+    with {:ok, content} <- File.read(agent_md) do
+      Agent.parse(content)
     end
   end
+
+  defp describe({:ok, definition}), do: definition.description
+  defp describe(_), do: ""
 
   defp prompt_agent_choice(agents) do
     input = String.trim(IO.gets("Select agent: "))
