@@ -261,18 +261,16 @@ defmodule Mix.Tasks.SkillKit.Chat do
   defp printer_loop(root_name) do
     receive do
       %Delta{agent: agent, text: text} ->
-        if belongs_to?(agent, root_name), do: IO.write(text)
+        if agent == root_name, do: IO.write(text)
 
       %ToolCallComplete{agent: agent, name: name, input: input} ->
-        if belongs_to?(agent, root_name) do
-          IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
-        end
+        print_tool_call(origin(agent, root_name), name, input)
 
       %ToolResult{agent: agent} = result ->
-        if belongs_to?(agent, root_name), do: print_tool_result(result)
+        print_tool_result(origin(agent, root_name), result)
 
       %AssistantMessage{agent: agent} ->
-        if belongs_to?(agent, root_name), do: IO.puts("\n")
+        if agent == root_name, do: IO.puts("\n")
 
       %Error{agent: agent, reason: reason} ->
         if belongs_to?(agent, root_name) do
@@ -286,17 +284,50 @@ defmodule Mix.Tasks.SkillKit.Chat do
     printer_loop(root_name)
   end
 
+  defp origin(agent_name, root_name) do
+    cond do
+      agent_name == root_name -> :root
+      String.starts_with?(agent_name, root_name <> "/") -> :subloop
+      true -> :other
+    end
+  end
+
   defp belongs_to?(agent_name, root_name) do
     agent_name == root_name or String.starts_with?(agent_name, root_name <> "/")
   end
 
-  defp print_tool_result(%ToolResult{is_error: true, content: content}) do
+  defp print_tool_call(:root, name, input) do
+    IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
+  end
+
+  defp print_tool_call(:subloop, name, input) do
+    IO.puts(IO.ANSI.format([:cyan, "  ↳ #{name}(#{format_input(name, input)})"]))
+  end
+
+  defp print_tool_call(:other, _name, _input), do: :ok
+
+  # Skip printing the final `activate_skill` tool result — the sub-loop
+  # already streamed that text via Delta events, so printing it again
+  # (truncated) just looks like a duplicate ghost message.
+  defp print_tool_result(_origin, %ToolResult{name: "activate_skill", is_error: false}), do: :ok
+
+  defp print_tool_result(:root, %ToolResult{is_error: true, content: content}) do
     IO.puts(IO.ANSI.format([:red, "  ← error: ", :reset, truncate(content)]))
   end
 
-  defp print_tool_result(%ToolResult{content: content}) do
+  defp print_tool_result(:root, %ToolResult{content: content}) do
     IO.puts(IO.ANSI.format([:faint, "  ← ", truncate(content)]))
   end
+
+  defp print_tool_result(:subloop, %ToolResult{is_error: true, content: content}) do
+    IO.puts(IO.ANSI.format([:red, "  ← error: ", :reset, truncate(content)]))
+  end
+
+  defp print_tool_result(:subloop, %ToolResult{content: content}) do
+    IO.puts(IO.ANSI.format([:cyan, "  ← ", truncate(content)]))
+  end
+
+  defp print_tool_result(:other, _result), do: :ok
 
   defp truncate(content) when is_binary(content) do
     if String.length(content) > 240, do: String.slice(content, 0, 240) <> "…", else: content
