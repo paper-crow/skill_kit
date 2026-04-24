@@ -174,7 +174,9 @@ defmodule SkillKit.Agent.SkillActivation do
     %{acc | tool_calls: acc.tool_calls ++ [tool_call]}
   end
 
-  defp process_event(%Usage{} = usage, acc, _agent, _sub_name) do
+  defp process_event(%Usage{} = usage, acc, agent, sub_name) do
+    notify_caller(agent, %{usage | agent: sub_name})
+
     merged = %{
       input_tokens: acc.usage.input_tokens + usage.input_tokens,
       output_tokens: acc.usage.output_tokens + usage.output_tokens

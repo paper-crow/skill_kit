@@ -10,6 +10,7 @@ defmodule SkillKit.Agent.SkillActivationTest do
   alias SkillKit.Event.Done
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
+  alias SkillKit.Event.Usage
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
   alias SkillKit.Types.AssistantMessage
@@ -180,6 +181,24 @@ defmodule SkillKit.Agent.SkillActivationTest do
 
       sub_name = "#{agent_name}/skill:fake:do"
       assert_receive %Delta{agent: ^sub_name, text: "hello from sub"}
+    end
+
+    test "forwards Usage events from the sub-loop to the caller, tagged with sub-agent name",
+         %{state: state, skill: skill, agent_name: agent_name} do
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, _opts ->
+        events = [
+          %Delta{text: "x"},
+          %Usage{input_tokens: 11, output_tokens: 22},
+          %Done{stop_reason: :end_turn}
+        ]
+
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      SkillActivation.run(state, skill, "body", "id")
+
+      sub_name = "#{agent_name}/skill:fake:do"
+      assert_receive %Usage{agent: ^sub_name, input_tokens: 11, output_tokens: 22}
     end
 
     test "passes skill metadata through to the tool context", %{state: state, skill: skill} do
