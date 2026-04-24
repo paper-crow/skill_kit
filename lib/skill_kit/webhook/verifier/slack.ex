@@ -36,21 +36,25 @@ defmodule SkillKit.Webhook.Verifier.Slack do
 
   @impl true
   def verify(raw_body, conn, config, agent) do
-    handle_request(classify(raw_body), raw_body, conn, config, agent)
+    merged = Map.merge(@defaults, config)
+    post_verify(Hmac.verify(raw_body, conn, merged, agent), raw_body, conn)
   end
 
-  defp classify(raw_body) do
-    case Jason.decode(raw_body) do
-      {:ok, %{"type" => "url_verification", "challenge" => challenge}}
-      when is_binary(challenge) ->
-        {:handshake, challenge}
+  defp post_verify(:ok, raw_body, conn), do: dispatch(classify(raw_body), conn)
+  defp post_verify({:error, _} = err, _raw_body, _conn), do: err
 
-      _ ->
-        :normal
-    end
-  end
+  defp classify(raw_body), do: match_handshake(Jason.decode(raw_body))
 
-  defp handle_request({:handshake, challenge}, _raw_body, conn, _config, _agent) do
+  defp match_handshake({:ok, %{"type" => "url_verification", "challenge" => challenge}})
+       when is_binary(challenge),
+       do: {:handshake, challenge}
+
+  defp match_handshake(_), do: :normal
+
+  defp dispatch({:handshake, challenge}, conn), do: respond_challenge(conn, challenge)
+  defp dispatch(:normal, _conn), do: :ok
+
+  defp respond_challenge(conn, challenge) do
     response = Jason.encode!(%{challenge: challenge})
 
     resp_conn =
@@ -59,9 +63,5 @@ defmodule SkillKit.Webhook.Verifier.Slack do
       |> Plug.Conn.send_resp(200, response)
 
     {:handshake, resp_conn}
-  end
-
-  defp handle_request(:normal, raw_body, conn, config, agent) do
-    Hmac.verify(raw_body, conn, Map.merge(@defaults, config), agent)
   end
 end

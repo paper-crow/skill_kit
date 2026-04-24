@@ -12,13 +12,36 @@ defmodule SkillKit.Webhook.Verifier.SlackTest do
 
   defp agent, do: %SkAgent{name: "a", description: "t", system_prompt: ""}
 
-  test "short-circuits url_verification with the challenge response" do
+  test "rejects url_verification body that is not signed" do
+    SkillKit.CredentialProvider.Mock
+    |> stub(:fetch, fn _tool, _agent, "SL" -> {:ok, @secret} end)
+
     body = ~s({"type":"url_verification","challenge":"chal_abc"})
 
     conn =
       :post
       |> Plug.Test.conn(body)
       |> Plug.Conn.put_req_header("content-type", "application/json")
+
+    assert {:error, :invalid_signature} =
+             Slack.verify(body, conn, %{secret_key: "SL"}, agent())
+  end
+
+  test "handshakes signed url_verification with the challenge response" do
+    SkillKit.CredentialProvider.Mock
+    |> stub(:fetch, fn _tool, _agent, "SL" -> {:ok, @secret} end)
+
+    ts = Integer.to_string(System.system_time(:second))
+    body = ~s({"type":"url_verification","challenge":"chal_abc"})
+
+    sig =
+      :hmac |> :crypto.mac(:sha256, @secret, "v0:#{ts}:#{body}") |> Base.encode16(case: :lower)
+
+    conn =
+      :post
+      |> Plug.Test.conn(body)
+      |> Plug.Conn.put_req_header("x-slack-request-timestamp", ts)
+      |> Plug.Conn.put_req_header("x-slack-signature", "v0=#{sig}")
 
     assert {:handshake, conn} = Slack.verify(body, conn, %{secret_key: "SL"}, agent())
     assert conn.state == :sent
