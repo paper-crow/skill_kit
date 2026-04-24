@@ -27,7 +27,7 @@ defmodule SkillKit.Webhook.Verifier.None do
       %SkillKit.Webhook{
         id: "...",
         agent_name: "support",
-        prompt: "got: $WEBHOOK_BODY",
+        prompt: "A webhook arrived; echo the body back.",
         verifier: {SkillKit.Webhook.Verifier.None, %{}},
         inserted_at: DateTime.utc_now()
       }

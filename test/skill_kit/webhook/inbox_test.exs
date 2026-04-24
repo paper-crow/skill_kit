@@ -47,7 +47,9 @@ defmodule SkillKit.Webhook.InboxTest do
       assert text =~ ~s(webhook_id="wh_xyz")
       refute text =~ "My intent"
 
-      assert Keyword.fetch!(opts, :system_append) == "My intent"
+      system = Keyword.fetch!(opts, :system_append)
+      assert system =~ "My intent"
+      assert system =~ "webhook_inbox"
       assert [{SkillKit.Tools.WebhookInbox, ctx}] = Keyword.fetch!(opts, :tools_add)
       assert ctx.inbox_module == SkillKit.Webhook.Inbox.Memory
       assert ctx.inbox == :my_inbox

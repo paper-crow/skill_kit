@@ -44,7 +44,7 @@ defmodule SkillKit.Webhook.PlugTest do
     %Webhook{
       id: id,
       agent_name: agent_name,
-      prompt: "evt: $WEBHOOK_BODY",
+      prompt: "A webhook event arrived; echo the body back.",
       verifier: verifier,
       inserted_at: DateTime.utc_now()
     }

@@ -29,6 +29,9 @@ defmodule SkillKit.Webhook.Inbox.MemoryTest do
       e = build_entry(%{prompt: "My intent"})
       assert :ok = Memory.put(inbox, e)
 
+      # The entry is passed through verbatim — the dispatch callback
+      # receives what was put; composition happens downstream in
+      # Inbox.dispatch/2.
       assert_receive {:dispatch, entry}
       assert entry.prompt == "My intent"
       assert entry.delivery.id == e.delivery.id

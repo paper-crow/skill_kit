@@ -82,7 +82,7 @@ defmodule SkillKit.Tools.WebhookTest do
 
     test "creates a webhook record and returns the URL", %{supervisor: sup} do
       input = %{
-        "prompt" => "Stripe: $WEBHOOK_BODY",
+        "prompt" => "A Stripe webhook arrived; process the event.",
         "verifier" => %{"type" => "stripe", "secret_key" => "STRIPE"}
       }
 
@@ -92,7 +92,7 @@ defmodule SkillKit.Tools.WebhookTest do
       assert {:ok,
               [
                 %Webhook{
-                  prompt: "Stripe: $WEBHOOK_BODY",
+                  prompt: "A Stripe webhook arrived; process the event.",
                   verifier: {Stripe, %{secret_key: "STRIPE"}}
                 }
               ]} =

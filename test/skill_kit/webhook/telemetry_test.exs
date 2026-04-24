@@ -55,7 +55,7 @@ defmodule SkillKit.Webhook.TelemetryTest do
     webhook = %Webhook{
       id: "tele-1",
       agent_name: "agent",
-      prompt: "b: $WEBHOOK_BODY",
+      prompt: "A webhook fired; handle the payload.",
       verifier: {Github, %{secret_key: "GH"}},
       inserted_at: DateTime.utc_now()
     }

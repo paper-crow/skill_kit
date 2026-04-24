@@ -101,9 +101,9 @@ defmodule SkillKit.Tools.Webhook do
           "prompt" => %{
             "type" => "string",
             "description" =>
-              "register (required) / update (optional). Template rendered into a user message " <>
-                "on each inbound hit. Tokens: $WEBHOOK_BODY, $WEBHOOK_METHOD, " <>
-                "$WEBHOOK_HEADERS, $WEBHOOK_QUERY."
+              "register (required) / update (optional). Plain-English handler brief that becomes " <>
+                "the sub-loop's system prompt addition when this webhook fires. The request body " <>
+                "+ metadata are available to the receiving agent via the `webhook_inbox` tool."
           },
           "verifier" => %{
             "type" => "object",

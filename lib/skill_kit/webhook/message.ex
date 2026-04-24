@@ -11,6 +11,28 @@ defmodule SkillKit.Webhook.Message do
 
   alias SkillKit.Webhook.Inbox
 
+  @on_hit_guidance """
+  You just received a webhook delivery. The user message contains a \
+  `<webhook-delivery id="..." webhook_id="..." method="..." body_bytes="..."/>` \
+  pointer — the payload itself is NOT inlined, to keep the context small. \
+  Use the `webhook_inbox` tool to read the delivery:
+
+    - `operation: "summary", id: "<id>"` — structural shape (types, sizes, \
+      header list) with no leaf values. Use this first for large payloads to \
+      see what's inside before reading specific fields.
+    - `operation: "read", id: "<id>", selector: "<path>"` — one slice. \
+      Selectors: `body.field`, `body.arr[0].field`, `body.arr[].field` \
+      (array projection), `headers.x-name`, `headers`, `query`, `method`.
+    - `operation: "read", id: "<id>", selector: "body", limit_bytes: N` — \
+      byte-capped read for very large bodies; paginate with \
+      `offset_bytes` if needed.
+    - `operation: "delete", id: "<id>"` — evict after processing, if \
+      retention matters.
+
+  The handler brief authored by the user follows. Act on what it asks; \
+  call `webhook_inbox` as needed to inspect or extract payload data.
+  """
+
   @doc """
   The standalone pointer tag for a delivery. Attributes carry the cheap
   metadata inline so the agent can branch without a tool call for trivial
@@ -36,7 +58,7 @@ defmodule SkillKit.Webhook.Message do
   def send_event_opts(prompt, delivery, inbox_ref)
       when is_binary(prompt) and is_map(delivery) and is_tuple(inbox_ref) do
     [
-      system_append: prompt,
+      system_append: @on_hit_guidance <> "\n---\n\n" <> prompt,
       initial_messages: :empty,
       tools_add: [{SkillKit.Tools.WebhookInbox, inbox_context(inbox_ref)}],
       tools_remove: [SkillKit.Tools.Webhook],
