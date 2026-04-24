@@ -8,7 +8,7 @@ defmodule SkillKit.Webhook.Inbox.MemoryTest do
   setup do
     name = :"#{__MODULE__}_#{System.unique_integer([:positive])}"
     parent = self()
-    dispatch = fn agent, text, opts -> send(parent, {:dispatch, agent, text, opts}) end
+    dispatch = fn entry -> send(parent, {:dispatch, entry}) end
 
     {:ok, _pid} =
       Memory.start_link(
@@ -24,27 +24,22 @@ defmodule SkillKit.Webhook.Inbox.MemoryTest do
 
   # -- Memory-specific behavior (not part of the shared contract) ---------
 
-  describe "dispatch callback" do
-    test "fires with pointer text and standard send_event opts", %{inbox: inbox} do
+  describe "dispatch" do
+    test "fires with the full entry when :dispatch is a 1-arity fn", %{inbox: inbox} do
       e = build_entry(%{prompt: "My intent"})
       assert :ok = Memory.put(inbox, e)
 
-      assert_receive {:dispatch, _agent, text, opts}
-      assert text =~ e.delivery.id
-      assert text =~ "<webhook-delivery"
-      refute text =~ "My intent"
-      assert Keyword.fetch!(opts, :system_append) == "My intent"
-      assert [{SkillKit.Tools.WebhookInbox, _ctx}] = Keyword.fetch!(opts, :tools_add)
-      assert Keyword.fetch!(opts, :tools_remove) == [SkillKit.Tools.Webhook]
-      assert Keyword.fetch!(opts, :skills_remove_prefix) == "webhook:"
+      assert_receive {:dispatch, entry}
+      assert entry.prompt == "My intent"
+      assert entry.delivery.id == e.delivery.id
     end
 
-    test "not called when start_link has no :dispatch option" do
+    test "skipped when :dispatch is :none" do
       name = :"nodispatch_#{System.unique_integer([:positive])}"
-      {:ok, _pid} = Memory.start_link(name: name)
+      {:ok, _pid} = Memory.start_link(name: name, dispatch: :none)
 
       assert :ok = Memory.put(name, build_entry())
-      refute_receive {:dispatch, _, _, _}, 50
+      refute_receive {:dispatch, _}, 50
     end
   end
 
@@ -52,7 +47,7 @@ defmodule SkillKit.Webhook.Inbox.MemoryTest do
     @tag :capture_log
     test "oldest delivery evicted when max exceeded" do
       parent = self()
-      dispatch = fn _a, _t, _o -> send(parent, :dispatched) end
+      dispatch = fn _entry -> send(parent, :dispatched) end
       name = :"lru_#{System.unique_integer([:positive])}"
 
       {:ok, _pid} =
@@ -88,7 +83,7 @@ defmodule SkillKit.Webhook.Inbox.MemoryTest do
   describe "TTL (ttl_ms)" do
     test "expired entries return :not_found" do
       parent = self()
-      dispatch = fn _a, _t, _o -> send(parent, :dispatched) end
+      dispatch = fn _entry -> send(parent, :dispatched) end
       name = :"ttl_#{System.unique_integer([:positive])}"
 
       {:ok, _pid} =

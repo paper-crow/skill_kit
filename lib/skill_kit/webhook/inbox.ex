@@ -125,4 +125,40 @@ defmodule SkillKit.Webhook.Inbox do
 
   @doc "Evict a delivery."
   @callback delete(inbox(), agent_name(), delivery_id()) :: :ok
+
+  # -- Shared dispatch primitive -------------------------------------------
+  #
+  # Composing and dispatching the event is an inbox-level concern shared
+  # across every impl. Each impl decides *when* to emit (immediately,
+  # debounced, throttled, or not at all); the composition of the event
+  # text + send_event opts and the actual call to `SkillKit.send_event/3`
+  # live here so adapter modules don't re-implement them.
+
+  alias SkillKit.Webhook.Message
+
+  @doc """
+  Composes the standard event text and `send_event/3` opts for an entry
+  without dispatching. Useful for custom dispatch modes (coalesced
+  batches, etc.) and for unit-testing composition in isolation.
+  """
+  @spec compose(entry()) :: {String.t(), keyword()}
+  def compose(entry) do
+    text = Message.pointer(entry.delivery)
+    opts = Message.send_event_opts(entry.prompt, entry.delivery)
+    {text, opts}
+  end
+
+  @doc """
+  Composes and dispatches the event to the receiving agent via
+  `SkillKit.send_event/3`. Returns `:ok` on success or
+  `{:error, :not_found}` if the agent is not running.
+
+  Impls call this from `put/2` (or from a debounce/throttle timer) when
+  they decide it's time to notify the agent.
+  """
+  @spec dispatch(entry()) :: :ok | {:error, :not_found}
+  def dispatch(entry) do
+    {text, opts} = compose(entry)
+    SkillKit.send_event(entry.agent, text, opts)
+  end
 end

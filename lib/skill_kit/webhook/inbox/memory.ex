@@ -17,17 +17,19 @@ defmodule SkillKit.Webhook.Inbox.Memory do
       (default 24h)
     * `:default_limit_bytes` — cap applied to `read/4` results when the
       caller does not set `:limit_bytes` (default 4096)
-    * `:dispatch` — a 3-arity function `fn agent_ref, text, opts -> :ok`
-      called on `put/2` after the delivery is persisted. Default nil
-      (persist only, no dispatch). Production wires this to
-      `&SkillKit.send_event/3`.
+    * `:dispatch` — controls whether/how `put/2` notifies the agent after
+      persisting. One of:
+        * `:immediate` (default) — calls `SkillKit.Webhook.Inbox.dispatch/1`
+        * `:none` — persist only, no notification
+        * a 1-arity function `fn entry -> :ok` — invoked with the full
+          entry (primarily for tests that need to intercept dispatch)
   """
 
   @behaviour SkillKit.Webhook.Inbox
 
   use GenServer
 
-  alias SkillKit.Webhook.Message
+  alias SkillKit.Webhook.Inbox
 
   @default_max 500
   @default_ttl :timer.hours(24)
@@ -81,7 +83,7 @@ defmodule SkillKit.Webhook.Inbox.Memory do
       max_deliveries: Keyword.get(opts, :max_deliveries, @default_max),
       ttl_ms: Keyword.get(opts, :ttl_ms, @default_ttl),
       default_limit_bytes: Keyword.get(opts, :default_limit_bytes, @default_limit_bytes),
-      dispatch: Keyword.get(opts, :dispatch)
+      dispatch: Keyword.get(opts, :dispatch, :immediate)
     }
 
     {:ok, state}
@@ -89,7 +91,7 @@ defmodule SkillKit.Webhook.Inbox.Memory do
 
   @impl GenServer
   def handle_call({:put, entry}, _from, state) do
-    %{agent: agent_ref, prompt: prompt, delivery: delivery} = entry
+    %{delivery: delivery} = entry
     expires_at = now_ms() + state.ttl_ms
     key = {delivery.agent_name, delivery.id}
 
@@ -98,7 +100,7 @@ defmodule SkillKit.Webhook.Inbox.Memory do
     order = push_order(state.order, delivery.agent_name, delivery.id)
     order = evict_over_cap(order, delivery.agent_name, state)
 
-    maybe_dispatch(state.dispatch, agent_ref, prompt, delivery)
+    maybe_dispatch(state.dispatch, entry)
 
     {:reply, :ok, %{state | order: order}}
   end
@@ -151,13 +153,9 @@ defmodule SkillKit.Webhook.Inbox.Memory do
     end
   end
 
-  defp maybe_dispatch(nil, _agent_ref, _prompt, _delivery), do: :ok
-
-  defp maybe_dispatch(fun, agent_ref, prompt, delivery) when is_function(fun, 3) do
-    text = Message.pointer(delivery)
-    opts = Message.send_event_opts(prompt, delivery)
-    fun.(agent_ref, text, opts)
-  end
+  defp maybe_dispatch(:immediate, entry), do: Inbox.dispatch(entry)
+  defp maybe_dispatch(:none, _entry), do: :ok
+  defp maybe_dispatch(fun, entry) when is_function(fun, 1), do: fun.(entry)
 
   # -- Read / Summary / List -----------------------------------------------
 
