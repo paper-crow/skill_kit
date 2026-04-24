@@ -10,6 +10,10 @@ Register a GitHub-signed webhook endpoint.
 - Delivery id: GitHub sends a unique `X-GitHub-Delivery` header on every request — use it for idempotency.
 - Common events: `push`, `pull_request`, `issues`, `release`.
 
+## Prompt guidance
+
+The handler's text output becomes the agent's chat turn, NOT the HTTP response body (GitHub already got a 202). Phrase the prompt as intent for the agent's chat output, not as "send back to GitHub."
+
 ## Call
 
 ```

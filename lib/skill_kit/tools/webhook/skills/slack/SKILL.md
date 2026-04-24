@@ -10,6 +10,10 @@ Register a Slack-signed webhook endpoint.
 - `url_verification` handshake: when you first add the URL in Slack, Slack POSTs a challenge. The framework responds automatically — your agent is NOT invoked for handshakes.
 - Slack retries on 5xx; dedup using the `event_id` field.
 
+## Prompt guidance
+
+The handler's text output becomes the agent's chat turn, NOT the HTTP response body (Slack already got a 202). Phrase the prompt as intent for the agent's chat output, not as "reply to Slack."
+
 ## Call
 
 ```

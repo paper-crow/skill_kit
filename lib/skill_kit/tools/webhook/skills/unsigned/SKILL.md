@@ -23,6 +23,10 @@ Do NOT use:
 - As a fallback when a signed vendor skill appears unavailable. Tell the user the vendor is not configured and stop.
 - For payments, auth events, or anything affecting other users.
 
+## Prompt guidance
+
+The handler's text output becomes the agent's chat turn, NOT the HTTP response body. The HTTP sender already got a 202 before your handler ran. Write the prompt accordingly — say "echo the body verbatim" rather than "echo it back to the client" or "return it in the response."
+
 ## Call
 
 ```

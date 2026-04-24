@@ -29,6 +29,17 @@ defmodule SkillKit.Webhook.Message do
     - `operation: "delete", id: "<id>"` — evict after processing, if \
       retention matters.
 
+  ## IMPORTANT: where your output goes
+
+  The HTTP sender ALREADY received a 202 Accepted response the moment \
+  the webhook fired — before this sub-loop ran. Your text output is NOT \
+  the HTTP response body; the sender will never see it. Your output \
+  becomes a turn in the agent's CHAT conversation, surfaced to the \
+  human who registered the webhook. If the user's handler brief says \
+  "echo back" or "return X", it means "produce that as your chat output \
+  for the human to see" — NOT "send as an HTTP response." Never claim \
+  the response was "sent back to the client"; it wasn't.
+
   The handler brief authored by the user follows. Act on what it asks; \
   call `webhook_inbox` as needed to inspect or extract payload data.
   """

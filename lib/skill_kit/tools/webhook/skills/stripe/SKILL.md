@@ -10,6 +10,10 @@ Register a Stripe-signed webhook endpoint.
 - Stripe events carry a stable top-level `id` — use it for idempotency.
 - Stripe retries on non-2xx for up to 3 days.
 
+## Prompt guidance
+
+The handler's text output becomes the agent's chat turn, NOT the HTTP response body (Stripe already got a 202). Phrase the prompt as intent for the agent's chat output, not as "send back to Stripe."
+
 ## Call
 
 ```
