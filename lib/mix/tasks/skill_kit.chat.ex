@@ -261,13 +261,19 @@ defmodule Mix.Tasks.SkillKit.Chat do
   end
 
   # Printer Task — receives all agent events and prints as they arrive,
-  # independent of the chat loop's stdin blocking. Matches on the root
-  # agent name as a prefix so events from activate_skill child agents
-  # (named "<root>/skill:<skill_name>-<n>") are also displayed.
+  # independent of the chat loop's stdin blocking. Sub-loop handling:
+  #
+  #   * "<root>/skill:<name>" — activate_skill chatter. Deltas hidden
+  #     (the final text comes back as the parent's tool_result), tool
+  #     calls shown in cyan for visibility.
+  #   * "<root>/delivery:<webhook_id>" — webhook event processing.
+  #     Deltas SHOWN (this is the only visible surface for the sub-loop's
+  #     response; there's no parent tool_result to collapse into), tool
+  #     calls shown in cyan too.
   defp printer_loop(root_name) do
     receive do
       %Delta{agent: agent, text: text} ->
-        if agent == root_name, do: IO.write(text)
+        print_delta(origin(agent, root_name), text)
 
       %ToolCallComplete{agent: agent, name: name, input: input} ->
         print_tool_call(origin(agent, root_name), name, input)
@@ -293,10 +299,16 @@ defmodule Mix.Tasks.SkillKit.Chat do
   defp origin(agent_name, root_name) do
     cond do
       agent_name == root_name -> :root
+      String.starts_with?(agent_name, root_name <> "/skill:") -> :skill
+      String.starts_with?(agent_name, root_name <> "/delivery:") -> :delivery
       String.starts_with?(agent_name, root_name <> "/") -> :subloop
       true -> :other
     end
   end
+
+  defp print_delta(:root, text), do: IO.write(text)
+  defp print_delta(:delivery, text), do: IO.write(IO.ANSI.format([:cyan, text]))
+  defp print_delta(_origin, _text), do: :ok
 
   defp belongs_to?(agent_name, root_name) do
     agent_name == root_name or String.starts_with?(agent_name, root_name <> "/")
@@ -306,7 +318,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
     IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
   end
 
-  defp print_tool_call(:subloop, name, input) do
+  defp print_tool_call(origin, name, input) when origin in [:skill, :delivery, :subloop] do
     IO.puts(IO.ANSI.format([:cyan, "  ↳ #{name}(#{format_input(name, input)})"]))
   end
 
@@ -325,11 +337,13 @@ defmodule Mix.Tasks.SkillKit.Chat do
     IO.puts(IO.ANSI.format([:faint, "  ← ", truncate(content)]))
   end
 
-  defp print_tool_result(:subloop, %ToolResult{is_error: true, content: content}) do
+  defp print_tool_result(origin, %ToolResult{is_error: true, content: content})
+       when origin in [:skill, :delivery, :subloop] do
     IO.puts(IO.ANSI.format([:red, "  ← error: ", :reset, truncate(content)]))
   end
 
-  defp print_tool_result(:subloop, %ToolResult{content: content}) do
+  defp print_tool_result(origin, %ToolResult{content: content})
+       when origin in [:skill, :delivery, :subloop] do
     IO.puts(IO.ANSI.format([:cyan, "  ← ", truncate(content)]))
   end
 
