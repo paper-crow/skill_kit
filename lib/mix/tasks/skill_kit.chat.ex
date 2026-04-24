@@ -9,14 +9,20 @@ defmodule Mix.Tasks.SkillKit.Chat do
   ## Webhook dev server
 
   Each chat session starts `SkillKit.Webhook` and an HTTP listener on
-  `SKILL_KIT_WEBHOOK_PORT` (default 4001). Agents loaded with the
-  `SkillKit.Tools.Webhook` kit can register endpoints through the
-  `webhook:register` skill:
+  `SKILL_KIT_WEBHOOK_PORT` (default 4001). The agent is loaded with
+  `SkillKit.Tools.Webhook, allow_unsigned: true` so you can register
+  ad-hoc endpoints without configuring HMAC secrets:
 
-      you> add a webhook with verifier type "none" that echoes the body
-      agent> Webhook registered. URL: http://localhost:4001/<id>
+      you> register a webhook that echoes the body back
+      agent> Webhook URL: http://localhost:4001/<id>
       $ curl -d "hi" http://localhost:4001/<id>
-      # agent receives "hi" as a user message and responds in the chat.
+      # agent receives the delivery as a scoped sub-loop and responds
+      # in the chat.
+
+  Signed vendor skills (`webhook:github`, `webhook:stripe`,
+  `webhook:slack`) are also loaded but will need a host-configured
+  credential to actually verify inbound requests — see the kit's
+  moduledoc for wiring.
   """
 
   use Mix.Task
@@ -66,7 +72,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, agent} =
       SkillKit.start_agent(definition,
         tools: [{SkillKit.Tools.Shell, []}],
-        skills: [{SkillKit.Tools.Webhook, []}],
+        skills: [{SkillKit.Tools.Webhook, [allow_unsigned: true]}],
         caller: printer
       )
 

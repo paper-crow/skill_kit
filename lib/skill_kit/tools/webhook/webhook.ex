@@ -2,41 +2,52 @@ defmodule SkillKit.Tools.Webhook do
   @moduledoc """
   Kit that lets agents register webhook endpoints via skill activation.
 
-  Host wiring:
+  ## Host wiring
 
       SkillKit.start_agent("agents/support",
         tools: [{SkillKit.Tools.Shell, []}],
         skills: [
           {SkillKit.Tools.Webhook,
-            verifiers: %{
-              "stripe" => SkillKit.Webhook.Verifier.Stripe,
-              "github" => SkillKit.Webhook.Verifier.Github,
-              "slack"  => SkillKit.Webhook.Verifier.Slack,
-              "none"   => SkillKit.Webhook.Verifier.None
-            }}
+            github:  [secret_key: "GITHUB_WEBHOOK_SECRET"],
+            stripe:  [secret_key: "STRIPE_WEBHOOK_SECRET", max_skew: 600],
+            slack:   [secret_key: "SLACK_WEBHOOK_SECRET"],
+            allow_unsigned: true}
         ])
 
-  The webhook kit lives in `skills:`, not `tools:`. The parent LLM sees
-  `activate_skill(name: "webhook:register" | "webhook:unregister" | "webhook:list")`
-  and activates one of the skills. `activate_skill` forks a child agent
-  that inherits the parent's `tools:` AND has `SkillKit.Tools.Webhook`
-  added as a first-class tool in the child. The child reads the skill
-  body and calls the `webhook` tool directly with structured args.
+  Each configured provider binds its signing secret to the corresponding
+  register skill. `allow_unsigned: true` additionally loads the
+  `webhook:unsigned` skill for ad-hoc endpoints protected only by URL
+  secrecy.
 
-  `load_kits/1`:
+  ## Skill surface
 
-  1. Stashes the configured `verifiers` map and agent-scoped
-     `supervisor` name into kit + skill `metadata` — flowing through
-     `ToolExecution.context` at activation time.
-  2. Sets `metadata.tool = __MODULE__` so when this kit is added to the
-     child agent's `tools:` list, the Catalog exposes the `webhook`
-     tool. (At the parent level this has no effect because the kit is
-     in `skills:`, not `tools:`.)
-  3. Injects a `:pre_agent` `%Hook{}` onto every skill so
-     `SkillKit.Webhook.Lifecycle` attaches the agent to the
-     `Webhook.Registry` when it boots.
+  Always loaded (vendor register + management):
 
-  `execute/1` dispatches on `input["operation"]`.
+    * `webhook:github`, `webhook:stripe`, `webhook:slack` — signed
+      vendor skills. Each stores the webhook with its verifier module
+      pre-bound. If the host did not configure a vendor's secret,
+      registration still succeeds (the LLM sees no error) but the
+      resulting webhook's secret_key is `nil`; at on-hit time the
+      verifier returns `:misconfigured` and the Plug responds 500. This
+      design prevents the LLM from drifting to the unsigned skill as a
+      fallback when a signed vendor appears unavailable.
+
+    * `webhook:update`, `webhook:unregister`, `webhook:list` — vendor-
+      agnostic management. Update is prompt-only; to rotate a verifier
+      secret, unregister + re-register.
+
+  Opt-in:
+
+    * `webhook:unsigned` — loaded only when `allow_unsigned: true`. The
+      SKILL.md calls out when NOT to use it.
+
+  ## Runtime
+
+  When a register skill is activated, its metadata (`verifier_module`,
+  `secret_key`, `max_skew`, `supervisor`) flows into the tool's
+  `ToolExecution.context`. The `register` op reads those directly — it
+  does NOT accept a `verifier` field from the LLM's tool input. The
+  LLM has no capability to choose credential names or verifier modules.
   """
 
   use SkillKit.Kit, name: "webhook"
@@ -47,35 +58,40 @@ defmodule SkillKit.Tools.Webhook do
   alias SkillKit.Webhook.Lifecycle
   alias SkillKit.Webhook.Url
   alias SkillKit.Webhook.Verifier.Github
+  alias SkillKit.Webhook.Verifier.None
   alias SkillKit.Webhook.Verifier.Slack
   alias SkillKit.Webhook.Verifier.Stripe
 
-  @default_verifiers %{
-    "stripe" => Stripe,
-    "github" => Github,
-    "slack" => Slack
+  @provider_modules %{
+    github: Github,
+    stripe: Stripe,
+    slack: Slack
   }
+
+  @provider_skill_names Map.new(@provider_modules, fn {atom, _} -> {"webhook:#{atom}", atom} end)
+
+  @default_max_skew 300
 
   @impl SkillKit.Kit.Provider
   def load_kits(config) do
     {:ok, [kit]} = super(config)
     supervisor = Keyword.get(config, :supervisor, SkillKit.Webhook)
-    verifiers = Keyword.get(config, :verifiers, @default_verifiers)
+    allow_unsigned = Keyword.get(config, :allow_unsigned, false)
 
-    validate_verifiers!(verifiers)
+    vendor_bindings = build_vendor_bindings(config)
+    unsigned_binding = build_unsigned_binding(allow_unsigned)
 
     hook = lifecycle_hook(supervisor)
 
     skills =
-      Enum.map(kit.skills, fn skill ->
-        patch_skill(skill, hook, supervisor, verifiers)
-      end)
+      kit.skills
+      |> filter_skills(allow_unsigned)
+      |> Enum.map(&patch_skill(&1, hook, supervisor, vendor_bindings, unsigned_binding))
 
     metadata =
       Map.merge(kit.metadata, %{
         tool: __MODULE__,
-        supervisor: supervisor,
-        verifiers: verifiers
+        supervisor: supervisor
       })
 
     {:ok, [%{kit | skills: skills, metadata: metadata}]}
@@ -87,10 +103,9 @@ defmodule SkillKit.Tools.Webhook do
       name: "webhook",
       description:
         "Register, update, unregister, or list HTTP webhook endpoints bound to this agent. " <>
-          "Registered endpoints are hosted by this process; inbound requests are " <>
-          "verified and delivered as user messages. Use operation=register to create, " <>
-          "operation=update to modify an existing webhook (URL preserved), " <>
-          "operation=unregister to delete, operation=list to view.",
+          "Each vendor has its own register skill (webhook:github, webhook:stripe, " <>
+          "webhook:slack, webhook:unsigned). Update, unregister, and list are " <>
+          "vendor-agnostic.",
       input_schema: %{
         "type" => "object",
         "properties" => %{
@@ -101,21 +116,11 @@ defmodule SkillKit.Tools.Webhook do
           "prompt" => %{
             "type" => "string",
             "description" =>
-              "register (required) / update (optional). Plain-English handler brief that becomes " <>
-                "the sub-loop's system prompt addition when this webhook fires. The request body " <>
-                "+ metadata are available to the receiving agent via the `webhook_inbox` tool."
-          },
-          "verifier" => %{
-            "type" => "object",
-            "description" =>
-              "register (required) / update (optional). Keys: type (stripe|github|slack), " <>
-                "secret_key, optional max_skew.",
-            "properties" => %{
-              "type" => %{"type" => "string", "enum" => ["stripe", "github", "slack"]},
-              "secret_key" => %{"type" => "string"},
-              "max_skew" => %{"type" => "integer"}
-            },
-            "required" => ["type", "secret_key"]
+              "register (required) / update (optional). Plain-English handler brief " <>
+                "that becomes the sub-loop's system prompt addition when this webhook " <>
+                "fires. The framework teaches the sub-loop how to read payloads via " <>
+                "the webhook_inbox tool — write the prompt as intent, not as a " <>
+                "template."
           },
           "idempotency" => %{
             "type" => "object",
@@ -132,6 +137,52 @@ defmodule SkillKit.Tools.Webhook do
     }
   end
 
+  # -- skill filtering + binding --------------------------------------------
+
+  defp filter_skills(skills, allow_unsigned) do
+    case allow_unsigned do
+      true -> skills
+      false -> Enum.reject(skills, &(&1.name == "webhook:unsigned"))
+    end
+  end
+
+  defp build_vendor_bindings(config) do
+    Enum.reduce(@provider_modules, %{}, fn {atom, module}, acc ->
+      binding = vendor_binding(module, Keyword.get(config, atom))
+      Map.put(acc, atom, binding)
+    end)
+  end
+
+  defp vendor_binding(module, nil) do
+    %{verifier_module: module, secret_key: nil, max_skew: @default_max_skew}
+  end
+
+  defp vendor_binding(module, opts) when is_list(opts) do
+    secret_key = Keyword.get(opts, :secret_key)
+
+    unless is_binary(secret_key) do
+      raise ArgumentError,
+            "webhook provider config must include :secret_key as a string, got: #{inspect(opts)}"
+    end
+
+    %{
+      verifier_module: module,
+      secret_key: secret_key,
+      max_skew: Keyword.get(opts, :max_skew, @default_max_skew)
+    }
+  end
+
+  defp vendor_binding(_module, other) do
+    raise ArgumentError,
+          "webhook provider config must be a keyword list, got: #{inspect(other)}"
+  end
+
+  defp build_unsigned_binding(true) do
+    %{verifier_module: None, secret_key: nil, max_skew: @default_max_skew}
+  end
+
+  defp build_unsigned_binding(false), do: nil
+
   defp lifecycle_hook(supervisor) do
     %Hook{
       event: :pre_agent,
@@ -140,24 +191,25 @@ defmodule SkillKit.Tools.Webhook do
     }
   end
 
-  defp patch_skill(skill, hook, supervisor, verifiers) do
-    metadata = Map.merge(skill.metadata, %{supervisor: supervisor, verifiers: verifiers})
+  defp patch_skill(%{name: name} = skill, hook, supervisor, vendor_bindings, unsigned_binding) do
+    extra =
+      skill_metadata(name, vendor_bindings, unsigned_binding) |> Map.put(:supervisor, supervisor)
+
+    metadata = Map.merge(skill.metadata, extra)
     %{skill | hooks: [hook | skill.hooks], metadata: metadata}
   end
 
-  defp validate_verifiers!(verifiers) do
-    Enum.each(verifiers, fn {type, module} ->
-      Code.ensure_loaded!(module)
-
-      unless function_exported?(module, :verify, 4) do
-        raise ArgumentError,
-              "verifier #{inspect(module)} for type #{inspect(type)} does not implement " <>
-                "SkillKit.Webhook.Verifier (missing verify/4)"
-      end
-    end)
+  defp skill_metadata(name, vendor_bindings, unsigned_binding) do
+    case Map.get(@provider_skill_names, name) do
+      nil -> skill_metadata_for(name, unsigned_binding)
+      vendor -> Map.fetch!(vendor_bindings, vendor)
+    end
   end
 
-  # -- Tool callback --------------------------------------------------------
+  defp skill_metadata_for("webhook:unsigned", binding) when is_map(binding), do: binding
+  defp skill_metadata_for(_name, _binding), do: %{}
+
+  # -- Tool dispatch -------------------------------------------------------
 
   @impl SkillKit.Tool
   def execute(%ToolExecution{input: %{"operation" => op}} = exec) do
@@ -172,7 +224,7 @@ defmodule SkillKit.Tools.Webhook do
   defp dispatch("list", exec), do: list(exec)
   defp dispatch(op, _exec), do: {:error, "unknown webhook operation: #{inspect(op)}"}
 
-  # -- register -------------------------------------------------------------
+  # -- register ------------------------------------------------------------
 
   defp register(%ToolExecution{input: input, context: ctx}) do
     case build_webhook(input, ctx) do
@@ -183,7 +235,7 @@ defmodule SkillKit.Tools.Webhook do
 
   defp build_webhook(input, ctx) do
     with {:ok, prompt} <- require_string(input, "prompt"),
-         {:ok, verifier} <- resolve_verifier(input, ctx),
+         {:ok, verifier} <- resolve_verifier_from_ctx(ctx),
          {:ok, idempotency} <- resolve_idempotency(input) do
       {:ok,
        %Webhook{
@@ -197,6 +249,18 @@ defmodule SkillKit.Tools.Webhook do
     end
   end
 
+  defp resolve_verifier_from_ctx(%{verifier_module: None}) do
+    {:ok, {None, %{}}}
+  end
+
+  defp resolve_verifier_from_ctx(%{verifier_module: module, secret_key: secret, max_skew: skew})
+       when is_atom(module) do
+    config = %{secret_key: secret, max_skew: skew}
+    {:ok, {module, config}}
+  end
+
+  defp resolve_verifier_from_ctx(_ctx), do: {:error, {:invalid, "verifier context"}}
+
   defp persist_and_report(%Webhook{} = webhook, ctx) do
     case Webhook.register(webhook, supervisor: ctx.supervisor) do
       :ok -> {:ok, "Webhook registered. URL: " <> Url.url(webhook)}
@@ -208,30 +272,6 @@ defmodule SkillKit.Tools.Webhook do
     case Map.get(input, key) do
       value when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
       _ -> {:error, {:missing_field, key}}
-    end
-  end
-
-  defp resolve_verifier(input, ctx) do
-    case Map.get(input, "verifier", %{}) do
-      %{"type" => type} = cfg when is_binary(type) -> lookup_verifier(type, cfg, ctx)
-      _ -> {:error, {:missing_field, "verifier.type"}}
-    end
-  end
-
-  defp lookup_verifier(type, cfg, ctx) do
-    case Map.get(ctx.verifiers, type) do
-      nil -> {:error, {:unknown_verifier, type}}
-      module -> build_verifier_binding(module, cfg)
-    end
-  end
-
-  defp build_verifier_binding(module, cfg) do
-    case Map.get(cfg, "secret_key") do
-      key when is_binary(key) and byte_size(key) > 0 ->
-        {:ok, {module, %{secret_key: key, max_skew: Map.get(cfg, "max_skew", 300)}}}
-
-      _ ->
-        {:error, {:missing_field, "verifier.secret_key"}}
     end
   end
 
@@ -256,36 +296,34 @@ defmodule SkillKit.Tools.Webhook do
   end
 
   defp generate_id do
-    24 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+    Base.url_encode64(:crypto.strong_rand_bytes(24), padding: false)
   end
 
   defp format_error({:missing_field, field}), do: "missing required field: #{field}"
-
-  defp format_error({:unknown_verifier, type}),
-    do: "unknown verifier type: #{type}; available types are passed in the agent's kit config"
-
   defp format_error({:invalid, field}), do: "invalid value for field: #{field}"
 
-  # -- update ---------------------------------------------------------------
+  # -- update (prompt-only) ------------------------------------------------
 
   defp update(%ToolExecution{input: %{"id" => id} = input, context: ctx}) when is_binary(id) do
-    case Webhook.get(id, supervisor: ctx.supervisor) do
-      {:ok, webhook} -> apply_update(webhook, input, ctx)
-      {:error, :not_found} -> {:error, "webhook not found: #{id}"}
-    end
+    dispatch_update(Webhook.get(id, supervisor: ctx.supervisor), id, input, ctx)
   end
 
   defp update(_exec), do: {:error, "missing required field: id"}
 
-  defp apply_update(webhook, input, ctx) do
-    with {:ok, prompt} <- updated_prompt(webhook, input),
-         {:ok, verifier} <- updated_verifier(webhook, input, ctx) do
-      updated = %{webhook | prompt: prompt, verifier: verifier}
-      :ok = Webhook.register(updated, supervisor: ctx.supervisor)
-      {:ok, "Webhook updated. URL: " <> Url.url(updated)}
-    else
-      {:error, reason} -> {:error, format_error(reason)}
+  defp dispatch_update({:ok, webhook}, _id, input, ctx) do
+    case updated_prompt(webhook, input) do
+      {:ok, prompt} ->
+        updated = %{webhook | prompt: prompt}
+        :ok = Webhook.register(updated, supervisor: ctx.supervisor)
+        {:ok, "Webhook updated. URL: " <> Url.url(updated)}
+
+      {:error, reason} ->
+        {:error, format_error(reason)}
     end
+  end
+
+  defp dispatch_update({:error, :not_found}, id, _input, _ctx) do
+    {:error, "webhook not found: #{id}"}
   end
 
   defp updated_prompt(webhook, input) do
@@ -296,14 +334,7 @@ defmodule SkillKit.Tools.Webhook do
     end
   end
 
-  defp updated_verifier(webhook, input, ctx) do
-    case Map.fetch(input, "verifier") do
-      :error -> {:ok, webhook.verifier}
-      {:ok, _value} -> resolve_verifier(input, ctx)
-    end
-  end
-
-  # -- unregister -----------------------------------------------------------
+  # -- unregister ----------------------------------------------------------
 
   defp unregister(%ToolExecution{input: %{"id" => id}, context: ctx}) when is_binary(id) do
     case Webhook.get(id, supervisor: ctx.supervisor) do
@@ -318,7 +349,7 @@ defmodule SkillKit.Tools.Webhook do
 
   defp unregister(_exec), do: {:error, "missing required field: id"}
 
-  # -- list -----------------------------------------------------------------
+  # -- list ----------------------------------------------------------------
 
   defp list(%ToolExecution{context: ctx}) do
     {:ok, webhooks} =
