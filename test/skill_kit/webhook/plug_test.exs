@@ -5,6 +5,7 @@ defmodule SkillKit.Webhook.PlugTest do
 
   alias SkillKit.Agent, as: SkAgent
   alias SkillKit.Webhook
+  alias SkillKit.Webhook.Inbox.Memory, as: InboxMemory
   alias SkillKit.Webhook.Plug, as: WebhookPlug
   alias SkillKit.Webhook.Registry, as: WebhookRegistry
   alias SkillKit.Webhook.Supervisor, as: WebhookSupervisor
@@ -14,7 +15,11 @@ defmodule SkillKit.Webhook.PlugTest do
 
   setup do
     name = :"#{__MODULE__}_#{System.unique_integer([:positive])}"
-    {:ok, _pid} = WebhookSupervisor.start_link(name: name)
+    # Plug-level tests focus on HTTP outcome + inbox persistence; use
+    # :dispatch :none to skip downstream send_event delivery (no Server
+    # registered in the fake agent setup).
+    {:ok, _pid} =
+      WebhookSupervisor.start_link(name: name, inbox: {InboxMemory, [dispatch: :none]})
 
     # Spin up a fake agent registry so whereis has a live PID to monitor.
     reg_atom = :"registry_#{System.unique_integer([:positive])}"
@@ -107,8 +112,8 @@ defmodule SkillKit.Webhook.PlugTest do
     assert conn.status == 500
   end
 
-  test "202 on happy path and the agent mailbox gets a rendered message",
-       %{supervisor: sup, agent: agent} do
+  test "202 on happy path and the delivery is persisted in the Inbox",
+       %{supervisor: sup} do
     secret = "sekret"
 
     SkillKit.CredentialProvider.Mock
@@ -123,9 +128,15 @@ defmodule SkillKit.Webhook.PlugTest do
     conn = plug_call("ok", body, [{"x-hub-signature-256", "sha256=#{sig}"}], sup)
     assert conn.status == 202
 
-    # The fake agent registry we set up is registered with the mailbox
-    # process as `self()`, so the cast lands here.
-    assert_receive {:"$gen_cast", {:message, %SkillKit.Types.UserMessage{content: content}}}, 500
-    assert content =~ "evt: " <> body
+    inbox_name = WebhookSupervisor.inbox_name(sup)
+    assert {:ok, [summary]} = InboxMemory.list(inbox_name, "plug-agent", [])
+    assert summary.webhook_id == "ok"
+    assert summary.method == "POST"
+    assert summary.body_bytes == byte_size(body)
+
+    assert {:ok, read} =
+             InboxMemory.read(inbox_name, "plug-agent", summary.id, selector: "body.hello")
+
+    assert read.value == "world"
   end
 end

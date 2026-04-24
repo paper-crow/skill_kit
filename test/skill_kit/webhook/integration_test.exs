@@ -3,7 +3,10 @@ defmodule SkillKit.Webhook.IntegrationTest do
 
   import Mox
 
+  alias SkillKit.Event.Delta
   alias SkillKit.Storage
+  alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.UserMessage
   alias SkillKit.Webhook
   alias SkillKit.Webhook.Plug, as: WebhookPlug
   alias SkillKit.Webhook.Supervisor, as: WebhookSupervisor
@@ -11,6 +14,7 @@ defmodule SkillKit.Webhook.IntegrationTest do
 
   @fixtures_disk Path.expand("../../fixtures/agents/webhook_integration", __DIR__)
 
+  setup :set_mox_global
   setup :verify_on_exit!
 
   setup do
@@ -19,19 +23,6 @@ defmodule SkillKit.Webhook.IntegrationTest do
 
     sup = :"#{__MODULE__}_#{System.unique_integer([:positive])}"
     {:ok, _pid} = WebhookSupervisor.start_link(name: sup)
-
-    handler_name = "integration-turn-start-#{inspect(self())}"
-
-    :telemetry.attach(
-      handler_name,
-      [:skill_kit, :turn, :start],
-      fn _event, _meas, meta, owner ->
-        send(owner, {:telemetry_turn_start, meta[:agent_name]})
-      end,
-      self()
-    )
-
-    on_exit(fn -> :telemetry.detach(handler_name) end)
 
     {:ok, agent} =
       SkillKit.start_agent(@fixtures_disk,
@@ -50,26 +41,22 @@ defmodule SkillKit.Webhook.IntegrationTest do
     {:ok, supervisor: sup, agent: agent}
   end
 
-  test "full round-trip: register skill → plug hit → agent message",
+  test "full round-trip: register webhook → plug hit → Inbox → send_event → turn pair",
        %{supervisor: sup, agent: agent} do
-    # 1. Register a webhook directly through the facade (simulating what
-    #    webhook:register would do; skill activation through the LLM is
-    #    covered in SkillKit.Tools.WebhookTest).
     webhook = %Webhook{
       id: "integration-1",
       agent_name: agent.name,
-      prompt: "inbound: $WEBHOOK_BODY",
+      prompt: "Echo the webhook payload back to the user.",
       verifier: {Github, %{secret_key: "GH"}},
       inserted_at: DateTime.utc_now()
     }
 
     :ok = Webhook.register(webhook, supervisor: sup)
 
-    # 2. Stub the credential provider.
     secret = "integ_secret"
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
+    SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "delivery handled"})
 
-    # 3. Build a valid GitHub request and invoke the Plug.
     body = ~s({"ref":"refs/heads/main"})
     sig = :hmac |> :crypto.mac(:sha256, secret, body) |> Base.encode16(case: :lower)
 
@@ -83,10 +70,24 @@ defmodule SkillKit.Webhook.IntegrationTest do
     conn = WebhookPlug.call(conn, WebhookPlug.init(supervisor: sup))
     assert conn.status == 202
 
-    # 4. Assert the agent's turn starts — confirming the rendered prompt
-    #    reached the mailbox and the agent began processing it.
     agent_name = agent.name
-    assert_receive {:telemetry_turn_start, ^agent_name}, 2_000
+    sub_prefix = "#{agent_name}/delivery:integration-1"
+
+    assert_receive %Delta{text: "delivery handled", agent: ^sub_prefix}, 2_000
+
+    # Let the Server finish appending the turn pair.
+    Process.sleep(50)
+
+    [{server_pid, _}] = Registry.lookup(agent.registry, {agent_name, :server})
+    state = :sys.get_state(server_pid)
+
+    assert [
+             %UserMessage{content: pointer},
+             %AssistantMessage{content: "delivery handled"}
+           ] = state.messages
+
+    assert pointer =~ ~s(<webhook-delivery)
+    assert pointer =~ ~s(webhook_id="integration-1")
   end
 
   # ---------------------------------------------------------------------------

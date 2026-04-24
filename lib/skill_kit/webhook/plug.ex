@@ -14,9 +14,11 @@ defmodule SkillKit.Webhook.Plug do
   500 / 503. The handshake short-circuit (Slack `url_verification`) is
   returned as-is — the verifier wrote the response itself.
 
-  All dispatch is async: on success the Plug casts the rendered prompt
-  into the agent's mailbox via `SkillKit.send_message/2` and returns 202.
-  Sync dispatch (returning agent-computed content) is not supported in v1.
+  On success the Plug hands the delivery to the configured
+  `SkillKit.Webhook.Inbox` impl via `Inbox.put/2`. The Inbox owns
+  persistence, retention, and dispatch timing; it calls
+  `SkillKit.send_event/3` on the bound agent when it decides to emit.
+  The Plug returns 202 as soon as `put/2` returns `:ok`.
   """
 
   @behaviour Plug
@@ -26,7 +28,6 @@ defmodule SkillKit.Webhook.Plug do
   alias SkillKit.Webhook.Idempotency
   alias SkillKit.Webhook.Registry, as: WebhookRegistry
   alias SkillKit.Webhook.Supervisor, as: WebhookSupervisor
-  alias SkillKit.Webhook.Template
 
   @impl true
   def init(opts) do
@@ -85,9 +86,11 @@ defmodule SkillKit.Webhook.Plug do
 
   # -- Outcome dispatch -----------------------------------------------------
 
-  defp dispatch_outcome({:ok, webhook, agent, raw}, conn, _opts) do
-    rendered = Template.render_prompt(webhook.prompt, payload_context(conn, raw))
-    SkillKit.send_message(AgentRef.from_agent(agent), rendered)
+  defp dispatch_outcome({:ok, webhook, agent, raw}, conn, opts) do
+    {inbox_mod, inbox_name} = WebhookSupervisor.inbox_ref(Keyword.fetch!(opts, :supervisor))
+
+    entry = build_entry(webhook, agent, raw, conn)
+    :ok = inbox_mod.put(inbox_name, entry)
     Plug.Conn.send_resp(conn, 202, "")
   end
 
@@ -124,14 +127,31 @@ defmodule SkillKit.Webhook.Plug do
   defp idempotency_name(opts),
     do: WebhookSupervisor.idempotency_name(Keyword.fetch!(opts, :supervisor))
 
-  defp payload_context(conn, raw) do
+  defp build_entry(webhook, agent, raw, conn) do
     fetched = Plug.Conn.fetch_query_params(conn)
 
     %{
-      body: raw,
-      method: conn.method,
-      headers: Jason.encode!(Map.new(conn.req_headers)),
-      query: Jason.encode!(fetched.query_params)
+      agent: AgentRef.from_agent(agent),
+      prompt: webhook.prompt,
+      delivery: %{
+        id: delivery_id(webhook, conn),
+        webhook_id: webhook.id,
+        agent_name: webhook.agent_name,
+        received_at: DateTime.utc_now(),
+        method: conn.method,
+        headers: Map.new(conn.req_headers),
+        query: fetched.query_params,
+        body: raw
+      }
     }
+  end
+
+  # Use the idempotency key as the delivery id when available (lets the
+  # inbox dedup naturally), else generate a random id.
+  defp delivery_id(%Webhook{idempotency: config}, conn) do
+    case Idempotency.extract_key(conn, config) do
+      {:ok, key} -> key
+      _ -> "dlv_" <> Base.url_encode64(:crypto.strong_rand_bytes(12), padding: false)
+    end
   end
 end

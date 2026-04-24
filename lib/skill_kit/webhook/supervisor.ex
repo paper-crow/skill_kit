@@ -2,8 +2,10 @@ defmodule SkillKit.Webhook.Supervisor do
   @moduledoc """
   Supervision tree for the webhook adapter.
 
-  Starts `SkillKit.Webhook.Registry` and the configured `Store` backend
-  (default `SkillKit.Webhook.Store.Memory`) plus `SkillKit.Webhook.Idempotency`.
+  Starts `SkillKit.Webhook.Registry`, the configured `Store` backend
+  (default `SkillKit.Webhook.Store.Memory`), `SkillKit.Webhook.Idempotency`,
+  and the configured `Inbox` backend (default
+  `SkillKit.Webhook.Inbox.Memory`).
 
   Named by default as `SkillKit.Webhook` so the facade can default its
   supervisor reference to the module name.
@@ -12,12 +14,17 @@ defmodule SkillKit.Webhook.Supervisor do
   use Supervisor
 
   alias SkillKit.Webhook.Idempotency
+  alias SkillKit.Webhook.Inbox
   alias SkillKit.Webhook.Registry, as: WebhookRegistry
   alias SkillKit.Webhook.Store
 
-  @type opt :: {:name, atom()} | {:store, {module(), keyword()}}
+  @type opt ::
+          {:name, atom()}
+          | {:store, {module(), keyword()}}
+          | {:inbox, {module(), keyword()}}
 
   @default_store {Store.Memory, []}
+  @default_inbox {Inbox.Memory, []}
 
   @spec start_link([opt()]) :: Supervisor.on_start()
   def start_link(opts \\ []) do
@@ -41,11 +48,15 @@ defmodule SkillKit.Webhook.Supervisor do
   def init(opts) do
     name = Keyword.get(opts, :name, SkillKit.Webhook)
     {store_mod, store_cfg} = Keyword.get(opts, :store, @default_store)
+    {inbox_mod, inbox_cfg} = Keyword.get(opts, :inbox, @default_inbox)
+
+    :persistent_term.put({__MODULE__, :inbox, name}, {inbox_mod, inbox_name(name)})
 
     children = [
       {WebhookRegistry, name: registry_name(name)},
       {store_mod, [name: store_name(name)] ++ store_cfg},
-      {Idempotency, name: idempotency_name(name)}
+      {Idempotency, name: idempotency_name(name)},
+      {inbox_mod, [name: inbox_name(name)] ++ inbox_cfg}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
@@ -62,4 +73,18 @@ defmodule SkillKit.Webhook.Supervisor do
   @doc "Derives the Idempotency process name for a given supervisor name."
   @spec idempotency_name(atom()) :: atom()
   def idempotency_name(supervisor), do: Module.concat(supervisor, Idempotency)
+
+  @doc "Derives the Inbox process name for a given supervisor name."
+  @spec inbox_name(atom()) :: atom()
+  def inbox_name(supervisor), do: Module.concat(supervisor, Inbox)
+
+  @doc """
+  Returns the `{inbox_module, inbox_name}` tuple for the configured inbox,
+  as recorded during supervisor init. Used by the Plug to call
+  `Inbox.put/2` without knowing the impl module ahead of time.
+  """
+  @spec inbox_ref(atom()) :: {module(), atom()}
+  def inbox_ref(supervisor) do
+    :persistent_term.get({__MODULE__, :inbox, supervisor})
+  end
 end
