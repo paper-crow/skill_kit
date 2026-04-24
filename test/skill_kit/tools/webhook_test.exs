@@ -31,10 +31,46 @@ defmodule SkillKit.Tools.WebhookTest do
     }
   end
 
+  describe "load_kits/1 defaults" do
+    test "default verifier map excludes \"none\" so hosts must opt-in to unsigned webhooks" do
+      {:ok, [kit]} = WebhookKit.load_kits([])
+      refute Map.has_key?(kit.metadata.verifiers, "none")
+    end
+
+    test "default verifier map includes the signed verifiers" do
+      {:ok, [kit]} = WebhookKit.load_kits([])
+      assert Map.has_key?(kit.metadata.verifiers, "stripe")
+      assert Map.has_key?(kit.metadata.verifiers, "github")
+      assert Map.has_key?(kit.metadata.verifiers, "slack")
+    end
+  end
+
   describe "execute/1 :: register" do
     test "rejects unknown verifier type", %{supervisor: sup} do
       input = %{"prompt" => "p", "verifier" => %{"type" => "ghost", "secret_key" => "X"}}
       assert {:error, msg} = WebhookKit.execute(exec("register", input, sup))
+      assert msg =~ "unknown verifier"
+    end
+
+    test "rejects verifier type \"none\" when host has not opted in", %{supervisor: sup} do
+      {:ok, [kit]} = WebhookKit.load_kits([])
+
+      exec = %ToolExecution{
+        tool: WebhookKit,
+        input: %{
+          "operation" => "register",
+          "prompt" => "p",
+          "verifier" => %{"type" => "none", "secret_key" => "X"}
+        },
+        context: %{
+          supervisor: sup,
+          verifiers: kit.metadata.verifiers,
+          agent_name: "kit-agent",
+          agent: %SkAgent{name: "kit-agent", description: "", system_prompt: ""}
+        }
+      }
+
+      assert {:error, msg} = WebhookKit.execute(exec)
       assert msg =~ "unknown verifier"
     end
 

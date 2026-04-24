@@ -21,7 +21,7 @@ Use the `webhook` tool with `operation: "update"` plus:
 
 - `id` (string, required) — the webhook id. Either the tail segment of the webhook URL, or the `id` returned by `webhook:list`. Ask the user (or run `webhook:list`) if you don't already have it.
 - `prompt` (string, optional) — new on-hit instruction. Same token set as register (`$WEBHOOK_METHOD`, `$WEBHOOK_BODY`, `$WEBHOOK_HEADERS`, `$WEBHOOK_QUERY`). Treat it as a mini task brief for the receiving agent; see `webhook:register` for details on how to write a good prompt.
-- `verifier` (object, optional) — new verifier binding. Same shape as register: `{"type": "stripe|github|slack|none", "secret_key": "<credential-name>", "max_skew": <int>}`.
+- `verifier` (object, optional) — new verifier binding. Same shape as register: `{"type": "stripe|github|slack", "secret_key": "<credential-name>", "max_skew": <int>}`.
 
 At least one of `prompt` or `verifier` should be present — otherwise the update is a no-op. If the user wants to keep the existing value for a field, simply omit that field from the call.
 

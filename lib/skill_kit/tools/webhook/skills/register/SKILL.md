@@ -60,9 +60,7 @@ Use the `webhook` tool available in this turn. Set `operation: "register"` plus:
     - `$WEBHOOK_HEADERS` — JSON-encoded header map
     - `$WEBHOOK_QUERY` — JSON-encoded query params
 - `verifier` (object, required)
-    - `type` (string, required) — one of `stripe`, `github`, `slack`, or `none`.
-      - `stripe` / `github` / `slack` — HMAC-SHA256 with vendor-specific signing template and header format. Requires `secret_key` to point at a real credential.
-      - `none` — no signature check; relies on URL entropy (~192 bits) + transport-level trust. Still requires `secret_key` for API consistency; use any non-empty placeholder (the credential is not read).
+    - `type` (string, required) — one of `stripe`, `github`, or `slack`. HMAC-SHA256 with vendor-specific signing template and header format. Requires `secret_key` to point at a real credential. Hosts may enable additional verifier types (e.g. unsigned endpoints) by overriding the kit's `verifiers:` config; if so they will tell you.
     - `secret_key` (string, required) — name of a credential registered in the app's `SkillKit.CredentialProvider`. The host is responsible for knowing which keys are available; ask the user if unsure.
     - `max_skew` (int, optional) — timestamp tolerance in seconds; only used by vendors that sign timestamps.
 - `idempotency` (object, optional)
@@ -86,16 +84,6 @@ Webhook URL: <paste URL verbatim from the tool result>
 On failure: an error string describing the specific reason (missing field, unknown verifier type, etc.). Report it plainly without fabricating a URL.
 
 ## Full examples
-
-Simplest echo, no signature:
-
-```json
-{
-  "operation": "register",
-  "prompt": "A webhook request arrived. Method=$WEBHOOK_METHOD, body=$WEBHOOK_BODY. Repeat the body back to the user verbatim.",
-  "verifier": {"type": "none", "secret_key": "_"}
-}
-```
 
 Signed GitHub push webhook:
 

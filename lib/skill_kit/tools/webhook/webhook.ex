@@ -47,15 +47,13 @@ defmodule SkillKit.Tools.Webhook do
   alias SkillKit.Webhook.Lifecycle
   alias SkillKit.Webhook.Url
   alias SkillKit.Webhook.Verifier.Github
-  alias SkillKit.Webhook.Verifier.None
   alias SkillKit.Webhook.Verifier.Slack
   alias SkillKit.Webhook.Verifier.Stripe
 
   @default_verifiers %{
     "stripe" => Stripe,
     "github" => Github,
-    "slack" => Slack,
-    "none" => None
+    "slack" => Slack
   }
 
   @impl SkillKit.Kit.Provider
@@ -110,10 +108,10 @@ defmodule SkillKit.Tools.Webhook do
           "verifier" => %{
             "type" => "object",
             "description" =>
-              "register (required) / update (optional). Keys: type (stripe|github|slack|none), " <>
+              "register (required) / update (optional). Keys: type (stripe|github|slack), " <>
                 "secret_key, optional max_skew.",
             "properties" => %{
-              "type" => %{"type" => "string", "enum" => ["stripe", "github", "slack", "none"]},
+              "type" => %{"type" => "string", "enum" => ["stripe", "github", "slack"]},
               "secret_key" => %{"type" => "string"},
               "max_skew" => %{"type" => "integer"}
             },
