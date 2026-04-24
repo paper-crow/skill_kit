@@ -14,6 +14,7 @@ defmodule SkillKit.Agent.Server do
   use GenServer
 
   alias SkillKit.Agent.StreamAccumulator
+  alias SkillKit.Agent.SubLoop
   alias SkillKit.Agent.ToolRunner
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
@@ -25,6 +26,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
+  alias SkillKit.Types.UserMessage
 
   defstruct [
     :agent,
@@ -161,6 +163,96 @@ defmodule SkillKit.Agent.Server do
         {:noreply, state}
     end
   end
+
+  # --- Event processing (send_event/3 entry point) ---
+
+  @impl true
+  def handle_cast({:process_event, _content, _opts}, %{halted: true} = state) do
+    {:noreply, state}
+  end
+
+  def handle_cast({:process_event, content, opts}, state) do
+    config = build_event_config(state, content, opts)
+    result_text = SubLoop.run(state, config)
+
+    user_msg = %UserMessage{content: content}
+    assistant_msg = %AssistantMessage{content: result_text, agent: state.agent.name}
+
+    notify_caller(state, %{assistant_msg | agent: state.agent.name})
+
+    new_state = %{state | messages: state.messages ++ [user_msg, assistant_msg]}
+    save_conversation(new_state)
+    {:noreply, new_state}
+  end
+
+  defp build_event_config(state, content, opts) do
+    %{
+      system_append: Keyword.fetch!(opts, :system_append),
+      initial_messages: resolve_initial_history(opts, state) ++ [%UserMessage{content: content}],
+      sub_tools: build_event_sub_tools(state, opts),
+      sub_name: Keyword.fetch!(opts, :sub_agent_name),
+      error_prefix: Keyword.get(opts, :error_prefix, "Event error")
+    }
+  end
+
+  defp resolve_initial_history(opts, state) do
+    case Keyword.get(opts, :initial_messages, :empty) do
+      :empty -> []
+      :forked -> fork_parent_messages(state.messages)
+      list when is_list(list) -> list
+    end
+  end
+
+  # Drop a trailing assistant message that carries dangling tool_calls — same
+  # reasoning as SkillActivation.fork_messages/1.
+  defp fork_parent_messages(messages) do
+    case List.last(messages) do
+      %AssistantMessage{tool_calls: [_ | _]} -> Enum.drop(messages, -1)
+      _ -> messages
+    end
+  end
+
+  defp build_event_sub_tools(state, opts) do
+    tools_remove = Keyword.get(opts, :tools_remove, [])
+    tools_add = Keyword.get(opts, :tools_add, [])
+
+    state.agent.tools
+    |> Enum.reject(fn {module, _kit_opts} -> module in tools_remove end)
+    |> Enum.map(&resolve_parent_tool(&1, state))
+    |> Kernel.++(Enum.map(tools_add, &resolve_added_tool(&1, state)))
+  end
+
+  defp resolve_parent_tool({module, _kit_opts}, state) do
+    definition = module.definition()
+    context = parent_tool_context(state.agent, definition.name)
+    {module, context, definition}
+  end
+
+  defp resolve_added_tool({module, context}, state) do
+    definition = module.definition()
+    merged = Map.merge(base_context(state.agent), context)
+    {module, merged, definition}
+  end
+
+  defp parent_tool_context(agent, tool_name) do
+    base = base_context(agent)
+
+    case SkillKit.Catalog.tool_config(agent, tool_name) do
+      nil -> base
+      {_tool, metadata} -> Map.merge(base, Map.delete(metadata, :tool))
+    end
+  end
+
+  defp base_context(agent) do
+    %{
+      agent: agent,
+      agent_name: root_agent_name(agent),
+      scope: agent.scope
+    }
+  end
+
+  defp root_agent_name(%{parent_ref: %SkillKit.AgentRef{name: name}}), do: name
+  defp root_agent_name(%{name: name}), do: name
 
   # --- Core Loop ---
 

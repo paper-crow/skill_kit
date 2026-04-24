@@ -203,6 +203,63 @@ defmodule SkillKit do
   end
 
   @doc """
+  Dispatches a discrete event to the agent for processing as a bounded task.
+
+  Events are processed in an isolated sub-loop: the content is treated as
+  a user message, the sub-loop runs with a scoped tool set and a
+  configurable initial message history, and only the final result is
+  appended to the agent's conversation as a `{UserMessage, AssistantMessage}`
+  turn pair. Intermediate tool calls, reasoning, and sub-agent events stay
+  inside the sub-loop — the primary conversation sees one turn per event.
+
+  This contrasts with `send_message/2`, which adds to the ongoing
+  conversation and produces regular assistant turns with all intermediate
+  steps visible.
+
+  Primary caller today is `SkillKit.Webhook.Inbox.Memory.put/2`, which
+  emits webhook deliveries to their bound agent with a scoped tool set
+  (webhook config tool stripped, `webhook_inbox` injected). Future callers
+  include cron-like schedulers, admin-initiated runs, and any other
+  event-driven trigger that wants isolated processing.
+
+  ## Options
+
+    * `:system_append` (string, required) — appended to the parent agent's
+      system prompt for the duration of the sub-loop
+    * `:initial_messages` (`:empty | :forked | [msg]`, default `:empty`) —
+      the message history the sub-loop starts with; `:forked` copies the
+      parent's history (dropping a trailing `activate_skill` tool use),
+      `:empty` starts fresh
+    * `:tools_add` (list of `{module, context}`) — extra tools injected
+      into the sub-loop
+    * `:tools_remove` (list of modules) — parent tools stripped from the
+      sub-loop
+    * `:skills_remove_prefix` (string) — skill namespace prefix to hide from
+      `activate_skill` during the sub-loop (e.g. `"webhook:"`)
+    * `:allow_activate_skill` (boolean, default `false`) — whether the
+      `activate_skill` meta-tool is exposed in the sub-loop
+    * `:sub_agent_name` (string, required) — tag applied to events forwarded
+      to the parent's caller so chat printers can attribute them
+
+  Returns `:ok` if the cast was delivered, or `{:error, :not_found}` if
+  the agent's server process cannot be found.
+  """
+  @spec send_event(agent(), String.t(), keyword()) :: :ok | {:error, :not_found}
+  def send_event(%AgentRef{} = agent, content, opts)
+      when is_binary(content) and is_list(opts) do
+    case Registry.lookup(agent.registry, {agent.name, :server}) do
+      [{pid, _}] ->
+        GenServer.cast(pid, {:process_event, content, opts})
+        :ok
+
+      [] ->
+        {:error, :not_found}
+    end
+  rescue
+    ArgumentError -> {:error, :not_found}
+  end
+
+  @doc """
   Responds to a suspended tool call with input.
 
   When a tool returns `{:pending, state}`, the caller receives an
