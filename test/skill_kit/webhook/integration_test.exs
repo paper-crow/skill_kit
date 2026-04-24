@@ -90,6 +90,66 @@ defmodule SkillKit.Webhook.IntegrationTest do
     assert pointer =~ ~s(webhook_id="integration-1")
   end
 
+  test "sub-loop LLM calls webhook_inbox to read the body, then responds",
+       %{supervisor: sup, agent: agent} do
+    webhook = %Webhook{
+      id: "integration-2",
+      agent_name: agent.name,
+      prompt: "A GitHub push arrived. Read body.ref and report which branch was pushed.",
+      verifier: {Github, %{secret_key: "GH"}},
+      inserted_at: DateTime.utc_now()
+    }
+
+    :ok = Webhook.register(webhook, supervisor: sup)
+
+    secret = "integ_secret"
+    stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
+
+    # First LLM call: tool_call into webhook_inbox to read body.ref.
+    # Second LLM call: final text referencing what webhook_inbox returned.
+    SkillKit.Test.expect_responses([
+      %SkillKit.Response.ToolCall{
+        name: "webhook_inbox",
+        input: %{"operation" => "read", "id" => "integration-2", "selector" => "body.ref"}
+      },
+      %SkillKit.Response.Text{content: "Pushed to refs/heads/main."}
+    ])
+
+    body = ~s({"ref":"refs/heads/main"})
+    sig = :hmac |> :crypto.mac(:sha256, secret, body) |> Base.encode16(case: :lower)
+
+    conn =
+      :post
+      |> Plug.Test.conn("/integration-2", body)
+      |> Plug.Conn.assign(:raw_body, body)
+      |> Plug.Conn.put_req_header("x-hub-signature-256", "sha256=#{sig}")
+      |> Map.put(:path_info, ["integration-2"])
+
+    conn = WebhookPlug.call(conn, WebhookPlug.init(supervisor: sup))
+    assert conn.status == 202
+
+    agent_name = agent.name
+    sub_prefix = "#{agent_name}/delivery:integration-2"
+
+    assert_receive %Delta{text: "Pushed to refs/heads/main.", agent: ^sub_prefix}, 2_000
+
+    Process.sleep(50)
+
+    [{server_pid, _}] = Registry.lookup(agent.registry, {agent_name, :server})
+    state = :sys.get_state(server_pid)
+
+    # Primary conversation sees only the turn pair: pointer in + final text
+    # out. The intermediate webhook_inbox tool call lives inside the sub-loop
+    # and does NOT appear in state.messages.
+    assert [
+             %UserMessage{content: pointer},
+             %AssistantMessage{content: "Pushed to refs/heads/main."}
+           ] = state.messages
+
+    assert pointer =~ ~s(<webhook-delivery)
+    refute pointer =~ "tool_use"
+  end
+
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------
