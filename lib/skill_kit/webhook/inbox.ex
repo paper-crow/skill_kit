@@ -140,11 +140,14 @@ defmodule SkillKit.Webhook.Inbox do
   Composes the standard event text and `send_event/3` opts for an entry
   without dispatching. Useful for custom dispatch modes (coalesced
   batches, etc.) and for unit-testing composition in isolation.
+
+  `inbox_ref` is `{InboxModule, inbox_name}` — threaded through so the
+  injected `webhook_inbox` tool knows which inbox to call back into.
   """
-  @spec compose(entry()) :: {String.t(), keyword()}
-  def compose(entry) do
+  @spec compose(entry(), {module(), term()}) :: {String.t(), keyword()}
+  def compose(entry, inbox_ref) do
     text = Message.pointer(entry.delivery)
-    opts = Message.send_event_opts(entry.prompt, entry.delivery)
+    opts = Message.send_event_opts(entry.prompt, entry.delivery, inbox_ref)
     {text, opts}
   end
 
@@ -154,11 +157,13 @@ defmodule SkillKit.Webhook.Inbox do
   `{:error, :not_found}` if the agent is not running.
 
   Impls call this from `put/2` (or from a debounce/throttle timer) when
-  they decide it's time to notify the agent.
+  they decide it's time to notify the agent, passing their own
+  `{InboxModule, inbox_name}` so the agent's `webhook_inbox` tool calls
+  back into the right impl.
   """
-  @spec dispatch(entry()) :: :ok | {:error, :not_found}
-  def dispatch(entry) do
-    {text, opts} = compose(entry)
+  @spec dispatch(entry(), {module(), term()}) :: :ok | {:error, :not_found}
+  def dispatch(entry, inbox_ref) do
+    {text, opts} = compose(entry, inbox_ref)
     SkillKit.send_event(entry.agent, text, opts)
   end
 end

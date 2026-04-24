@@ -37,9 +37,10 @@ defmodule SkillKit.Webhook.InboxTest do
     }
   end
 
-  describe "compose/1" do
-    test "returns pointer text + standard send_event opts" do
-      {text, opts} = Inbox.compose(entry(%{prompt: "My intent"}))
+  describe "compose/2" do
+    test "returns pointer text + standard send_event opts with inbox_ref threaded in" do
+      inbox_ref = {SkillKit.Webhook.Inbox.Memory, :my_inbox}
+      {text, opts} = Inbox.compose(entry(%{prompt: "My intent"}), inbox_ref)
 
       assert text =~ "<webhook-delivery"
       assert text =~ ~s(id="dlv_abc")
@@ -48,8 +49,8 @@ defmodule SkillKit.Webhook.InboxTest do
 
       assert Keyword.fetch!(opts, :system_append) == "My intent"
       assert [{SkillKit.Tools.WebhookInbox, ctx}] = Keyword.fetch!(opts, :tools_add)
-      assert ctx.agent_name == "dispatch-agent"
-      assert ctx.delivery_id == "dlv_abc"
+      assert ctx.inbox_module == SkillKit.Webhook.Inbox.Memory
+      assert ctx.inbox == :my_inbox
       assert Keyword.fetch!(opts, :tools_remove) == [SkillKit.Tools.Webhook]
       assert Keyword.fetch!(opts, :skills_remove_prefix) == "webhook:"
       assert Keyword.fetch!(opts, :allow_activate_skill) == true
@@ -58,7 +59,7 @@ defmodule SkillKit.Webhook.InboxTest do
     end
   end
 
-  describe "dispatch/1" do
+  describe "dispatch/2" do
     test "returns {:error, :not_found} for a stopped agent" do
       name = "inbox-dispatch-dead-#{System.unique_integer([:positive])}"
 
@@ -75,7 +76,8 @@ defmodule SkillKit.Webhook.InboxTest do
 
       e = entry(%{agent: agent_ref, delivery: %{agent_name: name}})
 
-      assert {:error, :not_found} = Inbox.dispatch(e)
+      assert {:error, :not_found} =
+               Inbox.dispatch(e, {SkillKit.Webhook.Inbox.Memory, :x})
     end
 
     # Full dispatch → sub-loop → turn pair integration test lives in

@@ -24,15 +24,21 @@ defmodule SkillKit.Webhook.Message do
   @doc """
   Standard `send_event/3` opts for webhook delivery dispatch. Produces a
   scoped processing context: webhook.prompt becomes the sub-loop's system
-  append, webhook config tools stripped, `webhook_inbox` injected, parent
-  skills kept, `activate_skill` available, initial messages empty.
+  append, webhook config tools stripped, `webhook_inbox` injected (bound
+  to the supplied `inbox_ref`), parent skills kept, `activate_skill`
+  available, initial messages empty.
+
+  `inbox_ref` is `{InboxModule, inbox_name}` — the Inbox behaviour impl
+  and its registered process name, so the `webhook_inbox` tool knows
+  which inbox to query at runtime.
   """
-  @spec send_event_opts(String.t(), Inbox.delivery()) :: keyword()
-  def send_event_opts(prompt, delivery) when is_binary(prompt) and is_map(delivery) do
+  @spec send_event_opts(String.t(), Inbox.delivery(), {module(), term()}) :: keyword()
+  def send_event_opts(prompt, delivery, inbox_ref)
+      when is_binary(prompt) and is_map(delivery) and is_tuple(inbox_ref) do
     [
       system_append: prompt,
       initial_messages: :empty,
-      tools_add: [{SkillKit.Tools.WebhookInbox, inbox_context(delivery)}],
+      tools_add: [{SkillKit.Tools.WebhookInbox, inbox_context(inbox_ref)}],
       tools_remove: [SkillKit.Tools.Webhook],
       skills_remove_prefix: "webhook:",
       allow_activate_skill: true,
@@ -40,7 +46,7 @@ defmodule SkillKit.Webhook.Message do
     ]
   end
 
-  defp inbox_context(delivery) do
-    %{agent_name: delivery.agent_name, delivery_id: delivery.id}
+  defp inbox_context({module, name}) do
+    %{inbox_module: module, inbox: name}
   end
 end

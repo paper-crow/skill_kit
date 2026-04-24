@@ -78,6 +78,7 @@ defmodule SkillKit.Webhook.Inbox.Memory do
       :ets.new(Module.concat(name, Table), [:set, :protected, read_concurrency: true])
 
     state = %{
+      name: name,
       table: table,
       order: %{},
       max_deliveries: Keyword.get(opts, :max_deliveries, @default_max),
@@ -100,7 +101,7 @@ defmodule SkillKit.Webhook.Inbox.Memory do
     order = push_order(state.order, delivery.agent_name, delivery.id)
     order = evict_over_cap(order, delivery.agent_name, state)
 
-    maybe_dispatch(state.dispatch, entry)
+    maybe_dispatch(state.dispatch, entry, {__MODULE__, state.name})
 
     {:reply, :ok, %{state | order: order}}
   end
@@ -153,9 +154,9 @@ defmodule SkillKit.Webhook.Inbox.Memory do
     end
   end
 
-  defp maybe_dispatch(:immediate, entry), do: Inbox.dispatch(entry)
-  defp maybe_dispatch(:none, _entry), do: :ok
-  defp maybe_dispatch(fun, entry) when is_function(fun, 1), do: fun.(entry)
+  defp maybe_dispatch(:immediate, entry, inbox_ref), do: Inbox.dispatch(entry, inbox_ref)
+  defp maybe_dispatch(:none, _entry, _inbox_ref), do: :ok
+  defp maybe_dispatch(fun, entry, _inbox_ref) when is_function(fun, 1), do: fun.(entry)
 
   # -- Read / Summary / List -----------------------------------------------
 
