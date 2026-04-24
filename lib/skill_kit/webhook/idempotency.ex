@@ -43,14 +43,22 @@ defmodule SkillKit.Webhook.Idempotency do
     now = System.system_time(:second)
     table = table_for(name)
 
-    case :ets.lookup(table, key) do
-      [{^key, expires_at}] when expires_at > now ->
-        :duplicate
+    claim(:ets.insert_new(table, {key, now + ttl}), table, key, now, ttl)
+  end
 
-      _ ->
-        :ets.insert(table, {key, now + ttl})
-        :ok
-    end
+  defp claim(true, _table, _key, _now, _ttl), do: :ok
+
+  defp claim(false, table, key, now, ttl) do
+    resolve_existing(:ets.lookup(table, key), table, key, now, ttl)
+  end
+
+  defp resolve_existing([{_k, expires_at}], _table, _key, now, _ttl)
+       when expires_at > now,
+       do: :duplicate
+
+  defp resolve_existing(_lookup, table, key, now, ttl) do
+    :ets.insert(table, {key, now + ttl})
+    :ok
   end
 
   @doc """

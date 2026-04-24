@@ -44,4 +44,42 @@ defmodule SkillKit.Webhook.IdempotencyTest do
     conn = Plug.Test.conn(:post, "/")
     assert Idempotency.extract_key(conn, nil) == :no_key
   end
+
+  test "check/3 is atomic under concurrent contention on the same key", %{name: name} do
+    key = "concurrent-key"
+    workers = 100
+    parent = self()
+    ref = make_ref()
+
+    pids =
+      for _ <- 1..workers do
+        spawn_link(fn ->
+          send(parent, {:ready, ref})
+
+          receive do
+            {:go, ^ref} -> :ok
+          end
+
+          send(parent, {:result, ref, Idempotency.check(name, key, ttl: 60)})
+        end)
+      end
+
+    for _ <- 1..workers do
+      receive do
+        {:ready, ^ref} -> :ok
+      end
+    end
+
+    for pid <- pids, do: send(pid, {:go, ref})
+
+    results =
+      for _ <- 1..workers do
+        receive do
+          {:result, ^ref, result} -> result
+        end
+      end
+
+    assert Enum.count(results, &(&1 == :ok)) == 1
+    assert Enum.count(results, &(&1 == :duplicate)) == workers - 1
+  end
 end
