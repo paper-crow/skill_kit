@@ -175,14 +175,26 @@ defmodule SkillKit.Agent.Server do
     config = build_event_config(state, content, opts)
     result_text = SubLoop.run(state, config)
 
-    user_msg = %UserMessage{content: content}
-    assistant_msg = %AssistantMessage{content: result_text, agent: state.agent.name}
+    # Bubble the sub-loop's result up to the main agent as a SystemMessage
+    # so the main agent runs a turn on it and can surface the outcome or
+    # react naturally in the primary conversation. Sub-loop intermediate
+    # steps (tool calls, reasoning) still stay inside the sub-loop — only
+    # the final text crosses back into the main thread.
+    bubble_event_result(state, result_text, config)
 
-    notify_caller(state, %{assistant_msg | agent: state.agent.name})
+    {:noreply, state}
+  end
 
-    new_state = %{state | messages: state.messages ++ [user_msg, assistant_msg]}
-    save_conversation(new_state)
-    {:noreply, new_state}
+  defp bubble_event_result(state, result_text, config) do
+    content = format_event_bubble(config.sub_name, result_text)
+    cast_to_mailbox(state, {:message, %SystemMessage{content: content}})
+  end
+
+  defp format_event_bubble(sub_name, result_text) do
+    "[Event delivered — #{sub_name}]\n\n" <>
+      result_text <>
+      "\n\nThe event has been handled. Surface the outcome to the user in a brief sentence or two, " <>
+      "or silently acknowledge if the handler's output indicated a quiet log-only intent."
   end
 
   defp build_event_config(state, content, opts) do

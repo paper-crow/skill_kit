@@ -55,7 +55,11 @@ defmodule SkillKit.Webhook.IntegrationTest do
 
     secret = "integ_secret"
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
-    SkillKit.Test.expect_response(%SkillKit.Response.Text{content: "delivery handled"})
+
+    SkillKit.Test.expect_responses([
+      %SkillKit.Response.Text{content: "delivery handled"},
+      %SkillKit.Response.Text{content: "A webhook just came through — handled."}
+    ])
 
     body = ~s({"ref":"refs/heads/main"})
     sig = :hmac |> :crypto.mac(:sha256, secret, body) |> Base.encode16(case: :lower)
@@ -73,21 +77,12 @@ defmodule SkillKit.Webhook.IntegrationTest do
     agent_name = agent.name
     sub_prefix = "#{agent_name}/delivery:integration-1"
 
+    # Sub-loop delta (tagged with sub-agent name)
     assert_receive %Delta{text: "delivery handled", agent: ^sub_prefix}, 2_000
 
-    # Let the Server finish appending the turn pair.
-    Process.sleep(50)
-
-    [{server_pid, _}] = Registry.lookup(agent.registry, {agent_name, :server})
-    state = :sys.get_state(server_pid)
-
-    assert [
-             %UserMessage{content: pointer},
-             %AssistantMessage{content: "delivery handled"}
-           ] = state.messages
-
-    assert pointer =~ ~s(<webhook-delivery)
-    assert pointer =~ ~s(webhook_id="integration-1")
+    # Main agent's reaction to the bubbled-up SystemMessage (tagged with root name)
+    assert_receive %Delta{text: "A webhook just came through — handled.", agent: ^agent_name},
+                   2_000
   end
 
   test "sub-loop LLM calls webhook_inbox to read the body, then responds",
@@ -105,14 +100,16 @@ defmodule SkillKit.Webhook.IntegrationTest do
     secret = "integ_secret"
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
 
-    # First LLM call: tool_call into webhook_inbox to read body.ref.
-    # Second LLM call: final text referencing what webhook_inbox returned.
+    # Sub-loop: first LLM call = tool_call to webhook_inbox; second LLM
+    # call = final text.
+    # Main agent: third LLM call = reaction to bubbled SystemMessage.
     SkillKit.Test.expect_responses([
       %SkillKit.Response.ToolCall{
         name: "webhook_inbox",
         input: %{"operation" => "read", "id" => "integration-2", "selector" => "body.ref"}
       },
-      %SkillKit.Response.Text{content: "Pushed to refs/heads/main."}
+      %SkillKit.Response.Text{content: "Pushed to refs/heads/main."},
+      %SkillKit.Response.Text{content: "Got a push event — main branch."}
     ])
 
     body = ~s({"ref":"refs/heads/main"})
@@ -131,23 +128,42 @@ defmodule SkillKit.Webhook.IntegrationTest do
     agent_name = agent.name
     sub_prefix = "#{agent_name}/delivery:integration-2"
 
+    # Sub-loop final text (tagged with sub-agent name)
     assert_receive %Delta{text: "Pushed to refs/heads/main.", agent: ^sub_prefix}, 2_000
+
+    # Main agent's reaction (tagged with root name)
+    assert_receive %Delta{text: "Got a push event — main branch.", agent: ^agent_name}, 2_000
 
     Process.sleep(50)
 
     [{server_pid, _}] = Registry.lookup(agent.registry, {agent_name, :server})
     state = :sys.get_state(server_pid)
 
-    # Primary conversation sees only the turn pair: pointer in + final text
-    # out. The intermediate webhook_inbox tool call lives inside the sub-loop
-    # and does NOT appear in state.messages.
-    assert [
-             %UserMessage{content: pointer},
-             %AssistantMessage{content: "Pushed to refs/heads/main."}
-           ] = state.messages
+    # The main conversation now contains:
+    #   * a SystemMessage carrying the sub-loop's final text (bubbled up)
+    #   * the main agent's AssistantMessage reacting to it
+    # Intermediate webhook_inbox tool calls stay inside the sub-loop's
+    # local state and do NOT appear in state.messages.
+    assert Enum.any?(state.messages, fn
+             %SkillKit.Types.SystemMessage{content: content} ->
+               String.contains?(content, "Pushed to refs/heads/main.")
 
-    assert pointer =~ ~s(<webhook-delivery)
-    refute pointer =~ "tool_use"
+             _ ->
+               false
+           end)
+
+    assert Enum.any?(state.messages, fn
+             %AssistantMessage{content: content} ->
+               is_binary(content) and String.contains?(content, "push event")
+
+             _ ->
+               false
+           end)
+
+    refute Enum.any?(state.messages, fn
+             %UserMessage{content: content} -> String.contains?(content, "<webhook-delivery")
+             _ -> false
+           end)
   end
 
   # ---------------------------------------------------------------------------
