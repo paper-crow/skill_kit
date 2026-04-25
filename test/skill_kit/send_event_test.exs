@@ -6,6 +6,7 @@ defmodule SkillKit.SendEventTest do
   alias SkillKit.Event.Delta
   alias SkillKit.Storage
   alias SkillKit.Types.AssistantMessage
+  alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.UserMessage
 
   setup :set_mox_global
@@ -26,7 +27,16 @@ defmodule SkillKit.SendEventTest do
   end
 
   defp server_state(agent_ref) do
+    :sys.get_state(server_pid(agent_ref))
+  end
+
+  defp server_pid(agent_ref) do
     [{pid, _}] = Registry.lookup(agent_ref.registry, {agent_ref.name, :server})
+    pid
+  end
+
+  defp mailbox_state(agent_ref) do
+    [{pid, _}] = Registry.lookup(agent_ref.registry, {agent_ref.name, :mailbox})
     :sys.get_state(pid)
   end
 
@@ -77,11 +87,26 @@ defmodule SkillKit.SendEventTest do
 
     # Only one LLM call (sub-loop). No main agent turn — the sub-loop ends
     # without invoking send_message, so nothing reaches the main mailbox.
+    #
+    # Defense against re-introduction of the auto-bubble:
+    #
+    # The deleted code cast a SystemMessage starting "[Event delivered — ..."
+    # to the main agent's mailbox after the sub-loop completed. If we let
+    # that flush, the main agent crashes on a 2nd unexpected Mox call and
+    # the supervisor restarts it with empty state — silently masking the
+    # regression. So we set a long flush_interval (10s) to keep any
+    # regression-cast message pinned in the mailbox queue, then read the
+    # mailbox state directly and refute the marker is present.
     SkillKit.Test.expect_responses([
       %SkillKit.Response.Text{content: "handled silently"}
     ])
 
-    {:ok, agent} = SkillKit.start_agent(definition(name), caller: self())
+    base = definition(name)
+    agent_def = %{base | mailbox: %{base.mailbox | flush_interval: 10_000}}
+
+    {:ok, agent} = SkillKit.start_agent(agent_def, caller: self())
+
+    original_server_pid = server_pid(agent)
 
     sub_name = "#{name}/delivery:wh_silent"
 
@@ -95,9 +120,41 @@ defmodule SkillKit.SendEventTest do
 
     refute_receive %Delta{agent: ^name}, 200
 
+    # Give any synchronous post-SubLoop cast time to land in the mailbox
+    # before we inspect it.
     Process.sleep(100)
 
+    # Primary defense: inspect the mailbox queue directly. With the long
+    # flush_interval, any regression-cast SystemMessage is still here.
+    mbox = mailbox_state(agent)
+
+    refute Enum.any?(mbox.messages, fn
+             %SystemMessage{content: content} -> String.contains?(content, "Event delivered")
+             _ -> false
+           end)
+
+    # Secondary defense: a regression that casts a non-SystemMessage would
+    # also be caught by checking for any content matching the sub-loop
+    # output verbatim.
+    refute Enum.any?(mbox.messages, fn
+             %{content: content} when is_binary(content) ->
+               String.contains?(content, "handled silently")
+
+             _ ->
+               false
+           end)
+
+    # Tertiary defense: the server should still be the same pid we
+    # started with — no crash-and-restart from an unexpected flush.
+    assert server_pid(agent) == original_server_pid
+    assert Process.alive?(original_server_pid)
+
     state = server_state(agent)
+
+    refute Enum.any?(state.messages, fn
+             %SystemMessage{content: content} -> String.contains?(content, "Event delivered")
+             _ -> false
+           end)
 
     refute Enum.any?(state.messages, fn
              %UserMessage{content: "handled silently"} -> true
