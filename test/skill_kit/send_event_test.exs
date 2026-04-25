@@ -30,13 +30,18 @@ defmodule SkillKit.SendEventTest do
     :sys.get_state(pid)
   end
 
-  test "send_event runs a sub-loop and bubbles the result to the main agent via a SystemMessage" do
-    name = "send-event-#{System.unique_integer([:positive])}"
+  test "send_event sub-loop reaches the main agent only when it calls send_message" do
+    name = "send-event-bubble-#{System.unique_integer([:positive])}"
 
-    # Sub-loop's LLM response is the first call; the main agent's
-    # reaction (triggered by the bubble-up SystemMessage) is the second.
+    # Sub-loop turn 1 = ToolCall(send_message, content="processed OK")
+    # Sub-loop turn 2 = empty assistant turn → loop terminates
+    # Main agent turn = reaction to the UserMessage delivered by send_message
     SkillKit.Test.expect_responses([
-      %SkillKit.Response.Text{content: "delivery processed"},
+      %SkillKit.Response.ToolCall{
+        name: "send_message",
+        input: %{"content" => "processed OK"}
+      },
+      %SkillKit.Response.Text{content: ""},
       %SkillKit.Response.Text{content: "Webhook delivered: processed OK."}
     ])
 
@@ -48,33 +53,54 @@ defmodule SkillKit.SendEventTest do
                sub_agent_name: "#{name}/delivery:wh_1"
              )
 
-    # Sub-loop delta comes through tagged with sub-agent name
-    assert_receive %Delta{text: "delivery processed", agent: sub_name}, 1000
-    assert sub_name == "#{name}/delivery:wh_1"
+    assert_receive %Delta{text: "Webhook delivered: processed OK.", agent: ^name}, 1_000
 
-    # Main agent's reaction to the bubbled SystemMessage comes through
-    # tagged with the root agent name
-    assert_receive %Delta{text: "Webhook delivered: processed OK.", agent: ^name}, 1000
-
-    # Let the Server finish the main turn
     Process.sleep(100)
 
     state = server_state(agent)
 
-    # Main agent's messages include the bubbled SystemMessage and the
-    # main agent's assistant response. The sub-loop's intermediate
-    # steps are NOT in the main conversation.
     assert Enum.any?(state.messages, fn
-             %SkillKit.Types.SystemMessage{content: content} ->
-               String.contains?(content, "delivery processed") and
-                 String.contains?(content, "Event delivered")
-
-             _ ->
-               false
+             %UserMessage{content: "processed OK"} -> true
+             _ -> false
            end)
 
     assert Enum.any?(state.messages, fn
              %AssistantMessage{content: "Webhook delivered: processed OK." <> _} -> true
+             _ -> false
+           end)
+
+    SkillKit.stop_agent(agent)
+  end
+
+  test "send_event sub-loop that does not call send_message leaves the main agent idle" do
+    name = "send-event-silent-#{System.unique_integer([:positive])}"
+
+    # Only one LLM call (sub-loop). No main agent turn — the sub-loop ends
+    # without invoking send_message, so nothing reaches the main mailbox.
+    SkillKit.Test.expect_responses([
+      %SkillKit.Response.Text{content: "handled silently"}
+    ])
+
+    {:ok, agent} = SkillKit.start_agent(definition(name), caller: self())
+
+    sub_name = "#{name}/delivery:wh_silent"
+
+    assert :ok =
+             SkillKit.send_event(agent, "<webhook-delivery id=\"dlv_silent\"/>",
+               system_append: "Just log it; do not bother the user.",
+               sub_agent_name: sub_name
+             )
+
+    assert_receive %Delta{text: "handled silently", agent: ^sub_name}, 1_000
+
+    refute_receive %Delta{agent: ^name}, 200
+
+    Process.sleep(100)
+
+    state = server_state(agent)
+
+    refute Enum.any?(state.messages, fn
+             %UserMessage{content: "handled silently"} -> true
              _ -> false
            end)
 
@@ -94,15 +120,11 @@ defmodule SkillKit.SendEventTest do
   test "send_event passes the configured system_append to the LLM as a system prompt suffix" do
     name = "send-event-sys-#{System.unique_integer([:positive])}"
 
-    # Two LLM calls: sub-loop with system_append, main agent reaction.
+    # Single sub-loop call; no auto-bubble means no main-agent turn.
     SkillKit.Test.expect_responses([
-      %SkillKit.Response.Text{content: "ok"},
-      %SkillKit.Response.Text{content: "main ack"}
+      %SkillKit.Response.Text{content: "ok"}
     ])
 
-    # We can't use assert_response because we need to assert on just
-    # the FIRST call (sub-loop). Instead, capture the system from the
-    # delta stream via the caller.
     {:ok, agent} = SkillKit.start_agent(definition(name), caller: self())
 
     assert :ok =
@@ -111,26 +133,20 @@ defmodule SkillKit.SendEventTest do
                sub_agent_name: "#{name}/delivery:x"
              )
 
-    assert_receive %Delta{text: "ok"}, 1000
-    assert_receive %Delta{text: "main ack"}, 1000
+    assert_receive %Delta{text: "ok"}, 1_000
     SkillKit.stop_agent(agent)
   end
 
   test "send_event with initial_messages: :empty sends only the event user message to LLM" do
     name = "send-event-empty-#{System.unique_integer([:positive])}"
 
-    # Custom Mox expectation that asserts on the first call's messages
-    # then returns ok; second call (main agent reaction) just returns text.
     counter = :counters.new(1, [:atomics])
 
-    Mox.expect(SkillKit.LLM.Mock, :stream, 2, fn messages, _opts ->
+    Mox.expect(SkillKit.LLM.Mock, :stream, 1, fn messages, _opts ->
       index = :counters.get(counter, 1) + 1
       :counters.put(counter, 1, index)
 
-      case index do
-        1 -> assert messages == [%UserMessage{content: "pointer"}]
-        _ -> :ok
-      end
+      assert messages == [%UserMessage{content: "pointer"}]
 
       {:ok,
        Stream.map(
@@ -151,8 +167,7 @@ defmodule SkillKit.SendEventTest do
                sub_agent_name: "#{name}/delivery:x"
              )
 
-    assert_receive %Delta{text: "ok-1"}, 1000
-    assert_receive %Delta{text: "ok-2"}, 1000
+    assert_receive %Delta{text: "ok-1"}, 1_000
     SkillKit.stop_agent(agent)
   end
 end

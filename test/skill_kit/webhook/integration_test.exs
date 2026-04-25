@@ -57,7 +57,11 @@ defmodule SkillKit.Webhook.IntegrationTest do
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
 
     SkillKit.Test.expect_responses([
-      %SkillKit.Response.Text{content: "delivery handled"},
+      %SkillKit.Response.ToolCall{
+        name: "send_message",
+        input: %{"content" => "delivery handled"}
+      },
+      %SkillKit.Response.Text{content: ""},
       %SkillKit.Response.Text{content: "A webhook just came through — handled."}
     ])
 
@@ -75,12 +79,8 @@ defmodule SkillKit.Webhook.IntegrationTest do
     assert conn.status == 202
 
     agent_name = agent.name
-    sub_prefix = "#{agent_name}/delivery:integration-1"
 
-    # Sub-loop delta (tagged with sub-agent name)
-    assert_receive %Delta{text: "delivery handled", agent: ^sub_prefix}, 2_000
-
-    # Main agent's reaction to the bubbled-up SystemMessage (tagged with root name)
+    # Main agent's reaction to the UserMessage delivered by send_message
     assert_receive %Delta{text: "A webhook just came through — handled.", agent: ^agent_name},
                    2_000
   end
@@ -100,15 +100,16 @@ defmodule SkillKit.Webhook.IntegrationTest do
     secret = "integ_secret"
     stub(SkillKit.CredentialProvider.Mock, :fetch, fn _tool, _agent, "GH" -> {:ok, secret} end)
 
-    # Sub-loop: first LLM call = tool_call to webhook_inbox; second LLM
-    # call = final text.
-    # Main agent: third LLM call = reaction to bubbled SystemMessage.
     SkillKit.Test.expect_responses([
       %SkillKit.Response.ToolCall{
         name: "webhook_inbox",
         input: %{"operation" => "read", "id" => "integration-2", "selector" => "body.ref"}
       },
-      %SkillKit.Response.Text{content: "Pushed to refs/heads/main."},
+      %SkillKit.Response.ToolCall{
+        name: "send_message",
+        input: %{"content" => "Pushed to refs/heads/main."}
+      },
+      %SkillKit.Response.Text{content: ""},
       %SkillKit.Response.Text{content: "Got a push event — main branch."}
     ])
 
@@ -126,12 +127,7 @@ defmodule SkillKit.Webhook.IntegrationTest do
     assert conn.status == 202
 
     agent_name = agent.name
-    sub_prefix = "#{agent_name}/delivery:integration-2"
 
-    # Sub-loop final text (tagged with sub-agent name)
-    assert_receive %Delta{text: "Pushed to refs/heads/main.", agent: ^sub_prefix}, 2_000
-
-    # Main agent's reaction (tagged with root name)
     assert_receive %Delta{text: "Got a push event — main branch.", agent: ^agent_name}, 2_000
 
     Process.sleep(50)
@@ -139,17 +135,13 @@ defmodule SkillKit.Webhook.IntegrationTest do
     [{server_pid, _}] = Registry.lookup(agent.registry, {agent_name, :server})
     state = :sys.get_state(server_pid)
 
-    # The main conversation now contains:
-    #   * a SystemMessage carrying the sub-loop's final text (bubbled up)
-    #   * the main agent's AssistantMessage reacting to it
-    # Intermediate webhook_inbox tool calls stay inside the sub-loop's
-    # local state and do NOT appear in state.messages.
+    # The main conversation now contains a UserMessage delivered by
+    # send_message and the main agent's AssistantMessage reacting to it.
+    # Webhook delivery pointers and intermediate webhook_inbox tool calls
+    # stay inside the sub-loop and do NOT appear in state.messages.
     assert Enum.any?(state.messages, fn
-             %SkillKit.Types.SystemMessage{content: content} ->
-               String.contains?(content, "Pushed to refs/heads/main.")
-
-             _ ->
-               false
+             %UserMessage{content: "Pushed to refs/heads/main."} -> true
+             _ -> false
            end)
 
     assert Enum.any?(state.messages, fn
