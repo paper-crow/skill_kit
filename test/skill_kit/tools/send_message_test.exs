@@ -3,6 +3,7 @@ defmodule SkillKit.Tools.SendMessageTest do
 
   import Mox
 
+  alias SkillKit.AgentRef
   alias SkillKit.Event.Delta
   alias SkillKit.Storage
   alias SkillKit.ToolExecution
@@ -84,6 +85,16 @@ defmodule SkillKit.Tools.SendMessageTest do
       }
 
       assert {:error, "Target agent is not running."} = SendMessage.execute(execution)
+    end
+
+    test "returns error when content is missing from input" do
+      execution = %ToolExecution{
+        tool: SendMessage,
+        input: %{},
+        context: %{target: %AgentRef{name: "x", registry: :x, supervisor_pid: nil}}
+      }
+
+      assert {:error, "Missing required field: content" <> _} = SendMessage.execute(execution)
     end
   end
 
