@@ -29,16 +29,14 @@ defmodule SkillKit.Webhook.Message do
     - `operation: "delete", id: "<id>"` — evict after processing, if \
       retention matters.
 
-  ## IMPORTANT: where your output goes
+  ## IMPORTANT: the HTTP sender is gone
 
-  The HTTP sender ALREADY received a 202 Accepted response the moment \
-  the webhook fired — before this sub-loop ran. Your text output is NOT \
-  the HTTP response body; the sender will never see it. Your output \
-  becomes a turn in the agent's CHAT conversation, surfaced to the \
-  human who registered the webhook. If the user's handler brief says \
-  "echo back" or "return X", it means "produce that as your chat output \
-  for the human to see" — NOT "send as an HTTP response." Never claim \
-  the response was "sent back to the client"; it wasn't.
+  The HTTP sender ALREADY received a 202 Accepted the moment the webhook \
+  fired — before this sub-loop ran. Nothing you produce is sent over HTTP; \
+  the sender will never see it. If the user's handler brief says "echo \
+  back" or "return X", it means "pass that to `send_message` so the user \
+  sees it" — NOT "send as an HTTP response." Never claim the response \
+  was "sent back to the client"; it wasn't.
 
   ## Reaching the user
 

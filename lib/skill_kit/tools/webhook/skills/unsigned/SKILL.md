@@ -25,7 +25,7 @@ Do NOT use:
 
 ## Prompt guidance
 
-The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "echo the body verbatim via `send_message`") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event handles silently.
+The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "echo the body verbatim") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event is handled silently.
 
 ## Call
 
