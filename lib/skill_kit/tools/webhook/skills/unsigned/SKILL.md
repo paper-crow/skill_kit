@@ -25,7 +25,7 @@ Do NOT use:
 
 ## Prompt guidance
 
-The handler's text output becomes the agent's chat turn, NOT the HTTP response body. The HTTP sender already got a 202 before your handler ran. Write the prompt accordingly — say "echo the body verbatim" rather than "echo it back to the client" or "return it in the response."
+The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "echo the body verbatim via `send_message`") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event handles silently.
 
 ## Call
 

@@ -12,7 +12,7 @@ Register a GitHub-signed webhook endpoint.
 
 ## Prompt guidance
 
-The handler's text output becomes the agent's chat turn, NOT the HTTP response body (GitHub already got a 202). Phrase the prompt as intent for the agent's chat output, not as "send back to GitHub."
+The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "report the pushed branch via `send_message`") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event handles silently.
 
 ## Call
 

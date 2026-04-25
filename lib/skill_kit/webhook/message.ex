@@ -40,8 +40,19 @@ defmodule SkillKit.Webhook.Message do
   for the human to see" — NOT "send as an HTTP response." Never claim \
   the response was "sent back to the client"; it wasn't.
 
+  ## Reaching the user
+
+  Your final text alone does NOT reach the main chat — it stays in this \
+  sub-loop. To surface the outcome to the human, call the `send_message` \
+  tool with a brief summary. That posts a message to the main agent, \
+  which will run a turn and respond to the user. If the delivery is \
+  routine or log-only and there is nothing the human needs to see, simply \
+  finish your turn without calling `send_message`; the event will be \
+  handled silently.
+
   The handler brief authored by the user follows. Act on what it asks; \
-  call `webhook_inbox` as needed to inspect or extract payload data.
+  call `webhook_inbox` as needed to inspect or extract payload data, and \
+  call `send_message` to surface anything the human should see.
   """
 
   @doc """
