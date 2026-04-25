@@ -82,6 +82,47 @@ defmodule SkillKit.SendEventTest do
     SkillKit.stop_agent(agent)
   end
 
+  test "send_event sub-loop calling send_message multiple times batches messages on the main agent's mailbox" do
+    name = "send-event-multi-#{System.unique_integer([:positive])}"
+
+    # Sub-loop turn 1 = ToolCall(send_message, content="first")
+    # Sub-loop turn 2 = ToolCall(send_message, content="second")
+    # Sub-loop turn 3 = empty assistant turn → loop terminates
+    # Main agent turn = single reaction to both UserMessages flushed together
+    SkillKit.Test.expect_responses([
+      %SkillKit.Response.ToolCall{name: "send_message", input: %{"content" => "first"}},
+      %SkillKit.Response.ToolCall{name: "send_message", input: %{"content" => "second"}},
+      %SkillKit.Response.Text{content: ""},
+      %SkillKit.Response.Text{content: "Got both."}
+    ])
+
+    {:ok, agent} = SkillKit.start_agent(definition(name), caller: self())
+
+    assert :ok =
+             SkillKit.send_event(agent, "<webhook-delivery id=\"dlv_multi\"/>",
+               system_append: "Send two messages.",
+               sub_agent_name: "#{name}/delivery:wh_multi"
+             )
+
+    assert_receive %Delta{text: "Got both.", agent: ^name}, 1_000
+
+    Process.sleep(100)
+
+    state = server_state(agent)
+
+    assert Enum.any?(state.messages, fn
+             %UserMessage{content: "first"} -> true
+             _ -> false
+           end)
+
+    assert Enum.any?(state.messages, fn
+             %UserMessage{content: "second"} -> true
+             _ -> false
+           end)
+
+    SkillKit.stop_agent(agent)
+  end
+
   test "send_event sub-loop that does not call send_message leaves the main agent idle" do
     name = "send-event-silent-#{System.unique_integer([:positive])}"
 

@@ -71,6 +71,34 @@ defmodule SkillKit.Tools.SendMessageTest do
       SkillKit.stop_agent(agent)
     end
 
+    test "execute/1 with a target ref pointing at a different agent delivers there" do
+      sender_name = "send-message-sender-#{System.unique_integer([:positive])}"
+      target_name = "send-message-recipient-#{System.unique_integer([:positive])}"
+
+      # Only the target agent runs an LLM turn. The sender is started just to
+      # demonstrate the cross-agent shape — the tool is invoked directly via
+      # SendMessage.execute/1 from the test process, not through the sender.
+      SkillKit.Test.expect_responses([
+        %SkillKit.Response.Text{content: "received"}
+      ])
+
+      {:ok, sender} = SkillKit.start_agent(definition(sender_name))
+      {:ok, target} = SkillKit.start_agent(definition(target_name), caller: self())
+
+      execution = %ToolExecution{
+        tool: SendMessage,
+        input: %{"content" => "hello recipient"},
+        context: %{target: target}
+      }
+
+      assert {:ok, "Message sent."} = SendMessage.execute(execution)
+
+      assert_receive %Delta{text: "received", agent: ^target_name}, 1_000
+
+      SkillKit.stop_agent(sender)
+      SkillKit.stop_agent(target)
+    end
+
     test "returns error when target agent is not running" do
       name = "send-message-dead-#{System.unique_integer([:positive])}"
 

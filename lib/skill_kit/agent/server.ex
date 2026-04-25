@@ -99,7 +99,13 @@ defmodule SkillKit.Agent.Server do
     {:noreply, state}
   end
 
-  # Subagent completed naturally — capture result from shutdown reason
+  # Subagent completed naturally — capture result from shutdown reason.
+  #
+  # The parent LLM is awaiting the result of an explicit delegation tool
+  # call, so SystemMessage auto-injection here is intentional. Sub-loops
+  # (e.g. send_event) deliberately do NOT auto-bubble — they post back to
+  # the main agent only when the LLM calls SkillKit.Tools.SendMessage.
+  # See `build_event_sub_tools/2`.
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, {:shutdown, {:result, response}}}, state) do
     case Map.pop(state.subagents, pid) do
