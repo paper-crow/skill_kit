@@ -228,10 +228,14 @@ defmodule SkillKit.Agent.Server do
     tools_remove = Keyword.get(opts, :tools_remove, [])
     tools_add = Keyword.get(opts, :tools_add, [])
 
+    send_message_tool =
+      {SkillKit.Tools.SendMessage, %{target: SkillKit.AgentRef.from_agent(state.agent)}}
+
     state.agent.tools
     |> Enum.reject(fn {module, _kit_opts} -> module in tools_remove end)
     |> Enum.map(&resolve_parent_tool(&1, state))
     |> Kernel.++(Enum.map(tools_add, &resolve_added_tool(&1, state)))
+    |> Kernel.++([resolve_added_tool(send_message_tool, state)])
   end
 
   defp resolve_parent_tool({module, _kit_opts}, state) do
