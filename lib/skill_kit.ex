@@ -207,10 +207,17 @@ defmodule SkillKit do
 
   Events are processed in an isolated sub-loop: the content is treated as
   a user message, the sub-loop runs with a scoped tool set and a
-  configurable initial message history, and only the final result is
-  appended to the agent's conversation as a `{UserMessage, AssistantMessage}`
-  turn pair. Intermediate tool calls, reasoning, and sub-agent events stay
-  inside the sub-loop — the primary conversation sees one turn per event.
+  configurable initial message history, and intermediate tool calls,
+  reasoning, and sub-agent events stay inside the sub-loop. The parent
+  agent's `state.messages` is NOT mutated by the cast itself.
+
+  Surfacing back to the main conversation is opt-in via the `send_message`
+  tool. Every event sub-loop is injected with `SkillKit.Tools.SendMessage`
+  bound to the parent agent; if the sub-loop's LLM calls it, that
+  delivers a `UserMessage` to the parent's mailbox, which then runs a
+  normal turn and produces an assistant response visible in the main
+  conversation. If the sub-loop finishes without calling `send_message`,
+  the event is handled silently and nothing reaches the main conversation.
 
   This contrasts with `send_message/2`, which adds to the ongoing
   conversation and produces regular assistant turns with all intermediate
@@ -233,7 +240,7 @@ defmodule SkillKit do
     * `:tools_add` (list of `{module, context}`) — extra tools injected
       into the sub-loop
     * `:tools_remove` (list of modules) — parent tools stripped from the
-      sub-loop
+      sub-loop. Does not apply to the auto-injected `send_message` tool.
     * `:skills_remove_prefix` (string) — skill namespace prefix to hide from
       `activate_skill` during the sub-loop (e.g. `"webhook:"`)
     * `:allow_activate_skill` (boolean, default `false`) — whether the

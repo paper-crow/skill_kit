@@ -192,8 +192,8 @@ defmodule SkillKit.Tools.Webhook do
   end
 
   defp patch_skill(%{name: name} = skill, hook, supervisor, vendor_bindings, unsigned_binding) do
-    extra =
-      skill_metadata(name, vendor_bindings, unsigned_binding) |> Map.put(:supervisor, supervisor)
+    base = skill_metadata(name, vendor_bindings, unsigned_binding)
+    extra = Map.put(base, :supervisor, supervisor)
 
     metadata = Map.merge(skill.metadata, extra)
     %{skill | hooks: [hook | skill.hooks], metadata: metadata}

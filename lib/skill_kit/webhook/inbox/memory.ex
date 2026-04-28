@@ -142,16 +142,16 @@ defmodule SkillKit.Webhook.Inbox.Memory do
 
   defp evict_over_cap(order, agent_name, state) do
     ids = Map.get(order, agent_name, [])
+    over_cap? = length(ids) > state.max_deliveries
+    do_evict(over_cap?, order, agent_name, ids, state)
+  end
 
-    case length(ids) > state.max_deliveries do
-      true ->
-        {keep, drop} = Enum.split(ids, state.max_deliveries)
-        Enum.each(drop, &:ets.delete(state.table, {agent_name, &1}))
-        Map.put(order, agent_name, keep)
+  defp do_evict(false, order, _agent_name, _ids, _state), do: order
 
-      false ->
-        order
-    end
+  defp do_evict(true, order, agent_name, ids, state) do
+    {keep, drop} = Enum.split(ids, state.max_deliveries)
+    Enum.each(drop, &:ets.delete(state.table, {agent_name, &1}))
+    Map.put(order, agent_name, keep)
   end
 
   defp maybe_dispatch(:immediate, entry, inbox_ref), do: Inbox.dispatch(entry, inbox_ref)
@@ -356,16 +356,18 @@ defmodule SkillKit.Webhook.Inbox.Memory do
   defp apply_byte_cap(value, cap, total) do
     serialized = serialize(value)
     bytes = byte_size(serialized)
+    over_cap? = bytes > cap
+    cap_result(over_cap?, value, serialized, bytes, cap, total)
+  end
 
-    case bytes > cap do
-      true ->
-        capped = :binary.part(serialized, 0, cap)
-        decoded = maybe_decode(capped, value)
-        %{value: decoded, bytes: cap, truncated: true, total: total || bytes}
+  defp cap_result(false, value, _serialized, bytes, _cap, total) do
+    %{value: value, bytes: bytes, truncated: false, total: total}
+  end
 
-      false ->
-        %{value: value, bytes: bytes, truncated: false, total: total}
-    end
+  defp cap_result(true, value, serialized, bytes, cap, total) do
+    capped = :binary.part(serialized, 0, cap)
+    decoded = maybe_decode(capped, value)
+    %{value: decoded, bytes: cap, truncated: true, total: total || bytes}
   end
 
   defp serialize(value) when is_binary(value), do: value
