@@ -422,7 +422,12 @@ defmodule SkillKit.Webhook.Inbox.Memory do
     %{"type" => "object", "keys" => keys}
   end
 
-  defp sample_keys_of(%{} = map), do: Map.keys(map) |> Enum.map(&to_string/1)
+  defp sample_keys_of(%{} = map) do
+    map
+    |> Map.keys()
+    |> Enum.map(&to_string/1)
+  end
+
   defp sample_keys_of(_), do: []
 
   # -- Time ------------------------------------------------------------------
