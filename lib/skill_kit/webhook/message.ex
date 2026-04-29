@@ -84,7 +84,7 @@ defmodule SkillKit.Webhook.Message do
       tools_remove: [SkillKit.Tools.Webhook],
       skills_remove_prefix: "webhook:",
       allow_activate_skill: true,
-      sub_agent_name: "#{delivery.agent_name}/delivery:#{delivery.webhook_id}"
+      sub_agent_name: "#{delivery.agent_name}/delivery:#{delivery.id}"
     ]
   end
 

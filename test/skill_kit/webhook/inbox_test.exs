@@ -57,7 +57,21 @@ defmodule SkillKit.Webhook.InboxTest do
       assert Keyword.fetch!(opts, :skills_remove_prefix) == "webhook:"
       assert Keyword.fetch!(opts, :allow_activate_skill) == true
       assert Keyword.fetch!(opts, :initial_messages) == :empty
-      assert Keyword.fetch!(opts, :sub_agent_name) =~ "dispatch-agent/delivery:wh_xyz"
+      assert Keyword.fetch!(opts, :sub_agent_name) == "dispatch-agent/delivery:dlv_abc"
+    end
+
+    test "sub_agent_name is unique per delivery, not per webhook registration" do
+      inbox_ref = {SkillKit.Webhook.Inbox.Memory, :my_inbox}
+      same_webhook = %{webhook_id: "wh_xyz", agent_name: "dispatch-agent"}
+
+      {_, opts_a} =
+        Inbox.compose(entry(%{delivery: Map.put(same_webhook, :id, "dlv_a")}), inbox_ref)
+
+      {_, opts_b} =
+        Inbox.compose(entry(%{delivery: Map.put(same_webhook, :id, "dlv_b")}), inbox_ref)
+
+      assert Keyword.fetch!(opts_a, :sub_agent_name) !=
+               Keyword.fetch!(opts_b, :sub_agent_name)
     end
   end
 
