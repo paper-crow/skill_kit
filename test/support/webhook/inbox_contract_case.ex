@@ -136,6 +136,16 @@ defmodule SkillKit.Webhook.Inbox.ContractCase do
                    @impl_module.read(inbox, "agent-1", id, selector: "body.nope.deep")
         end
 
+        test "malformed selector — unclosed bracket", %{inbox: inbox, id: id} do
+          assert {:error, :invalid_selector} =
+                   @impl_module.read(inbox, "agent-1", id, selector: "body.commits[0")
+        end
+
+        test "malformed selector — non-integer index", %{inbox: inbox, id: id} do
+          assert {:error, :invalid_selector} =
+                   @impl_module.read(inbox, "agent-1", id, selector: "body.commits[foo]")
+        end
+
         test "unknown id", %{inbox: inbox} do
           assert {:error, :not_found} =
                    @impl_module.read(inbox, "agent-1", "ghost", selector: "body")

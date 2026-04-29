@@ -208,6 +208,8 @@ defmodule SkillKit.Webhook.Inbox.Memory do
   defp resolve_selector(delivery, selector) when is_binary(selector) do
     tokens = parse_selector(selector)
     walk(tokens, delivery_view(delivery))
+  catch
+    :invalid_selector -> {:error, :invalid_selector}
   end
 
   defp parse_selector(selector) do
@@ -227,10 +229,23 @@ defmodule SkillKit.Webhook.Inbox.Memory do
   defp parse_brackets("[]" <> rest), do: [:project | parse_brackets(rest)]
 
   defp parse_brackets("[" <> rest) do
-    [index_part, tail] = String.split(rest, "]", parts: 2)
-    {int, ""} = Integer.parse(index_part)
-    [{:idx, int} | parse_brackets(tail)]
+    rest
+    |> String.split("]", parts: 2)
+    |> consume_bracket()
   end
+
+  defp parse_brackets(_), do: throw(:invalid_selector)
+
+  defp consume_bracket([index_part, tail]) do
+    index_part
+    |> Integer.parse()
+    |> consume_index(tail)
+  end
+
+  defp consume_bracket(_), do: throw(:invalid_selector)
+
+  defp consume_index({int, ""}, tail), do: [{:idx, int} | parse_brackets(tail)]
+  defp consume_index(_, _), do: throw(:invalid_selector)
 
   defp delivery_view(%{} = delivery) do
     %{
