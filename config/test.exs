@@ -8,5 +8,3 @@ config :skill_kit, SkillKit.LLM,
   default_provider: :mock
 
 config :skill_kit, SkillKit.Storage, provider: SkillKit.Storage.Memory
-
-config :skill_kit, :credential_provider, SkillKit.CredentialProvider.Mock
