@@ -50,6 +50,7 @@ defmodule SkillKit.Webhook.Supervisor do
     {store_mod, store_cfg} = Keyword.get(opts, :store, @default_store)
     {inbox_mod, inbox_cfg} = Keyword.get(opts, :inbox, @default_inbox)
 
+    :persistent_term.put({__MODULE__, :store, name}, {store_mod, store_name(name)})
     :persistent_term.put({__MODULE__, :inbox, name}, {inbox_mod, inbox_name(name)})
 
     children = [
@@ -86,5 +87,16 @@ defmodule SkillKit.Webhook.Supervisor do
   @spec inbox_ref(atom()) :: {module(), atom()}
   def inbox_ref(supervisor) do
     :persistent_term.get({__MODULE__, :inbox, supervisor})
+  end
+
+  @doc """
+  Returns the `{store_module, store_name}` tuple for the configured store,
+  as recorded during supervisor init. The Webhook facade reads this so
+  every `register`/`get`/`list`/`unregister` call lands on the configured
+  store, not the default `Store.Memory`.
+  """
+  @spec store_ref(atom()) :: {module(), atom()}
+  def store_ref(supervisor) do
+    :persistent_term.get({__MODULE__, :store, supervisor})
   end
 end

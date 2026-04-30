@@ -94,4 +94,66 @@ defmodule SkillKit.WebhookTest do
                Webhook.list(%{agent_name: "x"}, supervisor: sup)
     end
   end
+
+  describe "facade routes to the configured store" do
+    defmodule EchoStore do
+      @moduledoc false
+      @behaviour SkillKit.Webhook.Store
+      use Agent
+
+      def start_link(opts) do
+        Agent.start_link(fn -> [] end, name: Keyword.fetch!(opts, :name))
+      end
+
+      def calls(name), do: Agent.get(name, &Enum.reverse/1)
+
+      @impl true
+      def put(config, webhook) do
+        record(config, {:put, webhook})
+        :ok
+      end
+
+      @impl true
+      def get(config, id) do
+        record(config, {:get, id})
+        {:error, :not_found}
+      end
+
+      @impl true
+      def delete(config, id) do
+        record(config, {:delete, id})
+        :ok
+      end
+
+      @impl true
+      def list(config, filter) do
+        record(config, {:list, filter})
+        {:ok, []}
+      end
+
+      defp record(config, call) do
+        Agent.update(Keyword.fetch!(config, :name), &[call | &1])
+      end
+    end
+
+    test "register/get/list all hit the configured store, not Store.Memory" do
+      sup = :"#{__MODULE__}_echo_#{System.unique_integer([:positive])}"
+      {:ok, _} = SkillKit.Webhook.Supervisor.start_link(name: sup, store: {EchoStore, []})
+
+      webhook = %Webhook{
+        id: "abc",
+        agent_name: "a",
+        prompt: "hi",
+        verifier: {SomeMod, %{}},
+        inserted_at: DateTime.utc_now()
+      }
+
+      :ok = Webhook.register(webhook, supervisor: sup)
+      {:error, :not_found} = Webhook.get("abc", supervisor: sup)
+      {:ok, []} = Webhook.list(%{}, supervisor: sup)
+
+      store_name = SkillKit.Webhook.Supervisor.store_name(sup)
+      assert EchoStore.calls(store_name) == [{:put, webhook}, {:get, "abc"}, {:list, %{}}]
+    end
+  end
 end
