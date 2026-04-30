@@ -18,6 +18,7 @@ defmodule SkillKit.Agent.SubLoop do
   # final text (or an error string prefixed with `error_prefix`).
 
   alias SkillKit.Agent.Server
+  alias SkillKit.Agent.SkillActivation
   alias SkillKit.Agent.StreamAccumulator
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
@@ -137,7 +138,7 @@ defmodule SkillKit.Agent.SubLoop do
          parent_state,
          config
        ) do
-    result = run_tool(find_tool(config.sub_tools, name), id, name, input)
+    result = run_tool(find_tool(config.sub_tools, name), id, name, input, parent_state)
     notify_caller(parent_state.agent, %{result | agent: config.sub_name})
     result
   end
@@ -146,11 +147,15 @@ defmodule SkillKit.Agent.SubLoop do
     Enum.find(sub_tools, fn {_m, _c, def} -> def.name == name end)
   end
 
-  defp run_tool(nil, id, name, _input) do
+  defp run_tool(nil, id, name, _input, _parent_state) do
     %ToolResult{tool_call_id: id, content: "Unknown tool: #{name}", is_error: true}
   end
 
-  defp run_tool({module, context, _def}, id, _name, input) do
+  defp run_tool({SkillActivation, _ctx, _def}, id, _name, input, parent_state) do
+    SkillActivation.dispatch(parent_state, id, input)
+  end
+
+  defp run_tool({module, context, _def}, id, _name, input, _parent_state) do
     exec = %ToolExecution{tool: module, input: input, context: context}
     to_result(ToolExecution.execute(exec), id)
   end

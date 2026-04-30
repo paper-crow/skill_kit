@@ -43,6 +43,7 @@ defmodule SkillKit.Agent.SkillActivation do
 
   alias SkillKit.Agent.Server
   alias SkillKit.Agent.SubLoop
+  alias SkillKit.Catalog
   alias SkillKit.Hooks
   alias SkillKit.Skill
   alias SkillKit.Types.AssistantMessage
@@ -60,6 +61,47 @@ defmodule SkillKit.Agent.SkillActivation do
       end)
 
     to_tool_result(outcome, tool_call_id)
+  end
+
+  @doc """
+  Resolves the skill named in `input["name"]`, renders its body in the
+  parent's scope, and runs it as a sub-loop. Used by both the parent
+  agent's tool dispatcher and event sub-loops that opt into
+  `activate_skill` exposure.
+
+  Returns a `%ToolResult{}` (always — errors are formatted as error
+  results, not raised).
+  """
+  @spec dispatch(Server.t(), String.t(), map()) :: ToolResult.t()
+  def dispatch(%Server{} = parent_state, tool_call_id, input)
+      when is_binary(tool_call_id) and is_map(input) do
+    skill_name = Map.get(input, "name", "")
+
+    case resolve_and_render(parent_state, skill_name) do
+      {:ok, skill, body} -> run(parent_state, skill, body, tool_call_id)
+      {:error, reason} -> error_result(tool_call_id, reason)
+    end
+  end
+
+  defp resolve_and_render(state, skill_name) do
+    with {:ok, skill} <- Catalog.get_skill(state.agent, skill_name),
+         {:ok, body} <- render(skill, state) do
+      {:ok, skill, body}
+    end
+  end
+
+  defp render(skill, state) do
+    scope_context = %{agent: state.agent.name, skill: skill.name}
+    Skill.render(skill, %{}, state.agent.scope, scope_context)
+  end
+
+  defp error_result(id, reason) do
+    %ToolResult{
+      tool_call_id: id,
+      name: "activate_skill",
+      content: "Skill activation failed: #{inspect(reason)}",
+      is_error: true
+    }
   end
 
   # -- sub-loop scope ------------------------------------------------------

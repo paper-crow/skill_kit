@@ -23,7 +23,6 @@ defmodule SkillKit.Agent.ToolDispatch do
   alias SkillKit.Agent.SkillActivation
   alias SkillKit.Hooks
   alias SkillKit.Runtime
-  alias SkillKit.Skill
   alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.ToolCall
@@ -179,24 +178,7 @@ defmodule SkillKit.Agent.ToolDispatch do
   # --- Skill Activation (in-process sub-loop) ---
 
   defp activate_skill(state, %ToolCall{id: id, input: input}) do
-    skill_name = Map.get(input, "name", "")
-
-    case resolve_and_render_skill(state, skill_name) do
-      {:ok, skill, body} -> {SkillActivation.run(state, skill, body, id), []}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp resolve_and_render_skill(state, skill_name) do
-    with {:ok, skill} <- SkillKit.Catalog.get_skill(state.agent, skill_name),
-         {:ok, body} <- render_skill(skill, state) do
-      {:ok, skill, body}
-    end
-  end
-
-  defp render_skill(skill, state) do
-    scope_context = %{agent: state.agent.name, skill: skill.name}
-    Skill.render(skill, %{}, state.agent.scope, scope_context)
+    {SkillActivation.dispatch(state, id, input), []}
   end
 
   # --- Subagent Spawning ---

@@ -217,11 +217,30 @@ defmodule SkillKit.Agent.Server do
     send_message_tool =
       {SkillKit.Tools.SendMessage, %{target: SkillKit.AgentRef.from_agent(state.agent)}}
 
-    state.agent.tools
-    |> Enum.reject(fn {module, _kit_opts} -> module in tools_remove end)
-    |> Enum.map(&resolve_parent_tool(&1, state))
-    |> Kernel.++(Enum.map(tools_add, &resolve_added_tool(&1, state)))
-    |> Kernel.++([resolve_added_tool(send_message_tool, state)])
+    base =
+      state.agent.tools
+      |> Enum.reject(fn {module, _kit_opts} -> module in tools_remove end)
+      |> Enum.map(&resolve_parent_tool(&1, state))
+      |> Kernel.++(Enum.map(tools_add, &resolve_added_tool(&1, state)))
+      |> Kernel.++([resolve_added_tool(send_message_tool, state)])
+
+    maybe_append_activate_skill(base, state, opts)
+  end
+
+  defp maybe_append_activate_skill(tools, state, opts) do
+    case Keyword.get(opts, :allow_activate_skill, false) do
+      true -> append_activate_skill(tools, state, opts)
+      false -> tools
+    end
+  end
+
+  defp append_activate_skill(tools, state, opts) do
+    catalog_opts = [skills_remove_prefix: Keyword.get(opts, :skills_remove_prefix)]
+
+    case SkillKit.Catalog.activate_skill_tool(state.agent, catalog_opts) do
+      nil -> tools
+      %SkillKit.Tool{} = def -> tools ++ [{SkillKit.Agent.SkillActivation, %{}, def}]
+    end
   end
 
   defp resolve_parent_tool({module, _kit_opts}, state) do

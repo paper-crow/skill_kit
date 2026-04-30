@@ -101,6 +101,16 @@ defmodule SkillKit.Catalog do
     GenServer.call(server_ref(agent_or_catalog), {:tool_config, tool_name})
   end
 
+  @doc """
+  Returns the `activate_skill` tool definition filtered by `:skills_remove_prefix`,
+  or `nil` if no skills remain after filtering. Used by sub-loops that opt
+  into activate_skill exposure with optional namespace filtering.
+  """
+  @spec activate_skill_tool(GenServer.server() | Agent.t(), keyword()) :: Tool.t() | nil
+  def activate_skill_tool(agent_or_catalog, opts \\ []) do
+    GenServer.call(server_ref(agent_or_catalog), {:activate_skill_tool, opts})
+  end
+
   # -------------------------------------------------------------------
   # Server resolution
   # -------------------------------------------------------------------
@@ -191,6 +201,29 @@ defmodule SkillKit.Catalog do
     result = find_tool_config(kits, tool_name)
     {:reply, result, state}
   end
+
+  def handle_call({:activate_skill_tool, opts}, _from, state) do
+    skill_kits = load_all_kits(state.skill_providers)
+    prefix = Keyword.get(opts, :skills_remove_prefix)
+
+    visible = filter_authorized_skills(all_skills(skill_kits), state)
+    filterable = Enum.filter(visible, &activate_skill_candidate?(&1, prefix))
+
+    result =
+      case build_activate_skill_tool(filterable) do
+        [tool] -> tool
+        [] -> nil
+      end
+
+    {:reply, result, state}
+  end
+
+  defp activate_skill_candidate?(skill, prefix) do
+    Code.ensure_loaded?(skill.tool) and not skill_matches_prefix?(skill, prefix)
+  end
+
+  defp skill_matches_prefix?(_skill, nil), do: false
+  defp skill_matches_prefix?(skill, prefix), do: String.starts_with?(skill.name, prefix)
 
   # -------------------------------------------------------------------
   # Provider loading

@@ -235,6 +235,138 @@ defmodule SkillKit.SendEventTest do
     SkillKit.stop_agent(agent)
   end
 
+  describe "allow_activate_skill / skills_remove_prefix" do
+    alias SkillKit.Kit
+    alias SkillKit.Kit.Memory
+
+    defp seed_skills do
+      {:ok, provider} = Memory.start_link([])
+
+      Memory.put_kit(provider, %Kit{
+        name: "regular",
+        metadata: %{}
+      })
+
+      Memory.put(provider, %SkillKit.Skill{
+        name: "regular:bar",
+        namespace: "regular",
+        description: "regular skill",
+        tool: SkillKit.Tools.Shell
+      })
+
+      Memory.put(provider, %SkillKit.Skill{
+        name: "webhook:foo",
+        namespace: "webhook",
+        description: "webhook skill",
+        tool: SkillKit.Tools.Shell
+      })
+
+      provider
+    end
+
+    test "allow_activate_skill: false (default) — activate_skill is not exposed to the LLM" do
+      name = "send-event-noact-#{System.unique_integer([:positive])}"
+      provider = seed_skills()
+
+      parent = self()
+
+      Mox.expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(parent, {:tools, Keyword.get(opts, :tools, [])})
+
+        {:ok,
+         Stream.map([%Delta{text: "ok"}, %SkillKit.Event.Done{stop_reason: :end_turn}], & &1)}
+      end)
+
+      {:ok, agent} =
+        SkillKit.start_agent(definition(name),
+          caller: self(),
+          skills: [{Memory, provider: provider}]
+        )
+
+      assert :ok =
+               SkillKit.send_event(agent, "p",
+                 system_append: "x",
+                 sub_agent_name: "#{name}/d:1"
+               )
+
+      assert_receive {:tools, tools}, 1_000
+      refute Enum.any?(tools, &(&1.name == "activate_skill"))
+
+      SkillKit.stop_agent(agent)
+    end
+
+    test "allow_activate_skill: true — activate_skill is exposed with all skills in the enum" do
+      name = "send-event-act-#{System.unique_integer([:positive])}"
+      provider = seed_skills()
+
+      parent = self()
+
+      Mox.expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(parent, {:tools, Keyword.get(opts, :tools, [])})
+
+        {:ok,
+         Stream.map([%Delta{text: "ok"}, %SkillKit.Event.Done{stop_reason: :end_turn}], & &1)}
+      end)
+
+      {:ok, agent} =
+        SkillKit.start_agent(definition(name),
+          caller: self(),
+          skills: [{Memory, provider: provider}]
+        )
+
+      assert :ok =
+               SkillKit.send_event(agent, "p",
+                 system_append: "x",
+                 sub_agent_name: "#{name}/d:1",
+                 allow_activate_skill: true
+               )
+
+      assert_receive {:tools, tools}, 1_000
+      activate = Enum.find(tools, &(&1.name == "activate_skill"))
+      assert activate
+
+      assert get_in(activate.input_schema, ["properties", "name", "enum"]) ==
+               ["regular:bar", "webhook:foo"]
+
+      SkillKit.stop_agent(agent)
+    end
+
+    test "skills_remove_prefix filters matching skills out of activate_skill's enum" do
+      name = "send-event-pref-#{System.unique_integer([:positive])}"
+      provider = seed_skills()
+
+      parent = self()
+
+      Mox.expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(parent, {:tools, Keyword.get(opts, :tools, [])})
+
+        {:ok,
+         Stream.map([%Delta{text: "ok"}, %SkillKit.Event.Done{stop_reason: :end_turn}], & &1)}
+      end)
+
+      {:ok, agent} =
+        SkillKit.start_agent(definition(name),
+          caller: self(),
+          skills: [{Memory, provider: provider}]
+        )
+
+      assert :ok =
+               SkillKit.send_event(agent, "p",
+                 system_append: "x",
+                 sub_agent_name: "#{name}/d:1",
+                 allow_activate_skill: true,
+                 skills_remove_prefix: "webhook:"
+               )
+
+      assert_receive {:tools, tools}, 1_000
+      activate = Enum.find(tools, &(&1.name == "activate_skill"))
+      assert activate
+      assert get_in(activate.input_schema, ["properties", "name", "enum"]) == ["regular:bar"]
+
+      SkillKit.stop_agent(agent)
+    end
+  end
+
   test "send_event with initial_messages: :empty sends only the event user message to LLM" do
     name = "send-event-empty-#{System.unique_integer([:positive])}"
 
