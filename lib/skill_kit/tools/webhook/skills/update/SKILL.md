@@ -19,7 +19,7 @@ Typical triggers:
 Use the `webhook` tool with `operation: "update"` plus:
 
 - `id` (string, required) — the webhook id. Either the tail segment of the webhook URL, or the `id` returned by `webhook:list`. Ask the user (or run `webhook:list`) if you don't already have it.
-- `prompt` (string, required) — new handler brief. Plain-English intent for what the agent should do when a delivery arrives; the agent reads the payload via the `webhook_inbox` tool. See `webhook:register` for details on how to write a good prompt.
+- `prompt` (string, required) — new handler brief. Plain-English intent for what the agent should do when a delivery arrives; the agent reads the payload via the `webhook_inbox` tool. See the per-vendor register skills (`webhook:github`, `webhook:stripe`, `webhook:slack`, `webhook:unsigned`) for prompt-writing guidance.
 
 Fields you CANNOT change with `update` (unregister + register instead):
 
