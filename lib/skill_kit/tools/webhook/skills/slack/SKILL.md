@@ -4,23 +4,21 @@ description: "Register a webhook endpoint that receives and verifies signed Slac
 ---
 Register a Slack-signed webhook endpoint.
 
-## Slack specifics
+## Writing the prompt
 
-- Signature: HMAC-SHA256 over `v0:<timestamp>:<body>` in `X-Slack-Signature`. Timestamp in `X-Slack-Request-Timestamp`. Stale requests rejected.
-- `url_verification` handshake: when you first add the URL in Slack, Slack POSTs a challenge. The framework responds automatically — your agent is NOT invoked for handshakes.
-- Slack retries on 5xx; dedup using the `event_id` field.
+The prompt is what you'll do when a delivery arrives. Phrase it as intent ("on app_mention, reply in thread", "summarize message events"), not as a template.
 
-## Prompt guidance
-
-The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "summarize the mention") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event is handled silently.
+When a delivery fires you'll be invoked with the payload. To tell the user about it, call `send_message` with a summary. If it's log-only and there's nothing the user needs to hear, finish silently.
 
 ## Call
 
 ```
 operation: "register"
-prompt:    "<handler brief — e.g. 'On app_mention, reply in thread'>"
+prompt:    "<handler brief>"
 idempotency (optional): {"key": {"json_path": "$.event_id"}, "ttl": 86400}
 ```
+
+Use the `event_id` field for idempotency — Slack retries on 5xx.
 
 ## Slack-side setup (tell the user)
 

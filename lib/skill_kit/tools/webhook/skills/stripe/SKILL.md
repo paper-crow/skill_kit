@@ -4,23 +4,21 @@ description: "Register a webhook endpoint that receives and verifies signed even
 ---
 Register a Stripe-signed webhook endpoint.
 
-## Stripe specifics
+## Writing the prompt
 
-- Signature: HMAC-SHA256 delivered in `Stripe-Signature` with timestamp. Stale requests (default 5m tolerance) are rejected.
-- Stripe events carry a stable top-level `id` — use it for idempotency.
-- Stripe retries on non-2xx for up to 3 days.
+The prompt is what you'll do when a delivery arrives. Phrase it as intent ("on charge.succeeded, confirm and log", "alert on disputes"), not as a template.
 
-## Prompt guidance
-
-The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "summarize the charge status") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event is handled silently.
+When a delivery fires you'll be invoked with the payload. To tell the user about it, call `send_message` with a summary. If it's log-only and there's nothing the user needs to hear, finish silently.
 
 ## Call
 
 ```
 operation: "register"
-prompt:    "<handler brief — plain intent, e.g. 'On charge.succeeded, confirm and log'>"
+prompt:    "<handler brief>"
 idempotency (optional): {"key": {"json_path": "$.id"}, "ttl": 86400}
 ```
+
+Stripe events carry a stable top-level `id` — use it for idempotency. Stripe retries failed deliveries for up to 3 days.
 
 ## Stripe-side setup (tell the user)
 

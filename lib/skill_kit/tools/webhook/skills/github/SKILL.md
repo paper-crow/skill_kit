@@ -4,23 +4,21 @@ description: "Register a webhook endpoint that receives and verifies signed even
 ---
 Register a GitHub-signed webhook endpoint.
 
-## GitHub specifics
+## Writing the prompt
 
-- Signature: HMAC-SHA256 over the raw body, delivered as `X-Hub-Signature-256: sha256=<hex>`.
-- Delivery id: GitHub sends a unique `X-GitHub-Delivery` header on every request — use it for idempotency.
-- Common events: `push`, `pull_request`, `issues`, `release`.
+The prompt is what you'll do when a delivery arrives. Phrase it as intent ("summarize pushed commits", "report opened pull requests"), not as a template.
 
-## Prompt guidance
-
-The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "report the pushed branch and author") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event is handled silently.
+When a delivery fires you'll be invoked with the payload. To tell the user about it, call `send_message` with a summary. If it's log-only and there's nothing the user needs to hear, finish silently.
 
 ## Call
 
 ```
 operation: "register"
-prompt:    "<handler brief — plain intent, e.g. 'Summarize pushed commits'>"
+prompt:    "<handler brief — e.g. 'Summarize pushed commits'>"
 idempotency (optional): {"key": {"header": "x-github-delivery"}, "ttl": 86400}
 ```
+
+GitHub's `x-github-delivery` header is unique per delivery — the natural idempotency key.
 
 ## GitHub-side setup (tell the user)
 

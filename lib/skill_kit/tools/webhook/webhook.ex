@@ -123,11 +123,7 @@ defmodule SkillKit.Tools.Webhook do
           "prompt" => %{
             "type" => "string",
             "description" => """
-            register (required) / update (optional). Plain-English handler brief
-            that becomes the sub-loop's system prompt addition when this webhook
-            fires. The framework teaches the sub-loop how to read payloads via
-            the webhook_inbox tool — write the prompt as intent, not as a
-            template.
+            register (required) / update (optional). Plain-English handler brief — what to do when a delivery arrives. Write it as intent ("summarize the push", "alert on disputes"), not as a template. The framework provides the agent with payload-reading tools and `send_message` for surfacing results to the user.
             """
           },
           "idempotency" => %{

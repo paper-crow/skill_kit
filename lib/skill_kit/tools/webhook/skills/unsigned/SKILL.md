@@ -23,9 +23,11 @@ Do NOT use:
 - As a fallback when a signed vendor skill appears unavailable. Tell the user the vendor is not configured and stop.
 - For payments, auth events, or anything affecting other users.
 
-## Prompt guidance
+## Writing the prompt
 
-The handler's text output stays inside the sub-loop. To reach the user's chat the handler must call `send_message` with a summary. Phrase the prompt around what the handler should send (e.g. "echo the body verbatim") rather than passive output. If the handler brief is purely log-only, leave `send_message` out and the event is handled silently.
+The prompt is what you'll do when a delivery arrives. Phrase it as intent ("echo the body verbatim", "log every hit").
+
+When a delivery fires you'll be invoked with the payload. To tell the user about it, call `send_message` with a summary. If it's log-only and there's nothing the user needs to hear, finish silently.
 
 ## Call
 

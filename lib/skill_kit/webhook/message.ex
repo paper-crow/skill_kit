@@ -12,45 +12,22 @@ defmodule SkillKit.Webhook.Message do
   alias SkillKit.Webhook.Inbox
 
   @on_hit_guidance """
-  You just received a webhook delivery. The user message contains a \
-  `<webhook-delivery id="..." webhook_id="..." method="..." body_bytes="..."/>` \
-  pointer — the payload itself is NOT inlined, to keep the context small. \
-  Use the `webhook_inbox` tool to read the delivery:
+  You just received a webhook delivery. The user message contains a `<webhook-delivery id="..." webhook_id="..." method="..." body_bytes="..."/>` pointer — the payload itself is not inlined, to keep the context small. Use the `webhook_inbox` tool to read it:
 
-    - `operation: "summary", id: "<id>"` — structural shape (types, sizes, \
-      header list) with no leaf values. Use this first for large payloads to \
-      see what's inside before reading specific fields.
-    - `operation: "read", id: "<id>", selector: "<path>"` — one slice. \
-      Selectors: `body.field`, `body.arr[0].field`, `body.arr[].field` \
-      (array projection), `headers.x-name`, `headers`, `query`, `method`.
-    - `operation: "read", id: "<id>", selector: "body", limit_bytes: N` — \
-      byte-capped read for very large bodies; paginate with \
-      `offset_bytes` if needed.
-    - `operation: "delete", id: "<id>"` — evict after processing, if \
-      retention matters.
+    - `operation: "summary", id: "<id>"` — structural shape (types, sizes, header list) with no leaf values. Use this first for large payloads.
+    - `operation: "read", id: "<id>", selector: "<path>"` — one slice. Selectors: `body.field`, `body.arr[0].field`, `body.arr[].field` (array projection), `headers.x-name`, `headers`, `query`, `method`.
+    - `operation: "read", id: "<id>", selector: "body", limit_bytes: N` — byte-capped read for very large bodies; paginate with `offset_bytes`.
+    - `operation: "delete", id: "<id>"` — evict after processing if retention matters.
 
-  ## IMPORTANT: the HTTP sender is gone
+  ## The HTTP sender is gone
 
-  The HTTP sender ALREADY received a 202 Accepted the moment the webhook \
-  fired — before this sub-loop ran. Nothing you produce is sent over HTTP; \
-  the sender will never see it. If the user's handler brief says "echo \
-  back" or "return X", it means "pass that to `send_message` so the user \
-  sees it" — NOT "send as an HTTP response." Never claim the response \
-  was "sent back to the client"; it wasn't.
+  The sender already got a 202 Accepted the moment the webhook fired. Nothing you produce is sent over HTTP. If the handler brief says "echo back" or "return X", it means "pass that to `send_message` so the user sees it" — not "send as an HTTP response." Never claim the response was "sent back to the client"; it wasn't.
 
   ## Reaching the user
 
-  Your final text alone does NOT reach the main chat — it stays in this \
-  sub-loop. To surface the outcome to the human, call the `send_message` \
-  tool with a brief summary. That posts a message to the main agent, \
-  which will run a turn and respond to the user. If the delivery is \
-  routine or log-only and there is nothing the human needs to see, simply \
-  finish your turn without calling `send_message`; the event will be \
-  handled silently.
+  To tell the user about this delivery, call `send_message` with a summary. If the delivery is routine or log-only and there's nothing the user needs to hear, finish without calling `send_message` and the event is handled silently.
 
-  The handler brief authored by the user follows. Act on what it asks; \
-  call `webhook_inbox` as needed to inspect or extract payload data, and \
-  call `send_message` to surface anything the human should see.
+  The handler brief follows. Act on what it asks; use `webhook_inbox` to inspect or extract payload data, and `send_message` to surface anything the user should see.
   """
 
   @doc """
