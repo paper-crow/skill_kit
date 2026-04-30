@@ -27,10 +27,10 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   use Mix.Task
 
-  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error
   alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Kit.Local, as: LocalKit
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.ToolResult
 
@@ -46,22 +46,28 @@ defmodule Mix.Tasks.SkillKit.Chat do
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
     webhook_port = webhook_port()
 
+    agents = list_kits(agents_dir)
+
     agent_name =
       case args do
         [name | _] -> name
-        [] -> select_agent(agents_dir)
+        [] -> select_agent(agents)
       end
 
-    agent_md = Path.join([agents_dir, agent_name, "AGENT.md"])
+    case Enum.find(agents, &(&1.name == agent_name)) do
+      nil ->
+        Mix.shell().error("Agent not found: #{agent_name}")
+        Mix.shell().error("Available: #{Enum.map_join(agents, ", ", & &1.name)}")
+        exit({:shutdown, 1})
 
-    unless File.exists?(agent_md) do
-      Mix.shell().error("Agent not found: #{agent_name}")
-      Mix.shell().error("Available: #{Enum.join(list_agents(agents_dir), ", ")}")
-      exit({:shutdown, 1})
+      kit ->
+        run_agent(kit, agents_dir, webhook_port)
     end
+  end
 
-    {:ok, content} = File.read(agent_md)
-    {:ok, definition} = Agent.parse(content)
+  defp run_agent(kit, agents_dir, webhook_port) do
+    definition = kit.agent
+    agent_dir = Path.join(agents_dir, kit.name)
 
     {:ok, webhook_sup} = SkillKit.Webhook.Supervisor.start_link([])
     {:ok, http_sup} = start_webhook_server(webhook_port)
@@ -70,7 +76,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
     {:ok, printer} = Task.start_link(fn -> printer_loop(definition.name) end)
 
     {:ok, agent} =
-      SkillKit.start_agent(definition,
+      SkillKit.start_agent(agent_dir,
         tools: [{SkillKit.Tools.Shell, []}],
         skills: [{SkillKit.Tools.Webhook, [allow_unsigned: true]}],
         caller: printer
@@ -174,66 +180,56 @@ defmodule Mix.Tasks.SkillKit.Chat do
     IO.puts(IO.ANSI.format([:faint, "type 'exit' to quit\n"]))
   end
 
-  defp select_agent(agents_dir) do
-    case list_agents(agents_dir) do
-      [] ->
-        Mix.shell().error("No agents found in #{agents_dir}")
-        exit({:shutdown, 1})
-
-      [single] ->
-        single
-
-      agents ->
-        print_agent_menu(agents, agents_dir)
-        prompt_agent_choice(agents)
-    end
+  defp select_agent([]) do
+    Mix.shell().error("No agents found.")
+    exit({:shutdown, 1})
   end
 
-  defp print_agent_menu(agents, agents_dir) do
+  defp select_agent([single]), do: single.name
+
+  defp select_agent(kits) do
+    print_agent_menu(kits)
+    prompt_agent_choice(kits)
+  end
+
+  defp print_agent_menu(kits) do
     IO.puts(IO.ANSI.format([:bright, "\nAvailable agents:\n"]))
 
-    agents
+    kits
     |> Enum.with_index(1)
-    |> Enum.each(fn {name, i} ->
-      desc = agent_description(agents_dir, name)
-
-      IO.puts(IO.ANSI.format(["  ", :bright, "#{i}", :reset, ") #{name}", :faint, " — #{desc}"]))
+    |> Enum.each(fn {kit, i} ->
+      IO.puts(
+        IO.ANSI.format([
+          "  ",
+          :bright,
+          "#{i}",
+          :reset,
+          ") #{kit.name}",
+          :faint,
+          " — #{kit.agent.description}"
+        ])
+      )
     end)
 
     IO.puts("")
   end
 
-  defp agent_description(agents_dir, name) do
-    agent_md = Path.join([agents_dir, name, "AGENT.md"])
-    describe(read_and_parse(agent_md))
-  end
-
-  defp read_and_parse(agent_md) do
-    with {:ok, content} <- File.read(agent_md) do
-      Agent.parse(content)
-    end
-  end
-
-  defp describe({:ok, definition}), do: definition.description
-  defp describe(_), do: ""
-
-  defp prompt_agent_choice(agents) do
+  defp prompt_agent_choice(kits) do
     input = String.trim(IO.gets("Select agent: "))
+    names = Enum.map(kits, & &1.name)
 
     case Integer.parse(input) do
-      {n, ""} when n >= 1 and n <= length(agents) -> Enum.at(agents, n - 1)
-      _ -> if input in agents, do: input, else: List.first(agents)
+      {n, ""} when n >= 1 and n <= length(kits) -> Enum.at(names, n - 1)
+      _ -> if input in names, do: input, else: List.first(names)
     end
   end
 
-  defp list_agents(agents_dir) do
-    case File.ls(agents_dir) do
-      {:ok, entries} ->
-        entries
-        |> Enum.filter(fn name ->
-          File.exists?(Path.join([agents_dir, name, "AGENT.md"]))
-        end)
-        |> Enum.sort()
+  defp list_kits(agents_dir) do
+    case LocalKit.list_kits(dir: agents_dir <> "/*") do
+      {:ok, kits} ->
+        kits
+        |> Enum.filter(& &1.agent)
+        |> Enum.sort_by(& &1.name)
 
       {:error, _} ->
         []
