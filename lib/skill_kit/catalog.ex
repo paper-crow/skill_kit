@@ -383,9 +383,11 @@ defmodule SkillKit.Catalog do
     [
       %Tool{
         name: "activate_skill",
-        description:
-          "Activate a skill to handle the current task. The skill runs with full " <>
-            "conversation context in an isolated agent. Available skills:\n#{skill_descriptions}",
+        description: """
+        Activate a skill to handle the current task. The skill runs with full
+        conversation context in an isolated agent. Available skills:
+        #{skill_descriptions}
+        """,
         input_schema: %{
           "type" => "object",
           "properties" => %{

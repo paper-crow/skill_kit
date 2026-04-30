@@ -227,9 +227,10 @@ defmodule SkillKit.Kit.GitHub do
       %Skill{
         name: "github:import",
         namespace: "github",
-        description:
-          "Import skills from a GitHub repository. " <>
-            "Provide a source like 'owner/repo', 'owner/repo@tag', or 'owner/repo/path@branch'.",
+        description: """
+        Import skills from a GitHub repository.
+        Provide a source like 'owner/repo', 'owner/repo@tag', or 'owner/repo/path@branch'.
+        """,
         body: nil,
         tool: __MODULE__,
         metadata: meta
@@ -373,8 +374,10 @@ defmodule SkillKit.Kit.GitHub do
 
   defp format_import_result(ref, []) do
     {:ok,
-     "Imported #{Ref.display_name(ref)} — 0 skills found. " <>
-       "Ensure the repo follows the skills/*/SKILL.md convention."}
+     """
+     Imported #{Ref.display_name(ref)} — 0 skills found.
+     Ensure the repo follows the skills/*/SKILL.md convention.
+     """}
   end
 
   defp format_import_result(ref, skill_names) do

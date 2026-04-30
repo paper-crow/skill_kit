@@ -44,28 +44,31 @@ defmodule SkillKit.Tools.WebhookInbox do
   def definition do
     %SkillKit.Tool{
       name: "webhook_inbox",
-      description:
-        "Read webhook deliveries that have landed in this agent's inbox. " <>
-          "Use operation=list to see recent deliveries, operation=summary to inspect " <>
-          "one delivery's structure (types, sizes, keys) without reading leaf values, " <>
-          "operation=read to get a specific slice by selector, operation=delete to evict.",
+      description: """
+      Read webhook deliveries that have landed in this agent's inbox.
+      Use operation=list to see recent deliveries, operation=summary to inspect
+      one delivery's structure (types, sizes, keys) without reading leaf values,
+      operation=read to get a specific slice by selector, operation=delete to evict.
+      """,
       input_schema: %{
         "type" => "object",
         "properties" => %{
           "operation" => %{"type" => "string", "enum" => @operations},
           "id" => %{
             "type" => "string",
-            "description" =>
-              "Delivery id. Required for summary, read, delete. Obtain from " <>
-                "the <webhook-delivery id=\"...\"/> tag in the inbound user message " <>
-                "or from a prior list call."
+            "description" => """
+            Delivery id. Required for summary, read, delete. Obtain from
+            the <webhook-delivery id="..."/> tag in the inbound user message
+            or from a prior list call.
+            """
           },
           "selector" => %{
             "type" => "string",
-            "description" =>
-              "read only. Dot-notation path into the delivery: body.field, " <>
-                "body.arr[0].field, body.arr[].field (array projection), " <>
-                "headers.x-header-name, headers, query, method."
+            "description" => """
+            read only. Dot-notation path into the delivery: body.field,
+            body.arr[0].field, body.arr[].field (array projection),
+            headers.x-header-name, headers, query, method.
+            """
           },
           "offset" => %{
             "type" => "integer",
@@ -81,9 +84,10 @@ defmodule SkillKit.Tools.WebhookInbox do
           },
           "limit_bytes" => %{
             "type" => "integer",
-            "description" =>
-              "read only. Byte cap on the serialized result. Final safety net; " <>
-                "truncated results include total so you can paginate."
+            "description" => """
+            read only. Byte cap on the serialized result. Final safety net;
+            truncated results include total so you can paginate.
+            """
           },
           "line_start" => %{
             "type" => "integer",

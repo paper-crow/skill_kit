@@ -160,9 +160,10 @@ defmodule SkillKit.Agent.Server do
         )
 
         message = %SystemMessage{
-          content:
-            "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
-              "Reason: #{inspect(reason)}"
+          content: """
+          [Subagent Failed] #{entry.name} crashed while working on: #{entry.task}
+          Reason: #{inspect(reason)}
+          """
         }
 
         cast_to_mailbox(state, {:message, message})

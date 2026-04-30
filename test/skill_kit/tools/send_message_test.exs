@@ -30,10 +30,11 @@ defmodule SkillKit.Tools.SendMessageTest do
     test "returns a valid Tool struct" do
       assert SendMessage.definition() == %SkillKit.Tool{
                name: "send_message",
-               description:
-                 "Send a message to the bound target agent. The target is configured at " <>
-                   "tool registration time; you only supply the content. Use this when you " <>
-                   "want the receiving agent to wake and process what you have to say.",
+               description: """
+               Send a message to the bound target agent. The target is configured at
+               tool registration time; you only supply the content. Use this when you
+               want the receiving agent to wake and process what you have to say.
+               """,
                input_schema: %{
                  "type" => "object",
                  "properties" => %{

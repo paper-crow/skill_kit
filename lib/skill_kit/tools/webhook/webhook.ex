@@ -101,17 +101,18 @@ defmodule SkillKit.Tools.Webhook do
   def definition do
     %SkillKit.Tool{
       name: "webhook",
-      description:
-        "Register, update, unregister, or list HTTP webhook endpoints bound to this agent. " <>
-          "Each vendor has its own register skill (webhook:github, webhook:stripe, " <>
-          "webhook:slack, webhook:unsigned). Update, unregister, and list are " <>
-          "vendor-agnostic.\n\n" <>
-          "URL discipline: a successful register returns `Webhook registered. URL: <url>`. " <>
-          "Treat that URL as authoritative for the rest of the conversation — quote it " <>
-          "verbatim from memory when later asked, and never invent a URL with a different " <>
-          "host or format. Do not re-run `list` to recover a URL you already received. " <>
-          "If a register response does not contain a URL, say so plainly and offer to " <>
-          "re-register; do not guess.",
+      description: """
+      Register, update, unregister, or list HTTP webhook endpoints bound to this agent.
+      Each vendor has its own register skill (webhook:github, webhook:stripe,
+      webhook:slack, webhook:unsigned). Update, unregister, and list are vendor-agnostic.
+
+      URL discipline: a successful register returns `Webhook registered. URL: <url>`.
+      Treat that URL as authoritative for the rest of the conversation — quote it
+      verbatim from memory when later asked, and never invent a URL with a different
+      host or format. Do not re-run `list` to recover a URL you already received.
+      If a register response does not contain a URL, say so plainly and offer to
+      re-register; do not guess.
+      """,
       input_schema: %{
         "type" => "object",
         "properties" => %{
@@ -121,12 +122,13 @@ defmodule SkillKit.Tools.Webhook do
           },
           "prompt" => %{
             "type" => "string",
-            "description" =>
-              "register (required) / update (optional). Plain-English handler brief " <>
-                "that becomes the sub-loop's system prompt addition when this webhook " <>
-                "fires. The framework teaches the sub-loop how to read payloads via " <>
-                "the webhook_inbox tool — write the prompt as intent, not as a " <>
-                "template."
+            "description" => """
+            register (required) / update (optional). Plain-English handler brief
+            that becomes the sub-loop's system prompt addition when this webhook
+            fires. The framework teaches the sub-loop how to read payloads via
+            the webhook_inbox tool — write the prompt as intent, not as a
+            template.
+            """
           },
           "idempotency" => %{
             "type" => "object",

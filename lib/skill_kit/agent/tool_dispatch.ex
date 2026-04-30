@@ -260,11 +260,12 @@ defmodule SkillKit.Agent.ToolDispatch do
 
         result = %ToolResult{
           tool_call_id: id,
-          content:
-            "Subagent #{name} started in the background. Its result will arrive as a " <>
-              "system message when complete. Tell the user what you delegated and what " <>
-              "to expect, in whatever way fits the conversation. Continue with other " <>
-              "work or pause your turn as appropriate."
+          content: """
+          Subagent #{name} started in the background. Its result will arrive as a
+          system message when complete. Tell the user what you delegated and what
+          to expect, in whatever way fits the conversation. Continue with other
+          work or pause your turn as appropriate.
+          """
         }
 
         {result, [{:subagent, server_pid, entry}]}
