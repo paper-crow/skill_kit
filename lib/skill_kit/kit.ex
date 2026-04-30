@@ -32,6 +32,7 @@ defmodule SkillKit.Kit do
   """
 
   alias SkillKit.Agent
+  alias SkillKit.Frontmatter
   alias SkillKit.Skill
 
   @type t :: %__MODULE__{
@@ -57,9 +58,10 @@ defmodule SkillKit.Kit do
     skills_dir = Path.join(kit_path, "skills")
     kit_name = Keyword.get(opts, :name, infer_kit_name(__CALLER__.module))
 
-    # Compile-time: read and parse all SKILL.md and AGENT.md files
+    # Compile-time: read and parse all SKILL.md, AGENT.md, and TOOL.md files
     {:ok, skills} = compile_skills(skills_dir, kit_name)
     agent = compile_agent(kit_path)
+    {tool_name, tool_description} = compile_tool(kit_path, kit_name)
     resource_paths = compile_resource_paths(skills_dir, kit_path)
 
     quote do
@@ -72,6 +74,8 @@ defmodule SkillKit.Kit do
       end
 
       @kit_name unquote(kit_name)
+      @tool_name unquote(tool_name)
+      @tool_description unquote(tool_description)
 
       # Patch tool module — not available at macro expansion time
       @compiled_skills Enum.map(
@@ -111,12 +115,18 @@ defmodule SkillKit.Kit do
       @impl SkillKit.Tool
       def resume(_execution, _state, _decision), do: {:error, :not_resumable}
 
+      @doc """
+      Tool input schema. Override to declare parameters; defaults to an
+      empty object. Called from the generated `definition/0`.
+      """
+      def input_schema, do: %{}
+
       @impl SkillKit.Tool
       def definition do
         %SkillKit.Tool{
-          name: @kit_name,
-          description: "Kit tool for #{@kit_name}",
-          input_schema: %{}
+          name: @tool_name,
+          description: @tool_description,
+          input_schema: input_schema()
         }
       end
 
@@ -128,6 +138,7 @@ defmodule SkillKit.Kit do
 
       defoverridable resume: 3,
                      definition: 0,
+                     input_schema: 0,
                      load_kits: 1,
                      list_kits: 1,
                      get_kit: 2,
@@ -168,6 +179,19 @@ defmodule SkillKit.Kit do
   end
 
   @doc false
+  def compile_tool(kit_path, kit_name) do
+    tool_path = Path.join(kit_path, "TOOL.md")
+
+    with {:ok, content} <- File.read(tool_path),
+         {:ok, yaml, body} <- Frontmatter.parse(content),
+         {:ok, name} <- fetch_required_string(yaml, "name") do
+      {name, String.trim(body)}
+    else
+      _ -> {kit_name, "Kit tool for #{kit_name}"}
+    end
+  end
+
+  @doc false
   def compile_resource_paths(skills_dir, kit_path) do
     skill_paths =
       case File.ls(skills_dir) do
@@ -181,10 +205,12 @@ defmodule SkillKit.Kit do
           []
       end
 
-    agent_path = Path.join(kit_path, "AGENT.md")
-    agent_paths = if File.exists?(agent_path), do: [agent_path], else: []
+    optional_paths =
+      ["AGENT.md", "TOOL.md"]
+      |> Enum.map(&Path.join(kit_path, &1))
+      |> Enum.filter(&File.exists?/1)
 
-    skill_paths ++ agent_paths
+    skill_paths ++ optional_paths
   end
 
   defp compile_skill(skill_dir, kit_name) do

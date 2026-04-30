@@ -16,6 +16,23 @@ defmodule SkillKit.KitTest.TestKitWithAgent do
   def execute(_execution), do: {:ok, "pong"}
 end
 
+defmodule SkillKit.KitTest.TestKitWithTool do
+  use SkillKit.Kit, path: Path.expand("../support/fixtures/test_kit_with_tool", __DIR__)
+
+  @impl SkillKit.Tool
+  def execute(_execution), do: {:ok, "ok"}
+
+  defp input_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "msg" => %{"type" => "string", "description" => "Anything."}
+      },
+      "required" => ["msg"]
+    }
+  end
+end
+
 defmodule SkillKit.KitTest do
   use ExUnit.Case, async: false
 
@@ -23,6 +40,7 @@ defmodule SkillKit.KitTest do
   alias SkillKit.Kit
   alias SkillKit.KitTest.TestKit
   alias SkillKit.KitTest.TestKitWithAgent
+  alias SkillKit.KitTest.TestKitWithTool
   alias SkillKit.Skill
   alias SkillKit.Storage
   alias SkillKit.ToolExecution
@@ -71,6 +89,24 @@ defmodule SkillKit.KitTest do
     test "kit name is inferred from module" do
       {:ok, [kit]} = TestKit.load_kits([])
       assert kit.name == "test_kit"
+    end
+  end
+
+  describe "compile-time TOOL.md loading" do
+    test "definition/0 sources name + description from TOOL.md" do
+      assert %SkillKit.Tool{
+               name: "hello_tool",
+               description: description,
+               input_schema: %{"properties" => %{"msg" => _}}
+             } = TestKitWithTool.definition()
+
+      assert description =~ "A test tool whose name and description live in TOOL.md"
+      assert description =~ "The body becomes the tool's description verbatim."
+    end
+
+    test "definition/0 falls back to placeholder when no TOOL.md exists" do
+      # TestKit has no TOOL.md — placeholder behavior preserved.
+      assert %SkillKit.Tool{name: "test_kit"} = TestKit.definition()
     end
   end
 

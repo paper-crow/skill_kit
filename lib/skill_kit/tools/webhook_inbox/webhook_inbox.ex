@@ -32,82 +32,76 @@ defmodule SkillKit.Tools.WebhookInbox do
   See `SkillKit.Webhook.Inbox` module docs for selector syntax and
   slicing opts (`offset`, `limit`, `offset_bytes`, `limit_bytes`,
   `line_start`, `line_end`, `as`).
+
+  Tool name and description live in `TOOL.md` next to this file; the
+  `input_schema` (parameter contract) stays here in code.
   """
 
-  @behaviour SkillKit.Tool
+  use SkillKit.Kit
 
   alias SkillKit.ToolExecution
 
   @operations ~w(list summary read delete)
+  @output_formats ~w(json text base64)
 
-  @impl SkillKit.Tool
-  def definition do
-    %SkillKit.Tool{
-      name: "webhook_inbox",
-      description: """
-      Read webhook deliveries that have landed in this agent's inbox.
-      Use operation=list to see recent deliveries, operation=summary to inspect
-      one delivery's structure (types, sizes, keys) without reading leaf values,
-      operation=read to get a specific slice by selector, operation=delete to evict.
-      """,
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{
-          "operation" => %{"type" => "string", "enum" => @operations},
-          "id" => %{
-            "type" => "string",
-            "description" => """
-            Delivery id. Required for summary, read, delete. Obtain from
-            the <webhook-delivery id="..."/> tag in the inbound user message
-            or from a prior list call.
-            """
-          },
-          "selector" => %{
-            "type" => "string",
-            "description" => """
-            read only. Dot-notation path into the delivery: body.field,
-            body.arr[0].field, body.arr[].field (array projection),
-            headers.x-header-name, headers, query, method.
-            """
-          },
-          "offset" => %{
-            "type" => "integer",
-            "description" => "read only. Array offset when selector resolves to a list."
-          },
-          "limit" => %{
-            "type" => "integer",
-            "description" => "read only. Array limit when selector resolves to a list."
-          },
-          "offset_bytes" => %{
-            "type" => "integer",
-            "description" => "read only. Byte offset when selector resolves to a string/binary."
-          },
-          "limit_bytes" => %{
-            "type" => "integer",
-            "description" => """
-            read only. Byte cap on the serialized result. Final safety net;
-            truncated results include total so you can paginate.
-            """
-          },
-          "line_start" => %{
-            "type" => "integer",
-            "description" =>
-              "read only. First line (0-indexed) when selector resolves to multi-line text."
-          },
-          "line_end" => %{
-            "type" => "integer",
-            "description" =>
-              "read only. Last line (exclusive) when selector resolves to multi-line text."
-          },
-          "as" => %{
-            "type" => "string",
-            "enum" => ~w(json text base64),
-            "description" =>
-              "read only. Output format: json (default for structured), text, base64."
-          }
+  def input_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "operation" => %{"type" => "string", "enum" => @operations},
+        "id" => %{
+          "type" => "string",
+          "description" => """
+          Delivery id. Required for summary, read, delete. Obtain from
+          the <webhook-delivery id="..."/> tag in the inbound user message
+          or from a prior list call.
+          """
         },
-        "required" => ["operation"]
-      }
+        "selector" => %{
+          "type" => "string",
+          "description" => """
+          read only. Dot-notation path into the delivery: body.field,
+          body.arr[0].field, body.arr[].field (array projection),
+          headers.x-header-name, headers, query, method.
+          """
+        },
+        "offset" => %{
+          "type" => "integer",
+          "description" => "read only. Array offset when selector resolves to a list."
+        },
+        "limit" => %{
+          "type" => "integer",
+          "description" => "read only. Array limit when selector resolves to a list."
+        },
+        "offset_bytes" => %{
+          "type" => "integer",
+          "description" => "read only. Byte offset when selector resolves to a string/binary."
+        },
+        "limit_bytes" => %{
+          "type" => "integer",
+          "description" => """
+          read only. Byte cap on the serialized result. Final safety net;
+          truncated results include total so you can paginate.
+          """
+        },
+        "line_start" => %{
+          "type" => "integer",
+          "description" =>
+            "read only. First line (0-indexed) when selector resolves to multi-line text."
+        },
+        "line_end" => %{
+          "type" => "integer",
+          "description" =>
+            "read only. Last line (exclusive) when selector resolves to multi-line text."
+        },
+        "as" => %{
+          "type" => "string",
+          "enum" => @output_formats,
+          "description" =>
+            "read only. Output format: json (default for structured), text, base64."
+        }
+      },
+      "required" => ["operation"]
     }
   end
 
@@ -115,9 +109,6 @@ defmodule SkillKit.Tools.WebhookInbox do
   def execute(%ToolExecution{input: input, context: ctx}) do
     dispatch(Map.get(input, "operation"), input, ctx)
   end
-
-  @impl SkillKit.Tool
-  def resume(_exec, _state, _decision), do: {:error, "resume not supported"}
 
   # -- operation dispatch --------------------------------------------------
 
