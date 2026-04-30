@@ -25,9 +25,9 @@ defmodule SkillKit.Webhook.Message do
 
   ## Reaching the user
 
-  To tell the user about this delivery, call `send_message` with a summary. If the delivery is routine or log-only and there's nothing the user needs to hear, finish without calling `send_message` and the event is handled silently.
+  Act on the handler brief first. Call `send_message` only when the outcome is something the user should hear about — not to describe the payload. If the brief is routine or log-only, finish without calling `send_message` and the event is handled silently.
 
-  The handler brief follows. Act on what it asks; use `webhook_inbox` to inspect or extract payload data, and `send_message` to surface anything the user should see.
+  The handler brief follows. Use `webhook_inbox` to inspect or extract payload data; use `send_message` to surface results.
   """
 
   @doc """

@@ -123,7 +123,7 @@ defmodule SkillKit.Tools.Webhook do
           "prompt" => %{
             "type" => "string",
             "description" => """
-            register (required) / update (optional). Plain-English handler brief — what to do when a delivery arrives. Write it as intent ("summarize the push", "alert on disputes"), not as a template. The framework provides the agent with payload-reading tools and `send_message` for surfacing results to the user.
+            register (required) / update (optional). Plain-English handler brief — what the agent should DO when a delivery arrives. Write it as intent ("alert on disputes", "tag stale PRs"), not as a template. The framework gives the agent payload-reading tools and `send_message` to report back to the user; the brief drives the action, not the reporting.
             """
           },
           "idempotency" => %{
