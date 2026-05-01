@@ -52,7 +52,7 @@ defmodule SkillKit do
 
   @type agent :: AgentRef.t()
 
-  @valid_opts [:skills, :runtime, :scope, :conversation_store, :caller, :name]
+  @valid_opts [:tools, :skills, :runtime, :scope, :conversation_store, :caller, :name]
 
   @doc """
   Starts a new agent.
@@ -70,7 +70,13 @@ defmodule SkillKit do
 
   ## Options
 
-    * `:skills` — list of skill sources (default: `[]`)
+    * `:tools` — list of tool providers (default: `[]`). Tools are always
+      available to the LLM — called directly, no activation needed.
+      Examples: `[{SkillKit.Tools.Shell, cwd: "."}]`.
+    * `:skills` — list of skill providers (default: `[]`). Skills appear
+      only in `activate_skill`'s enum. When the LLM activates a skill,
+      a child agent is forked with the skill's underlying tool module
+      added to its `:tools` list, so the child can execute it directly.
     * `:runtime` — `{module, config}` for agent spawning (default: `{Runtime.Local, []}`)
     * `:scope` — authorization scope (default: `nil`)
     * `:conversation_store` — `{module, config}` for persistence (default: `nil`)
@@ -97,13 +103,15 @@ defmodule SkillKit do
     Keyword.validate!(opts, @valid_opts)
 
     agent = resolve_agent(source)
-    skills = normalize_skills(Keyword.get(opts, :skills, []))
+    tools = normalize_providers(Keyword.get(opts, :tools, []))
+    skills = normalize_providers(Keyword.get(opts, :skills, []))
     agent_provider = agent_as_provider(source)
     all_skills = merge_agent_provider(agent_provider, skills)
 
     %{
       agent
       | name: Keyword.get(opts, :name, agent.name),
+        tools: tools,
         skills: all_skills,
         runtime: Keyword.get(opts, :runtime, agent.runtime),
         scope: Keyword.get(opts, :scope, agent.scope),
@@ -150,13 +158,13 @@ defmodule SkillKit do
   # Skills normalization (string/module/tuple sugar)
   # -------------------------------------------------------------------
 
-  defp normalize_skills(skills) do
-    Enum.map(skills, &normalize_skill_entry/1)
+  defp normalize_providers(providers) do
+    Enum.map(providers, &normalize_provider_entry/1)
   end
 
-  defp normalize_skill_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
-  defp normalize_skill_entry(module) when is_atom(module), do: {module, []}
-  defp normalize_skill_entry({module, config}), do: {module, config}
+  defp normalize_provider_entry(path) when is_binary(path), do: {SkillKit.Kit.Local, dir: path}
+  defp normalize_provider_entry(module) when is_atom(module), do: {module, []}
+  defp normalize_provider_entry({module, config}), do: {module, config}
 
   # -------------------------------------------------------------------
   # Auto-include agent kit's tools
@@ -192,6 +200,70 @@ defmodule SkillKit do
     rescue
       ArgumentError -> {:error, :not_found}
     end
+  end
+
+  @doc """
+  Dispatches a discrete event to the agent for processing as a bounded task.
+
+  Events are processed in an isolated sub-loop: the content is treated as
+  a user message, the sub-loop runs with a scoped tool set and a
+  configurable initial message history, and intermediate tool calls,
+  reasoning, and sub-agent events stay inside the sub-loop. The parent
+  agent's `state.messages` is NOT mutated by the cast itself.
+
+  Surfacing back to the main conversation is opt-in via the `send_message`
+  tool. Every event sub-loop is injected with `SkillKit.Tools.SendMessage`
+  bound to the parent agent; if the sub-loop's LLM calls it, that
+  delivers a `UserMessage` to the parent's mailbox, which then runs a
+  normal turn and produces an assistant response visible in the main
+  conversation. If the sub-loop finishes without calling `send_message`,
+  the event is handled silently and nothing reaches the main conversation.
+
+  This contrasts with `send_message/2`, which adds to the ongoing
+  conversation and produces regular assistant turns with all intermediate
+  steps visible.
+
+  Primary caller today is `SkillKit.Webhook.Inbox.Memory.put/2`, which
+  emits webhook deliveries to their bound agent with a scoped tool set
+  (webhook config tool stripped, `webhook_inbox` injected). Future callers
+  include cron-like schedulers, admin-initiated runs, and any other
+  event-driven trigger that wants isolated processing.
+
+  ## Options
+
+    * `:system_append` (string, required) — appended to the parent agent's
+      system prompt for the duration of the sub-loop
+    * `:initial_messages` (`:empty | :forked | [msg]`, default `:empty`) —
+      the message history the sub-loop starts with; `:forked` copies the
+      parent's history (dropping a trailing `activate_skill` tool use),
+      `:empty` starts fresh
+    * `:tools_add` (list of `{module, context}`) — extra tools injected
+      into the sub-loop
+    * `:tools_remove` (list of modules) — parent tools stripped from the
+      sub-loop. Does not apply to the auto-injected `send_message` tool.
+    * `:skills_remove_prefix` (string) — skill namespace prefix to hide from
+      `activate_skill` during the sub-loop (e.g. `"webhook:"`)
+    * `:allow_activate_skill` (boolean, default `false`) — whether the
+      `activate_skill` meta-tool is exposed in the sub-loop
+    * `:sub_agent_name` (string, required) — tag applied to events forwarded
+      to the parent's caller so chat printers can attribute them
+
+  Returns `:ok` if the cast was delivered, or `{:error, :not_found}` if
+  the agent's server process cannot be found.
+  """
+  @spec send_event(agent(), String.t(), keyword()) :: :ok | {:error, :not_found}
+  def send_event(%AgentRef{} = agent, content, opts)
+      when is_binary(content) and is_list(opts) do
+    case Registry.lookup(agent.registry, {agent.name, :server}) do
+      [{pid, _}] ->
+        GenServer.cast(pid, {:process_event, content, opts})
+        :ok
+
+      [] ->
+        {:error, :not_found}
+    end
+  rescue
+    ArgumentError -> {:error, :not_found}
   end
 
   @doc """

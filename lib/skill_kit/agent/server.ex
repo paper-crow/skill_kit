@@ -13,6 +13,8 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
+  alias SkillKit.Agent.StreamAccumulator
+  alias SkillKit.Agent.SubLoop
   alias SkillKit.Agent.ToolRunner
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
@@ -24,6 +26,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
+  alias SkillKit.Types.UserMessage
 
   defstruct [
     :agent,
@@ -96,7 +99,13 @@ defmodule SkillKit.Agent.Server do
     {:noreply, state}
   end
 
-  # Subagent completed naturally — capture result from shutdown reason
+  # Subagent completed naturally — capture result from shutdown reason.
+  #
+  # The parent LLM is awaiting the result of an explicit delegation tool
+  # call, so SystemMessage auto-injection here is intentional. Sub-loops
+  # (e.g. send_event) deliberately do NOT auto-bubble — they post back to
+  # the main agent only when the LLM calls SkillKit.Tools.SendMessage.
+  # See `build_event_sub_tools/2`.
   @impl true
   def handle_info({:DOWN, _ref, :process, pid, {:shutdown, {:result, response}}}, state) do
     case Map.pop(state.subagents, pid) do
@@ -144,16 +153,128 @@ defmodule SkillKit.Agent.Server do
       {entry, subagents} ->
         state = %{state | subagents: subagents}
 
+        require Logger
+
+        Logger.warning(
+          "Subagent crashed: name=#{entry.name} task=#{entry.task} reason=#{inspect(reason, pretty: true, limit: :infinity)}"
+        )
+
         message = %SystemMessage{
-          content:
-            "[Subagent Failed] #{entry.name} crashed while working on: #{entry.task}\n" <>
-              "Reason: #{inspect(reason)}"
+          content: """
+          [Subagent Failed] #{entry.name} crashed while working on: #{entry.task}
+          Reason: #{inspect(reason)}
+          """
         }
 
         cast_to_mailbox(state, {:message, message})
         {:noreply, state}
     end
   end
+
+  # --- Event processing (send_event/3 entry point) ---
+
+  @impl true
+  def handle_cast({:process_event, _content, _opts}, %{halted: true} = state) do
+    {:noreply, state}
+  end
+
+  def handle_cast({:process_event, content, opts}, state) do
+    config = build_event_config(state, content, opts)
+    SubLoop.run(state, config)
+    {:noreply, state}
+  end
+
+  defp build_event_config(state, content, opts) do
+    %{
+      system_append: Keyword.fetch!(opts, :system_append),
+      initial_messages: resolve_initial_history(opts, state) ++ [%UserMessage{content: content}],
+      sub_tools: build_event_sub_tools(state, opts),
+      sub_name: Keyword.fetch!(opts, :sub_agent_name),
+      error_prefix: Keyword.get(opts, :error_prefix, "Event error")
+    }
+  end
+
+  defp resolve_initial_history(opts, state) do
+    case Keyword.get(opts, :initial_messages, :empty) do
+      :empty -> []
+      :forked -> fork_parent_messages(state.messages)
+      list when is_list(list) -> list
+    end
+  end
+
+  # Drop a trailing assistant message that carries dangling tool_calls — same
+  # reasoning as SkillActivation.fork_messages/1.
+  defp fork_parent_messages(messages) do
+    case List.last(messages) do
+      %AssistantMessage{tool_calls: [_ | _]} -> Enum.drop(messages, -1)
+      _ -> messages
+    end
+  end
+
+  defp build_event_sub_tools(state, opts) do
+    tools_remove = Keyword.get(opts, :tools_remove, [])
+    tools_add = Keyword.get(opts, :tools_add, [])
+
+    send_message_tool =
+      {SkillKit.Tools.SendMessage, %{target: SkillKit.AgentRef.from_agent(state.agent)}}
+
+    base =
+      state.agent.tools
+      |> Enum.reject(fn {module, _kit_opts} -> module in tools_remove end)
+      |> Enum.map(&resolve_parent_tool(&1, state))
+      |> Kernel.++(Enum.map(tools_add, &resolve_added_tool(&1, state)))
+      |> Kernel.++([resolve_added_tool(send_message_tool, state)])
+
+    maybe_append_activate_skill(base, state, opts)
+  end
+
+  defp maybe_append_activate_skill(tools, state, opts) do
+    case Keyword.get(opts, :allow_activate_skill, false) do
+      true -> append_activate_skill(tools, state, opts)
+      false -> tools
+    end
+  end
+
+  defp append_activate_skill(tools, state, opts) do
+    catalog_opts = [skills_remove_prefix: Keyword.get(opts, :skills_remove_prefix)]
+
+    case SkillKit.Catalog.activate_skill_tool(state.agent, catalog_opts) do
+      nil -> tools
+      %SkillKit.Tool{} = def -> tools ++ [{SkillKit.Agent.SkillActivation, %{}, def}]
+    end
+  end
+
+  defp resolve_parent_tool({module, _kit_opts}, state) do
+    definition = module.definition()
+    context = parent_tool_context(state.agent, definition.name)
+    {module, context, definition}
+  end
+
+  defp resolve_added_tool({module, context}, state) do
+    definition = module.definition()
+    merged = Map.merge(base_context(state.agent), context)
+    {module, merged, definition}
+  end
+
+  defp parent_tool_context(agent, tool_name) do
+    base = base_context(agent)
+
+    case SkillKit.Catalog.tool_config(agent, tool_name) do
+      nil -> base
+      {_tool, metadata} -> Map.merge(base, Map.delete(metadata, :tool))
+    end
+  end
+
+  defp base_context(agent) do
+    %{
+      agent: agent,
+      agent_name: root_agent_name(agent),
+      scope: agent.scope
+    }
+  end
+
+  defp root_agent_name(%{parent_ref: %SkillKit.AgentRef{name: name}}), do: name
+  defp root_agent_name(%{name: name}), do: name
 
   # --- Core Loop ---
 
@@ -179,8 +300,8 @@ defmodule SkillKit.Agent.Server do
         state
 
       {:ok, event_stream} ->
-        acc = Enum.reduce(event_stream, new_accumulator(), &process_event(&1, &2, state))
-        response = finalize_response(acc)
+        acc = Enum.reduce(event_stream, StreamAccumulator.new(), &process_event(&1, &2, state))
+        response = StreamAccumulator.finalize(acc)
         state = %{state | messages: state.messages ++ [response]}
         handle_response(response, state)
 
@@ -230,10 +351,6 @@ defmodule SkillKit.Agent.Server do
     )
   end
 
-  defp new_accumulator do
-    %{text: "", tool_calls: [], usage: %{input_tokens: 0, output_tokens: 0}}
-  end
-
   defp process_event(%Delta{text: text}, acc, state) do
     notify_caller(state, %Delta{text: text, agent: state.agent.name})
     %{acc | text: acc.text <> text}
@@ -261,15 +378,6 @@ defmodule SkillKit.Agent.Server do
 
   defp process_event(%Done{}, acc, _state), do: acc
   defp process_event(_other, acc, _state), do: acc
-
-  defp finalize_response(acc) do
-    content = if acc.text == "", do: nil, else: acc.text
-
-    %AssistantMessage{
-      content: content,
-      tool_calls: acc.tool_calls
-    }
-  end
 
   # --- Helpers ---
 

@@ -65,10 +65,11 @@ defmodule SkillKit.Tools.Shell do
   def definition do
     %SkillKit.Tool{
       name: "bash",
-      description:
-        "Execute a shell command. Use for running scripts, reading/writing files, " <>
-          "fetching URLs (curl), git operations, and any system interaction. " <>
-          "The working directory defaults to the current process working directory.",
+      description: """
+      Execute a shell command. Use for running scripts, reading/writing files,
+      fetching URLs (curl), git operations, and any system interaction.
+      The working directory defaults to the current process working directory.
+      """,
       input_schema: %{
         "type" => "object",
         "properties" => %{

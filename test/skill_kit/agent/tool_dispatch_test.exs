@@ -25,21 +25,42 @@ defmodule SkillKit.Agent.ToolDispatchTest do
     {:ok, agent: agent}
   end
 
-  test "build_context/1 returns the full context map", %{agent: agent} do
-    assert ToolDispatch.build_context(%{agent: agent}) == %{
+  test "build_context/2 returns the full context map", %{agent: agent} do
+    assert ToolDispatch.build_context(%{agent: agent}, "bash") == %{
              agent: agent,
+             agent_name: agent.name,
              scope: :my_scope
            }
   end
 
-  test "build_context/1 returns a context map with nil scope when the agent has none", %{
+  test "build_context/2 returns a context map with nil scope when the agent has none", %{
     agent: agent
   } do
     agent = %{agent | scope: nil}
 
-    assert ToolDispatch.build_context(%{agent: agent}) == %{
+    assert ToolDispatch.build_context(%{agent: agent}, "bash") == %{
              agent: agent,
+             agent_name: agent.name,
              scope: nil
            }
+  end
+
+  test "build_context/2 uses parent agent name for activate_skill children", %{agent: agent} do
+    # Construct a "child" agent sharing the parent's registry + name so the
+    # Catalog lookup resolves, but with a parent_ref pointing at a different
+    # name — verifying build_context picks the parent_ref's name over the
+    # agent's own.
+    child = %{
+      agent
+      | parent_ref: %SkillKit.AgentRef{
+          name: "root-parent",
+          registry: agent.registry,
+          supervisor_pid: self()
+        }
+    }
+
+    context = ToolDispatch.build_context(%{agent: child}, "bash")
+    assert context.agent_name == "root-parent"
+    assert context.agent == child
   end
 end

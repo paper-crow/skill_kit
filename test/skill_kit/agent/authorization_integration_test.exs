@@ -118,9 +118,12 @@ defmodule SkillKit.Agent.AuthorizationIntegrationTest do
 
   describe "hook-based tool denial" do
     test "PreToolUse hook denial returns error ToolResult to LLM" do
+      provider = provider_with_deny_hook()
+
       {:ok, _pid, ctx} =
         start_server(
-          skills: [provider_with_deny_hook()],
+          tools: [provider],
+          skills: [provider],
           caller: self()
         )
 
@@ -143,9 +146,12 @@ defmodule SkillKit.Agent.AuthorizationIntegrationTest do
     end
 
     test "PreToolUse hook denial with matcher only blocks matching tools" do
+      provider = provider_with_selective_deny_hook()
+
       {:ok, _pid, ctx} =
         start_server(
-          skills: [provider_with_selective_deny_hook()],
+          tools: [provider],
+          skills: [provider],
           caller: self()
         )
 
@@ -166,9 +172,12 @@ defmodule SkillKit.Agent.AuthorizationIntegrationTest do
     end
 
     test "denied tool result includes tool_call_id for LLM context" do
+      provider = provider_with_deny_hook()
+
       {:ok, _pid, ctx} =
         start_server(
-          skills: [provider_with_deny_hook()],
+          tools: [provider],
+          skills: [provider],
           caller: self()
         )
 

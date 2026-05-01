@@ -1,17 +1,18 @@
 defmodule SkillKit.Agent.ToolDispatch do
   @moduledoc """
   Tool execution dispatch. Classifies, executes, and returns results for
-  tool calls from the LLM. Handles plain tools, skill activation (via
-  child agent forking), and subagent spawning.
+  tool calls from the LLM. Handles plain tools, skill activation, and
+  subagent spawning.
 
   `execute_one/2` runs a single tool call and returns `{result, side_effects}`
   where side effects are tagged tuples applied by ToolRunner after collection.
   This design supports parallel execution — children can't share or modify
   Server state, so state changes are deferred as data.
 
-  Skill activation forks the parent agent's context into a child agent that
-  runs autonomously with the skill's instructions and tools. The parent
-  receives the result via `:DOWN` monitoring, avoiding state leaks.
+  Skill activation runs the skill as a forked sub-conversation in the
+  parent agent's process via `SkillKit.Agent.SkillActivation`. The parent
+  receives the sub-loop's final text as the `activate_skill` tool's
+  result. No child agent supervision tree is spawned.
 
   Subagent delegation returns immediately (the subagent runs independently).
   Tools that need external input return `{:suspended, execution, side_effects}`
@@ -19,9 +20,9 @@ defmodule SkillKit.Agent.ToolDispatch do
   """
 
   alias SkillKit.Agent.Server
+  alias SkillKit.Agent.SkillActivation
   alias SkillKit.Hooks
   alias SkillKit.Runtime
-  alias SkillKit.Skill
   alias SkillKit.ToolExecution
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.ToolCall
@@ -54,9 +55,20 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp wrap_error(result, _id), do: result
 
-  defp execute_command(state, %ToolCall{id: id, input: input}) do
-    tool = find_tool(state)
-    tool_context = build_context(state)
+  defp execute_command(state, %ToolCall{id: id, name: name, input: input}) do
+    dispatch_known_tool(find_tool(state, name), state, id, name, input)
+  end
+
+  defp dispatch_known_tool(nil, _state, id, name, _input) do
+    {%ToolResult{
+       tool_call_id: id,
+       content: "Unknown tool: #{name}",
+       is_error: true
+     }, []}
+  end
+
+  defp dispatch_known_tool(tool, state, id, name, input) do
+    tool_context = build_context(state, name)
 
     hook_context = %{
       tool: tool,
@@ -71,17 +83,16 @@ defmodule SkillKit.Agent.ToolDispatch do
         do_execute_command(id, tool, input, tool_context, hook_context)
       end)
 
-    case result do
-      {:suspended, execution} ->
-        {:suspended, execution, []}
-
-      {:deny, reason} ->
-        {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
-
-      tool_result ->
-        {unwrap_tool_result(id, tool_result), []}
-    end
+    dispatch_hook_result(result, id)
   end
+
+  defp dispatch_hook_result({:suspended, execution}, _id), do: {:suspended, execution, []}
+
+  defp dispatch_hook_result({:deny, reason}, id) do
+    {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
+  end
+
+  defp dispatch_hook_result(tool_result, id), do: {unwrap_tool_result(id, tool_result), []}
 
   defp do_execute_command(id, tool, input, tool_context, hook_context) do
     exec = %ToolExecution{tool: tool, input: input, context: tool_context}
@@ -105,42 +116,42 @@ defmodule SkillKit.Agent.ToolDispatch do
     end
   end
 
-  defp find_tool(state) do
-    case SkillKit.Catalog.tool_config(state.agent) do
-      nil -> SkillKit.Tools.Shell
+  defp find_tool(state, tool_name) do
+    case SkillKit.Catalog.tool_config(state.agent, tool_name) do
+      nil -> nil
       {tool, _metadata} -> tool
     end
   end
 
   @doc """
-  Builds the `context` map passed to `Tool.execute/1`.
+  Builds the `context` map passed to `Tool.execute/1` for a given tool
+  call name.
 
   The context contains:
-    * `:agent` — the full agent struct (provides scope, name, and anything
-      a tool or credential provider needs to dispatch on).
-    * `:scope` — a shortcut to `agent.scope` for existing callers.
-    * `:cwd`, `:env` — merged from the tool's config metadata if present.
+    * `:agent` — the full agent struct (scope, name, etc.).
+    * `:agent_name` — the root agent's name. For an activate_skill child
+      this is the parent's name, not the ephemeral child name — so
+      state that outlives the child (e.g. a webhook registration) is
+      bound to the right agent.
+    * `:scope` — shortcut to `agent.scope`.
+    * Tool-specific metadata merged in (e.g., `:cwd`, `:env` for Shell;
+      `:supervisor`, `:verifiers` for Webhook).
   """
-  def build_context(state) do
-    base_context = %{agent: state.agent, scope: state.agent.scope}
+  def build_context(state, tool_name) do
+    base_context = %{
+      agent: state.agent,
+      agent_name: root_agent_name(state.agent),
+      scope: state.agent.scope
+    }
 
-    case SkillKit.Catalog.tool_config(state.agent) do
+    case SkillKit.Catalog.tool_config(state.agent, tool_name) do
       nil -> base_context
-      {_tool, metadata} -> merge_tool_config(base_context, metadata)
+      {_tool, metadata} -> Map.merge(base_context, Map.delete(metadata, :tool))
     end
   end
 
-  defp merge_tool_config(context, metadata) do
-    context
-    |> maybe_put_cwd(metadata)
-    |> maybe_put_env(metadata)
-  end
-
-  defp maybe_put_cwd(context, %{cwd: cwd}), do: Map.put(context, :cwd, cwd)
-  defp maybe_put_cwd(context, _metadata), do: context
-
-  defp maybe_put_env(context, %{env: env}), do: Map.put(context, :env, env)
-  defp maybe_put_env(context, _metadata), do: context
+  defp root_agent_name(%{parent_ref: %SkillKit.AgentRef{name: name}}), do: name
+  defp root_agent_name(%{name: name}), do: name
 
   defp extract_output({:ok, output}), do: ensure_non_empty(output)
   defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
@@ -164,70 +175,10 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   defp unwrap_tool_result(_id, result), do: result
 
-  # --- Skill Activation (fork into child agent) ---
+  # --- Skill Activation (in-process sub-loop) ---
 
   defp activate_skill(state, %ToolCall{id: id, input: input}) do
-    skill_name = Map.get(input, "name", "")
-
-    with {:ok, skill} <- SkillKit.Catalog.get_skill(state.agent, skill_name),
-         {:ok, body} <- render_skill(skill, state),
-         {:ok, agent} <- build_skill_agent(skill, body, state) do
-      start_skill_agent(agent, skill, state, id)
-    end
-  end
-
-  defp render_skill(skill, state) do
-    scope_context = %{agent: state.agent.name, skill: skill.name}
-    Skill.render(skill, %{}, state.agent.scope, scope_context)
-  end
-
-  defp build_skill_agent(skill, body, state) do
-    {:ok,
-     %{
-       state.agent
-       | name: "#{state.agent.name}/skill:#{skill.name}-#{:erlang.unique_integer([:positive])}",
-         system_prompt: state.agent.system_prompt <> "\n\n" <> body,
-         skills: skill_providers(skill),
-         depth: state.agent.depth + 1,
-         parent_ref: build_parent_ref(state),
-         registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}",
-         conversation_store: nil,
-         initial_messages: state.messages
-     }}
-  end
-
-  defp skill_providers(%{tool: tool}) when tool != SkillKit.Tools.Shell do
-    [{tool, []}]
-  end
-
-  defp skill_providers(_skill), do: []
-
-  defp start_skill_agent(agent, skill, state, id) do
-    case Runtime.start_agent(agent) do
-      {:ok, agent_ref} ->
-        [{server_pid, _}] = Registry.lookup(agent_ref.registry, {agent.name, :server})
-
-        entry = %{
-          name: skill.name,
-          task: "skill:#{skill.name}",
-          parent_intent: get_last_assistant_content(state.messages),
-          agent_ref: agent_ref
-        }
-
-        result = %ToolResult{
-          tool_call_id: id,
-          content: "Running skill #{skill.name}..."
-        }
-
-        {result, [{:subagent, server_pid, entry}]}
-
-      {:error, reason} ->
-        {%ToolResult{
-           tool_call_id: id,
-           content: "Failed to start skill agent: #{inspect(reason)}",
-           is_error: true
-         }, []}
-    end
+    {SkillActivation.dispatch(state, id, input), []}
   end
 
   # --- Subagent Spawning ---
@@ -286,6 +237,7 @@ defmodule SkillKit.Agent.ToolDispatch do
         model: agent_def.model || state.agent.model,
         depth: state.agent.depth + 1,
         parent_ref: build_parent_ref(state),
+        tools: state.agent.tools,
         skills: state.agent.skills,
         runtime: state.agent.runtime,
         registry: :"skill_kit_registry_#{:erlang.unique_integer([:positive])}"
@@ -308,7 +260,12 @@ defmodule SkillKit.Agent.ToolDispatch do
 
         result = %ToolResult{
           tool_call_id: id,
-          content: "Delegated to #{name}. You will receive the result when it completes."
+          content: """
+          Subagent #{name} started in the background. Its result will arrive as a
+          system message when complete. Tell the user what you delegated and what
+          to expect, in whatever way fits the conversation. Continue with other
+          work or pause your turn as appropriate.
+          """
         }
 
         {result, [{:subagent, server_pid, entry}]}

@@ -7,7 +7,6 @@ defmodule Mix.Tasks.SkillKit.Demo do
 
   use Mix.Task
 
-  alias SkillKit.Agent
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error
   alias SkillKit.Types.AssistantMessage
@@ -26,25 +25,20 @@ defmodule Mix.Tasks.SkillKit.Demo do
       exit({:shutdown, 1})
     end
 
-    agent_md = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve/AGENT.md")
-    {:ok, content} = File.read(agent_md)
-    {:ok, definition} = Agent.parse(content)
-
+    agent_dir = Path.join(System.get_env("SKILL_KIT_AGENTS", "examples/agents"), "neve")
     skills_dir = System.get_env("SKILL_KIT_SKILLS", "examples/skills")
 
     {:ok, agent} =
-      SkillKit.start_agent(definition,
-        skills: [
-          {SkillKit.Kit.Local, dir: skills_dir},
-          {SkillKit.Tools.Shell, []}
-        ],
+      SkillKit.start_agent(agent_dir,
+        tools: [{SkillKit.Tools.Shell, []}],
+        skills: [{SkillKit.Kit.Local, dir: skills_dir}],
         caller: self()
       )
 
     Mix.shell().info("Sent: #{prompt}")
     :ok = SkillKit.send_message(agent, prompt)
 
-    receive_events(definition.name)
+    receive_events(agent.name)
 
     SkillKit.stop_agent(agent)
   end

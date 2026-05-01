@@ -25,7 +25,8 @@ defmodule SkillKit.Agent.Supervisor do
       {Registry, keys: :unique, name: agent.registry},
       {SkillKit.Catalog,
        name: {:via, Registry, {agent.registry, {agent.name, :catalog}}},
-       providers: agent.skills,
+       tools: agent.tools,
+       skills: agent.skills,
        scope: agent.scope},
       {Core, agent}
     ]

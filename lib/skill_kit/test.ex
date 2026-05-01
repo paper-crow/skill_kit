@@ -39,6 +39,7 @@ if Mix.env() == :test do
 
       caller = Keyword.get(opts, :caller, self())
       scope = Keyword.get(opts, :scope)
+      tools = Keyword.get(opts, :tools, [])
       skills = Keyword.get(opts, :skills, [])
       registry_name = :"test_registry_#{:erlang.unique_integer([:positive])}"
 
@@ -52,6 +53,7 @@ if Mix.env() == :test do
             system_prompt: "You are a test agent.",
             caller: caller,
             scope: scope,
+            tools: tools,
             skills: skills,
             registry: registry_name
           }
@@ -60,7 +62,8 @@ if Mix.env() == :test do
       ExUnit.Callbacks.start_supervised!(
         {SkillKit.Catalog,
          name: {:via, Registry, {registry_name, {agent.name, :catalog}}},
-         providers: skills,
+         tools: tools,
+         skills: skills,
          scope: scope}
       )
 
