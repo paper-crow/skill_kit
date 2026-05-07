@@ -97,47 +97,31 @@ defmodule SkillKit.Tools.Webhook do
     {:ok, [%{kit | skills: skills, metadata: metadata}]}
   end
 
-  @impl SkillKit.Tool
-  def definition do
-    %SkillKit.Tool{
-      name: "webhook",
-      description: """
-      Register, update, unregister, or list HTTP webhook endpoints bound to this agent.
-      Each vendor has its own register skill (webhook:github, webhook:stripe,
-      webhook:slack, webhook:unsigned). Update, unregister, and list are vendor-agnostic.
-
-      URL discipline: a successful register returns `Webhook registered. URL: <url>`.
-      Treat that URL as authoritative for the rest of the conversation — quote it
-      verbatim from memory when later asked, and never invent a URL with a different
-      host or format. Do not re-run `list` to recover a URL you already received.
-      If a register response does not contain a URL, say so plainly and offer to
-      re-register; do not guess.
-      """,
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{
-          "operation" => %{
-            "type" => "string",
-            "enum" => ["register", "update", "unregister", "list"]
-          },
-          "prompt" => %{
-            "type" => "string",
-            "description" => """
-            register (required) / update (optional). Plain-English handler brief — what the agent should DO when a delivery arrives. Write it as intent ("alert on disputes", "tag stale PRs"), not as a template. The framework gives the agent payload-reading tools and `send_message` to report back to the user; the brief drives the action, not the reporting.
-            """
-          },
-          "idempotency" => %{
-            "type" => "object",
-            "description" =>
-              "register only, optional. Keys: key ({header: ...} or {json_path: $.field}) and ttl."
-          },
-          "id" => %{
-            "type" => "string",
-            "description" => "update / unregister. The webhook id returned at registration."
-          }
+  def input_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "operation" => %{
+          "type" => "string",
+          "enum" => ["register", "update", "unregister", "list"]
         },
-        "required" => ["operation"]
-      }
+        "prompt" => %{
+          "type" => "string",
+          "description" => """
+          register (required) / update (optional). Plain-English handler brief — what the agent should DO when a delivery arrives. Write it as intent ("alert on disputes", "tag stale PRs"), not as a template. The framework gives the agent payload-reading tools and `send_message` to report back to the user; the brief drives the action, not the reporting.
+          """
+        },
+        "idempotency" => %{
+          "type" => "object",
+          "description" =>
+            "register only, optional. Keys: key ({header: ...} or {json_path: $.field}) and ttl."
+        },
+        "id" => %{
+          "type" => "string",
+          "description" => "update / unregister. The webhook id returned at registration."
+        }
+      },
+      "required" => ["operation"]
     }
   end
 
