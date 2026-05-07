@@ -61,25 +61,16 @@ defmodule SkillKit.Tools.Shell do
     collect(port, [])
   end
 
-  @impl SkillKit.Tool
-  def definition do
-    %SkillKit.Tool{
-      name: "bash",
-      description: """
-      Execute a shell command. Use for running scripts, reading/writing files,
-      fetching URLs (curl), git operations, and any system interaction.
-      The working directory defaults to the current process working directory.
-      """,
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{
-          "command" => %{
-            "type" => "string",
-            "description" => "The shell command to execute"
-          }
-        },
-        "required" => ["command"]
-      }
+  def input_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "command" => %{
+          "type" => "string",
+          "description" => "The shell command to execute"
+        }
+      },
+      "required" => ["command"]
     }
   end
 
