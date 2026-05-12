@@ -130,7 +130,28 @@ defmodule SkillKit.Agent.SkillActivation do
 
   defp build_sub_tools(parent_state, skill) do
     parent_tools = Enum.map(parent_state.agent.tools, &resolve_parent_tool(&1, parent_state))
-    maybe_append_skill_tool(parent_tools, skill, parent_state)
+
+    parent_tools
+    |> maybe_append_skill_tool(skill, parent_state)
+    |> Enum.map(&patch_for_skill_location(&1, skill))
+  end
+
+  # For file-backed skills, patch every sub-loop tool's context so tools that
+  # spawn subprocesses (e.g. Shell) resolve sibling scripts in the skill dir.
+  # Sets :cwd to the skill's directory and injects SKILLKIT_SKILL_PATH into
+  # the :env map (merging, not overwriting, any host-supplied env).
+  defp patch_for_skill_location(sub_tool, %Skill{location: nil}), do: sub_tool
+
+  defp patch_for_skill_location({module, context, definition}, %Skill{location: location}) do
+    skill_dir = Path.dirname(location)
+    env = Map.put(Map.get(context, :env, %{}), "SKILLKIT_SKILL_PATH", skill_dir)
+
+    patched =
+      context
+      |> Map.put(:cwd, skill_dir)
+      |> Map.put(:env, env)
+
+    {module, patched, definition}
   end
 
   defp resolve_parent_tool({module, _opts}, parent_state) do
