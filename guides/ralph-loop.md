@@ -160,6 +160,24 @@ Two reasonable starting points:
 Either way, **read the list before you run Ralph**. It will get done.
 You want it to be the thing you actually wanted.
 
+## Running it
+
+A built-in mix task ships the loop:
+
+```bash
+# Loop on an existing TODO.md in the current directory
+mix skill_kit.ralph TODO.md
+
+# Generate TODO.md from a prompt, then loop
+mix skill_kit.ralph TODO.md --prompt "Add JSON parsing to lib/foo.ex with tests"
+
+# Use a different agent (default: fixer)
+mix skill_kit.ralph TODO.md --agent neve
+```
+
+See `lib/mix/tasks/skill_kit.ralph.ex` for the source — it's the
+module below, plus argument parsing and a planning pass.
+
 ## The loop itself
 
 For completeness — it's footnote-sized. Using `SkillKit.send_message/2`
