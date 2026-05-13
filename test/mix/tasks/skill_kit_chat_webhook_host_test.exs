@@ -12,8 +12,7 @@ defmodule Mix.Tasks.SkillKit.Chat.WebhookHostTest do
   setup do
     # WebhookHost forwards to SkillKit.Webhook.Plug with default opts, so
     # the supervisor must be registered under the default name.
-    {:ok, sup_pid} =
-      WebhookSupervisor.start_link(inbox: {InboxMemory, [dispatch: :none]})
+    {:ok, sup_pid} = WebhookSupervisor.start_link(inbox: {InboxMemory, [dispatch: :none]})
 
     on_exit(fn ->
       if Process.alive?(sup_pid), do: Supervisor.stop(sup_pid)
