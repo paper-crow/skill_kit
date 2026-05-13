@@ -8,19 +8,29 @@ defmodule Mix.Tasks.SkillKit.Ralph do
       # Generate TODO.md from a prompt, then loop
       mix skill_kit.ralph TODO.md --prompt "Add JSON parsing to lib/foo.ex with tests"
 
-      # Choose a different agent (default: fixer)
-      mix skill_kit.ralph TODO.md --agent neve
+      # Choose a different agent (default: ralph)
+      mix skill_kit.ralph TODO.md --agent some-other-ralph
 
       # Operate in a different working directory
       mix skill_kit.ralph TODO.md --cwd path/to/project
 
   ## How it works
 
-  Each iteration sends the same prompt: read the TODO file, pick the
-  top unchecked item under `## MVP`, do it, mark it `[x]`, commit. The
-  loop exits when the agent replies `DONE` or when an error event
-  arrives. There is no iteration cap and no per-turn timeout — pacing
-  is handled by `Anthropic.Client`'s 429 retry.
+  This task is a thin driver. The Ralph contract lives in skills:
+
+    * `examples/agents/ralph/AGENT.md` — agent identity, routes user
+      requests to the right skill.
+    * `examples/agents/ralph/skills/plan/SKILL.md` — generates a TODO
+      file from a goal.
+    * `examples/agents/ralph/skills/iterate/SKILL.md` — does one
+      iteration: pick top unchecked item, do it, mark [x], commit.
+
+  The task sends a trigger message per turn — "Plan a TODO file at
+  PATH for: GOAL" or "Iterate on PATH" — and waits for the agent to
+  echo the skill's final word: `PLANNED`, `CONTINUE`, or `DONE`. The
+  loop exits on `DONE` (or on an `%Event.Error{}`). There is no
+  iteration cap and no per-turn timeout — pacing is handled by
+  `Anthropic.Client`'s 429 retry.
 
   See `guides/ralph-loop.md` for the design.
   """
@@ -36,34 +46,6 @@ defmodule Mix.Tasks.SkillKit.Ralph do
 
   @switches [agent: :string, prompt: :string, cwd: :string]
 
-  @loop_prompt """
-  Read the TODO file at <%= path %>.
-
-  Pick the top item under `## MVP` whose checkbox is unchecked. Do it.
-  Run `mix test` (or the project's equivalent) to verify. Mark the item
-  `[x]`. Append any new subtasks you discovered to `## MVP`. Stage and
-  commit; the commit message is the item text.
-
-  Reply with exactly the word DONE — and nothing else — if and only if
-  every line under `## MVP` starts with `[x]` AND tests pass.
-  """
-
-  @planner_prompt """
-  Write a TODO file at <%= path %> for the goal below.
-
-  GOAL:
-  <%= goal %>
-
-  Requirements:
-    - One `## MVP` section using `- [ ]` checkboxes.
-    - Each item must be verifiable (a test or check proves it done).
-    - Each item must be roughly one iteration of work — small but real.
-    - Order items by dependency.
-    - Optional `## FUTURE` section for nice-to-haves.
-
-  Use your shell tool to write the file. Reply "PLANNED" when done.
-  """
-
   @impl true
   def run(args) do
     load_dotenv()
@@ -71,9 +53,9 @@ defmodule Mix.Tasks.SkillKit.Ralph do
 
     {opts, positional, _} = OptionParser.parse(args, switches: @switches)
 
-    todo_path = todo_path_from(positional)
     cwd = opts[:cwd] || File.cwd!()
-    agent_dir = locate_agent!(opts[:agent] || "fixer")
+    todo_path = positional |> todo_path_from() |> Path.expand(cwd)
+    agent_dir = locate_agent!(opts[:agent] || "ralph")
 
     {:ok, agent} =
       SkillKit.start_agent(agent_dir,
@@ -82,7 +64,7 @@ defmodule Mix.Tasks.SkillKit.Ralph do
       )
 
     maybe_plan(agent, todo_path, opts[:prompt])
-    ensure_todo!(cwd, todo_path, agent)
+    ensure_todo!(todo_path, agent)
 
     result = loop(agent, todo_path, 1)
     SkillKit.stop_agent(agent)
@@ -111,9 +93,9 @@ defmodule Mix.Tasks.SkillKit.Ralph do
   defp maybe_plan(_agent, _todo_path, nil), do: :ok
 
   defp maybe_plan(agent, todo_path, goal) do
-    IO.puts(IO.ANSI.format([:bright, "\n--- planning ---"]))
-    prompt = render(@planner_prompt, path: todo_path, goal: goal)
-    :ok = SkillKit.send_message(agent, prompt)
+    IO.puts(IO.ANSI.format([:bright, "\n--- planning ---", :reset]))
+    trigger = "Plan a TODO file at #{todo_path} for this goal: #{goal}"
+    :ok = SkillKit.send_message(agent, trigger)
 
     case wait_for_turn() do
       {:ok, _msg} -> :ok
@@ -121,12 +103,10 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     end
   end
 
-  defp ensure_todo!(cwd, todo_path, agent) do
-    full = Path.join(cwd, todo_path)
-
-    case File.exists?(full) do
+  defp ensure_todo!(todo_path, agent) do
+    case File.exists?(todo_path) do
       true -> :ok
-      false -> abort!(agent, "TODO file not found at #{full}. Use --prompt to generate one.")
+      false -> abort!(agent, "TODO file not found at #{todo_path}. Use --prompt to generate one.")
     end
   end
 
@@ -138,8 +118,7 @@ defmodule Mix.Tasks.SkillKit.Ralph do
 
   defp loop(agent, todo_path, iter) do
     IO.puts(IO.ANSI.format([:bright, :magenta, "\n--- iter #{iter} ---", :reset]))
-    prompt = render(@loop_prompt, path: todo_path)
-    :ok = SkillKit.send_message(agent, prompt)
+    :ok = SkillKit.send_message(agent, "Iterate on #{todo_path}.")
 
     case wait_for_turn() do
       {:ok, %AssistantMessage{content: content}} -> next_step(content, agent, todo_path, iter)
@@ -147,8 +126,12 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     end
   end
 
-  defp next_step("DONE" <> _, _agent, _todo_path, _iter), do: :done
-  defp next_step(_content, agent, todo_path, iter), do: loop(agent, todo_path, iter + 1)
+  defp next_step(content, agent, todo_path, iter) do
+    case String.trim(content) do
+      "DONE" -> :done
+      _ -> loop(agent, todo_path, iter + 1)
+    end
+  end
 
   defp wait_for_turn do
     receive do
@@ -172,6 +155,7 @@ defmodule Mix.Tasks.SkillKit.Ralph do
   end
 
   defp format_input(%{"command" => cmd}), do: cmd
+  defp format_input(%{"name" => name}), do: name
   defp format_input(input) when is_map(input) and map_size(input) == 0, do: ""
   defp format_input(input), do: inspect(input, limit: 3)
 
@@ -182,14 +166,6 @@ defmodule Mix.Tasks.SkillKit.Ralph do
   defp report({:error, reason}) do
     IO.puts(IO.ANSI.format([:red, "\nRalph failed: ", :reset, inspect(reason), "\n"]))
     exit({:shutdown, 1})
-  end
-
-  defp render(template, bindings) do
-    Enum.reduce(bindings, template, &replace_binding/2)
-  end
-
-  defp replace_binding({key, value}, template) do
-    String.replace(template, "<%= #{key} %>", to_string(value))
   end
 
   # --- dotenv (mirror of skill_kit.chat) -----------------------------------

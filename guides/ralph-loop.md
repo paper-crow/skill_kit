@@ -171,12 +171,42 @@ mix skill_kit.ralph TODO.md
 # Generate TODO.md from a prompt, then loop
 mix skill_kit.ralph TODO.md --prompt "Add JSON parsing to lib/foo.ex with tests"
 
-# Use a different agent (default: fixer)
-mix skill_kit.ralph TODO.md --agent neve
+# Use a different agent (default: ralph)
+mix skill_kit.ralph TODO.md --agent some-other-ralph
 ```
 
-See `lib/mix/tasks/skill_kit.ralph.ex` for the source — it's the
-module below, plus argument parsing and a planning pass.
+The contract lives in skills, not in the task. The task is a thin
+driver that starts the agent, sends per-turn triggers, and watches
+for the sentinel.
+
+```
+examples/agents/ralph/
+├── AGENT.md                  # identity + skill routing
+└── skills/
+    ├── plan/SKILL.md         # write a TODO from a goal
+    └── iterate/SKILL.md      # do one item: pick, edit, test, mark, commit
+```
+
+The `iterate` skill uses SkillKit's `` !`cmd` `` syntax to inline the
+current TODO contents into the prompt at render time:
+
+```markdown
+TODO file path: $ARGUMENTS
+
+Current contents:
+
+​```
+!`cat $ARGUMENTS 2>/dev/null || echo "(file not found)"`
+​```
+```
+
+That keeps the iteration prompt fresh every turn without an extra
+shell tool call.
+
+The agent's job is to route — its `AGENT.md` says "if the user asks
+to plan, activate `plan`; if to iterate, activate `iterate`; then
+echo the skill's final word verbatim." That last clause is what lets
+the driver detect `DONE` reliably without a fuzzy match.
 
 ## The loop itself
 
