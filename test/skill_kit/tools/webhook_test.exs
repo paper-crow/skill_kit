@@ -281,6 +281,7 @@ defmodule SkillKit.Tools.WebhookTest do
         input: %{
           "operation" => "update",
           "id" => id,
+          "prompt" => "new prompt",
           "verifier" => %{"type" => "stripe", "secret_key" => "X"}
         },
         context: update_ctx
@@ -298,6 +299,31 @@ defmodule SkillKit.Tools.WebhookTest do
                  input: %{"operation" => "update", "prompt" => "x"},
                  context: update_ctx
                })
+    end
+
+    test "errors when prompt is missing — does not silently keep the existing prompt",
+         %{supervisor: sup} do
+      ctx = register_ctx("webhook:github", sup)
+
+      {:ok, _} =
+        WebhookKit.execute(%ToolExecution{
+          tool: WebhookKit,
+          input: %{"operation" => "register", "prompt" => "original"},
+          context: ctx
+        })
+
+      [%Webhook{id: id}] = fetch_webhooks(sup)
+      update_ctx = update_ctx(sup)
+
+      assert {:error, "missing required field: prompt"} =
+               WebhookKit.execute(%ToolExecution{
+                 tool: WebhookKit,
+                 input: %{"operation" => "update", "id" => id},
+                 context: update_ctx
+               })
+
+      # And the original prompt is genuinely untouched on disk.
+      assert {:ok, %Webhook{prompt: "original"}} = Webhook.get(id, supervisor: sup)
     end
 
     test "errors when id is unknown", %{supervisor: sup} do

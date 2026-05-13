@@ -108,7 +108,7 @@ defmodule SkillKit.Tools.Webhook do
         "prompt" => %{
           "type" => "string",
           "description" => """
-          register (required) / update (optional). Plain-English handler brief — what the agent should DO when a delivery arrives. Write it as intent ("alert on disputes", "tag stale PRs"), not as a template. The framework gives the agent payload-reading tools and `send_message` to report back to the user; the brief drives the action, not the reporting.
+          Required for register and update. Plain-English handler brief — what the agent should DO when a delivery arrives. Write it as intent ("alert on disputes", "tag stale PRs"), not as a template. The framework gives the agent payload-reading tools and `send_message` to report back to the user; the brief drives the action, not the reporting.
           """
         },
         "idempotency" => %{
@@ -314,9 +314,9 @@ defmodule SkillKit.Tools.Webhook do
     {:error, "webhook not found: #{id}"}
   end
 
-  defp updated_prompt(webhook, input) do
+  defp updated_prompt(_webhook, input) do
     case Map.fetch(input, "prompt") do
-      :error -> {:ok, webhook.prompt}
+      :error -> {:error, {:missing_field, "prompt"}}
       {:ok, value} when is_binary(value) and byte_size(value) > 0 -> {:ok, value}
       _ -> {:error, {:invalid, "prompt"}}
     end
