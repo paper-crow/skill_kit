@@ -180,8 +180,10 @@ defmodule PersonaChat.CLI do
   defp print_persona(name) do
     agent_path = Path.join([@personas_dir, name, "AGENT.md"])
 
-    case Agent.parse(agent_path) do
-      {:ok, defn} -> IO.puts("  - #{defn.name}: #{defn.description}")
+    with {:ok, content} <- File.read(agent_path),
+         {:ok, defn} <- Agent.parse(content) do
+      IO.puts("  - #{defn.name}: #{defn.description}")
+    else
       _ -> IO.puts("  - #{name}: (could not parse)")
     end
   end
