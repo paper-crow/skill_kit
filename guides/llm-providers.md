@@ -203,6 +203,11 @@ The adapter's encoder translates them to the provider's wire format.
 | `SystemMessage{content: text}` | provider-dependent (often a top-level `:system` param) |
 | `ToolResult{tool_call_id: id, content: text}` | provider-dependent tool result format |
 
+`UserMessage` and `ToolResult` `content` may be either a string or a list of
+content blocks (`[map()]`) — for example a mix of text and image blocks for
+vision-capable models. When `content` is already a list, pass it through to the
+provider as structured content rather than wrapping it as a string.
+
 Some providers (including Anthropic) require consecutive `ToolResult` messages to be
 grouped into a single request message. Handle this in the encoder by chunking the
 message list before mapping.

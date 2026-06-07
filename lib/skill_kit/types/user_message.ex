@@ -3,7 +3,7 @@ defmodule SkillKit.Types.UserMessage do
 
   @type t :: %__MODULE__{
           agent: String.t() | nil,
-          content: String.t()
+          content: String.t() | [map()]
         }
 
   @enforce_keys [:content]

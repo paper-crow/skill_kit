@@ -39,7 +39,8 @@ defmodule SkillKit.Kit.Local.ParserTest do
       assert skill.description == "Summarize a file's contents"
       assert skill.required_scope == ["files:read"]
       assert skill.location == path
-      assert skill.tool == SkillKit.Tools.Shell
+      # Filesystem-parsed skills are knowledge-only by default — no silent Shell.
+      assert skill.tool == nil
       assert skill.hooks == []
       assert String.contains?(skill.body, "{{content}}")
     end

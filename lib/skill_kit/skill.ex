@@ -3,8 +3,13 @@ defmodule SkillKit.Skill do
   Pure data struct representing a registered skill in SkillKit.
 
   `SkillKit.Skill` is a plain Elixir struct that carries all identity,
-  execution, and hook configuration for a skill. Execution is delegated
-  to the module named in `:tool` (default: `SkillKit.Tools.Shell`).
+  execution, and hook configuration for a skill. When `:tool` names a module,
+  that module executes the skill and is exposed to the model when the skill is
+  activated. `:tool` defaults to `nil` — a knowledge-only skill whose body is
+  injected on activation but which exposes NO executable tool. A tool (e.g.
+  `SkillKit.Tools.Shell`) is opt-in, never a silent default: set it explicitly
+  via the `SkillKit.Kit` macro (`use SkillKit.Kit`, which patches `:tool` to the
+  kit module) or by constructing the struct directly.
 
   ## Struct Fields
 
@@ -16,7 +21,7 @@ defmodule SkillKit.Skill do
   | `:body`           | `String.t() \| nil` | `nil`                      | Skill body / prompt template                 |
   | `:location`       | `String.t() \| nil` | `nil`                      | File path or source location for this skill  |
   | `:required_scope` | `[String.t()]`      | `[]`                       | Scopes required to call this skill           |
-  | `:tool`           | `module()`          | `SkillKit.Tools.Shell`  | Module responsible for executing the skill   |
+  | `:tool`           | `module() \| nil`    | `nil`                      | Module that executes the skill, or `nil` for a knowledge-only skill (no tool exposed) |
   | `:hooks`          | `[SkillKit.Hook.t()]` | `[]`                     | Lifecycle hooks attached to this skill       |
   | `:metadata`       | `%{String.t() => term()}` | `%{}`              | Arbitrary key-value metadata from frontmatter |
 
@@ -39,7 +44,7 @@ defmodule SkillKit.Skill do
           body: String.t() | nil,
           location: String.t() | nil,
           required_scope: [String.t()],
-          tool: module(),
+          tool: module() | nil,
           hooks: [Hook.t()],
           metadata: %{optional(String.t()) => term()}
         }
@@ -51,7 +56,7 @@ defmodule SkillKit.Skill do
     :body,
     :location,
     required_scope: [],
-    tool: SkillKit.Tools.Shell,
+    tool: nil,
     hooks: [],
     metadata: %{}
   ]

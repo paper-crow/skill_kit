@@ -5,7 +5,7 @@ defmodule SkillKit.Types.ToolResult do
           agent: String.t() | nil,
           name: String.t() | nil,
           tool_call_id: String.t(),
-          content: String.t(),
+          content: String.t() | [map()],
           is_error: boolean()
         }
 

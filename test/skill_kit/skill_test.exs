@@ -37,8 +37,8 @@ defmodule SkillKit.SkillTest do
       assert %Skill{}.required_scope == []
     end
 
-    test "tool defaults to SkillKit.Tools.Shell" do
-      assert %Skill{}.tool == SkillKit.Tools.Shell
+    test "tool defaults to nil (knowledge-only; a tool like Shell is opt-in, never silent)" do
+      assert %Skill{}.tool == nil
     end
 
     test "hooks defaults to empty list" do

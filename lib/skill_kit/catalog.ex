@@ -219,8 +219,13 @@ defmodule SkillKit.Catalog do
   end
 
   defp activate_skill_candidate?(skill, prefix) do
-    Code.ensure_loaded?(skill.tool) and not skill_matches_prefix?(skill, prefix)
+    skill_tool_available?(skill) and not skill_matches_prefix?(skill, prefix)
   end
+
+  # A skill is activatable when it has no tool (knowledge-only) or its tool module
+  # is loaded. A `nil` tool is the safe default — a skill never silently gets Shell.
+  defp skill_tool_available?(%{tool: nil}), do: true
+  defp skill_tool_available?(%{tool: tool}), do: Code.ensure_loaded?(tool)
 
   defp skill_matches_prefix?(_skill, nil), do: false
   defp skill_matches_prefix?(skill, prefix), do: String.starts_with?(skill.name, prefix)
@@ -324,10 +329,7 @@ defmodule SkillKit.Catalog do
 
     visible_skills = filter_authorized_skills(all_skills(skill_kits), state)
 
-    filterable_skills =
-      Enum.filter(visible_skills, fn skill ->
-        Code.ensure_loaded?(skill.tool)
-      end)
+    filterable_skills = Enum.filter(visible_skills, &skill_tool_available?/1)
 
     skill_tool = build_activate_skill_tool(filterable_skills)
 

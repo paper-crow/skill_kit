@@ -63,4 +63,22 @@ defmodule SkillKit.Agent.ToolDispatchTest do
     assert context.agent_name == "root-parent"
     assert context.agent == child
   end
+
+  describe "extract_output/1 with content blocks" do
+    test "passes a list of content-block maps through unchanged" do
+      blocks = [
+        %{"type" => "text", "text" => "resolved data"},
+        %{
+          "type" => "image",
+          "source" => %{"type" => "base64", "media_type" => "image/webp", "data" => "AAAA"}
+        }
+      ]
+
+      assert ToolDispatch.extract_output({:ok, blocks}) == blocks
+    end
+
+    test "still stringifies a bare string result" do
+      assert ToolDispatch.extract_output({:ok, "hello"}) == "hello"
+    end
+  end
 end
