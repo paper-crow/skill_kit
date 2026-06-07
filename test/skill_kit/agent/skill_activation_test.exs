@@ -44,6 +44,30 @@ defmodule SkillKit.Agent.SkillActivationTest do
     def resume(_exec, _state, _decision), do: {:error, "resume not supported"}
   end
 
+  # -- tool that reports the cwd / env keys it received ---------------------
+
+  defmodule ContextRecorder do
+    @moduledoc false
+    @behaviour SkillKit.Tool
+
+    @impl SkillKit.Tool
+    def definition do
+      %SkillKit.Tool{
+        name: "context_recorder",
+        description: "Reports its received context",
+        input_schema: %{"type" => "object", "properties" => %{}}
+      }
+    end
+
+    @impl SkillKit.Tool
+    def execute(%SkillKit.ToolExecution{context: ctx}) do
+      {:ok, "cwd=#{inspect(ctx[:cwd])} env=#{inspect(ctx[:env])}"}
+    end
+
+    @impl SkillKit.Tool
+    def resume(_exec, _state, _decision), do: {:error, "not supported"}
+  end
+
   # -- setup ---------------------------------------------------------------
 
   setup do
@@ -231,6 +255,42 @@ defmodule SkillKit.Agent.SkillActivationTest do
              } = SkillActivation.run(state, skill, "body", "id")
 
       assert content =~ "Skill activation error"
+    end
+
+    test "file-backed skill sets sub-loop tool cwd to the skill dir + SKILLKIT_SKILL_PATH env",
+         %{agent: agent} do
+      skill_dir = "/tmp/skillkit_test_skill_#{System.unique_integer([:positive])}"
+      skill_path = Path.join(skill_dir, "SKILL.md")
+
+      skill = %Skill{
+        name: "located:do",
+        namespace: "located",
+        description: "skill with a location",
+        body: "body",
+        location: skill_path,
+        tool: FakeTool,
+        metadata: %{}
+      }
+
+      # Add ContextRecorder to the parent's tools so the sub-loop sees it.
+      agent = %{agent | tools: [{ContextRecorder, []}]}
+      state = %Server{agent: agent, messages: [%UserMessage{content: "go"}]}
+
+      expect(SkillKit.LLM.Mock, :stream, 2, fn _msgs, _opts ->
+        call_count = increment(:cwd_calls, 1)
+
+        case call_count do
+          1 -> tool_call_stream("tc_cwd", "context_recorder", %{})
+          2 -> text_stream("done")
+        end
+      end)
+
+      SkillActivation.run(state, skill, "body", "id_x")
+
+      assert_receive %ToolResult{tool_call_id: "tc_cwd", content: content}, 1000
+      assert content =~ ~s(cwd="#{skill_dir}")
+      assert content =~ "SKILLKIT_SKILL_PATH"
+      assert content =~ skill_dir
     end
 
     test "returns a denial ToolResult when a pre-hook denies the activation",

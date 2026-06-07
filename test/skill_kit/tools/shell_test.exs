@@ -40,6 +40,28 @@ defmodule SkillKit.Tools.ShellTest do
   defp restore_credential_provider(val),
     do: Application.put_env(:skill_kit, :credential_provider, val)
 
+  describe "definition/0" do
+    test "tool name + description + input_schema surface" do
+      assert %SkillKit.Tool{
+               name: "bash",
+               description: description,
+               input_schema: %{
+                 "type" => "object",
+                 "properties" => %{
+                   "command" => %{
+                     "type" => "string",
+                     "description" => "The shell command to execute"
+                   }
+                 },
+                 "required" => ["command"]
+               }
+             } = Shell.definition()
+
+      assert description =~ "Execute a shell command"
+      assert description =~ "fetching URLs"
+    end
+  end
+
   describe "execute/1" do
     test "returns {:ok, stdout} for a simple echo command" do
       assert {:ok, "hello\n"} =

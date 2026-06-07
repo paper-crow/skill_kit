@@ -172,7 +172,8 @@ defmodule SkillKit.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/paper-crow/skill_kit"},
-      maintainers: ["SkillKit Authors"]
+      maintainers: ["Paper Crow"],
+      files: ~w(lib priv guides mix.exs README.md CHANGELOG.md LICENSE .formatter.exs)
     ]
   end
 end

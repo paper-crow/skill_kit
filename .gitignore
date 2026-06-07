@@ -33,3 +33,10 @@ CLAUDE.local.md
 .memory/
 /skill_kit_web/priv/static
 /.superpowers
+
+# Webhook handler artifacts from chat manual testing
+*.log
+/webhook_log.txt
+
+# Local agent conversation logs
+/.skill_kit/

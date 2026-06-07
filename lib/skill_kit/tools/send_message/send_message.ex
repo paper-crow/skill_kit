@@ -23,29 +23,20 @@ defmodule SkillKit.Tools.SendMessage do
   process cannot be located.
   """
 
-  @behaviour SkillKit.Tool
+  use SkillKit.Kit
 
   alias SkillKit.ToolExecution
 
-  @impl SkillKit.Tool
-  def definition do
-    %SkillKit.Tool{
-      name: "send_message",
-      description: """
-      Send a message to the bound target agent. The target is configured at
-      tool registration time; you only supply the content. Use this when you
-      want the receiving agent to wake and process what you have to say.
-      """,
-      input_schema: %{
-        "type" => "object",
-        "properties" => %{
-          "content" => %{
-            "type" => "string",
-            "description" => "The message content to deliver to the target agent."
-          }
-        },
-        "required" => ["content"]
-      }
+  def input_schema do
+    %{
+      "type" => "object",
+      "properties" => %{
+        "content" => %{
+          "type" => "string",
+          "description" => "The message content to deliver to the target agent."
+        }
+      },
+      "required" => ["content"]
     }
   end
 
@@ -58,10 +49,6 @@ defmodule SkillKit.Tools.SendMessage do
   def execute(%ToolExecution{input: input}) do
     {:error, "Missing required field: content (got: #{inspect(input)})"}
   end
-
-  @impl SkillKit.Tool
-  def resume(_execution, _state, _decision),
-    do: {:error, "send_message does not support suspension"}
 
   defp deliver(:ok), do: {:ok, "Message sent."}
   defp deliver({:error, :not_found}), do: {:error, "Target agent is not running."}
