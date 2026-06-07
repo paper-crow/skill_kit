@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-07
+
+### Added
+
+- Vision support in user messages: `SkillKit.Types.UserMessage` content may now be a list of content blocks (text and images), not just a string.
+- Image and content-block lists in tool results: `SkillKit.Types.ToolResult` accepts structured content, dispatched correctly through the tool pipeline.
+
+### Changed
+
+- Skills now default `:tool` to `nil` (knowledge-only) instead of `SkillKit.Tools.Shell`. A tool-less skill injects its body without exposing an executable tool to the model; previously any tool-less skill silently granted bash access on activation. A tool is now opt-in via the `SkillKit.Kit` macro or explicit struct construction. The catalog treats `nil`-tool skills as first-class in the `activate_skill` enum.
+
+[0.2.0]: https://github.com/paper-crow/skill_kit/releases/tag/v0.2.0
+
 ## [0.1.0] - 2026-06-07
 
 Initial public release.
