@@ -153,9 +153,11 @@ defmodule SkillKit.Agent.ToolDispatch do
   defp root_agent_name(%{parent_ref: %SkillKit.AgentRef{name: name}}), do: name
   defp root_agent_name(%{name: name}), do: name
 
-  defp extract_output({:ok, output}), do: ensure_non_empty(output)
-  defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
-  defp extract_output(other), do: inspect(other)
+  @doc false
+  def extract_output({:ok, output}), do: extract_output(output)
+  def extract_output(output) when is_binary(output), do: ensure_non_empty(output)
+  def extract_output([block | _] = blocks) when is_map(block), do: blocks
+  def extract_output(other), do: inspect(other)
 
   defp extract_error(execution) do
     case execution.result do
