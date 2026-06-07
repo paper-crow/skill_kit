@@ -169,6 +169,10 @@ defmodule SkillKit.Agent.SkillActivation do
     end
   end
 
+  # Knowledge-only skill (no tool): the sub-loop gets the skill body + inherited
+  # parent tools, but no extra tool — and never a silent Shell.
+  defp maybe_append_skill_tool(parent_tools, %Skill{tool: nil}, _parent_state), do: parent_tools
+
   defp maybe_append_skill_tool(parent_tools, %Skill{tool: tool_module} = skill, parent_state) do
     case Enum.any?(parent_tools, fn {m, _c, _d} -> m == tool_module end) do
       true -> parent_tools
