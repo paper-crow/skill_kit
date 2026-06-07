@@ -37,3 +37,6 @@ CLAUDE.local.md
 # Webhook handler artifacts from chat manual testing
 *.log
 /webhook_log.txt
+
+# Local agent conversation logs
+/.skill_kit/
