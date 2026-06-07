@@ -85,6 +85,20 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
       assert block["is_error"] == true
     end
 
+    test "encodes a user message whose content is a list of content blocks (text + image)" do
+      blocks = [
+        %{"type" => "text", "text" => "Analyze this."},
+        %{
+          "type" => "image",
+          "source" => %{"type" => "base64", "media_type" => "image/webp", "data" => "AAAA"}
+        }
+      ]
+
+      [encoded] = Encoder.encode_messages([%UserMessage{content: blocks}])
+
+      assert encoded == %{"role" => "user", "content" => blocks}
+    end
+
     test "encodes system message as user message" do
       messages = [%SystemMessage{content: "[Task complete]"}]
 
