@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-08
+
+### Fixed
+
+- Compilation under Elixir 1.18.x on OTP 28. Compiled regexes (`~r/.../`) now hold a `#Reference` on OTP 28, which cannot be escaped into a module attribute, so any module storing a regex in an attribute failed to compile with `cannot escape #Reference`. The affected modules — `SkillKit.Webhook.Verifier.Slack`/`Github`/`Stripe` (the `@defaults` maps), `SkillKit.Kit.Local.Parser`, and `SkillKit.Scope.Validation` — now build their regexes in a private function instead. No public API or behavior change.
+
+[0.2.1]: https://github.com/paper-crow/skill_kit/releases/tag/v0.2.1
+
 ## [0.2.0] - 2026-06-07
 
 ### Added

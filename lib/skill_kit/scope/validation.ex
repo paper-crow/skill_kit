@@ -47,8 +47,10 @@ defmodule SkillKit.Scope.Validation do
       true
   """
 
-  # Same pattern as @name_segment_regex in Kit.Local.Parser
-  @segment_regex ~r/^[a-z][a-z0-9_-]*$/
+  # Same pattern as name_segment_regex/0 in Kit.Local.Parser.
+  # Built in a function (not a module attribute): a compiled regex holds a
+  # #Reference under OTP 28, which can't be escaped into an attribute.
+  defp segment_regex, do: ~r/^[a-z][a-z0-9_-]*$/
 
   @typedoc ~S(A scope string, e.g. "admin:read" or "admin:*")
   @type scope :: String.t()
@@ -133,10 +135,10 @@ defmodule SkillKit.Scope.Validation do
   defp parse_scope(scope) do
     case String.split(scope, ":", parts: 3) do
       [ns, "*"] ->
-        if Regex.match?(@segment_regex, ns), do: {:wildcard, ns}, else: :invalid
+        if Regex.match?(segment_regex(), ns), do: {:wildcard, ns}, else: :invalid
 
       [ns, action] ->
-        if Regex.match?(@segment_regex, ns) and Regex.match?(@segment_regex, action) do
+        if Regex.match?(segment_regex(), ns) and Regex.match?(segment_regex(), action) do
           {:exact, ns, action}
         else
           :invalid

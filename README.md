@@ -16,7 +16,7 @@ Add SkillKit to your dependencies:
 
 ```elixir
 # mix.exs
-{:skill_kit, "~> 0.2.0"}
+{:skill_kit, "~> 0.2.1"}
 ```
 
 Set your API key and start chatting:
