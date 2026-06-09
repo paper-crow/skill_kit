@@ -61,8 +61,10 @@ defmodule SkillKit.Kit.Local.Parser do
   alias SkillKit.Hook
   alias SkillKit.Skill
 
-  # Namespace segment validation — same regex as SkillKit.Registry
-  @name_segment_regex ~r/^[a-z][a-z0-9_-]*$/
+  # Namespace segment validation — same regex as SkillKit.Registry.
+  # Built in a function (not a module attribute): a compiled regex holds a
+  # #Reference under OTP 28, which can't be escaped into an attribute.
+  defp name_segment_regex, do: ~r/^[a-z][a-z0-9_-]*$/
 
   @doc """
   Loads a `SKILL.md` file from `path` and returns a parsed skill struct.
@@ -251,15 +253,15 @@ defmodule SkillKit.Kit.Local.Parser do
     case String.split(name, ":", parts: 2) do
       [namespace, skill_name]
       when namespace != "" and skill_name != "" ->
-        if Regex.match?(@name_segment_regex, namespace) and
-             Regex.match?(@name_segment_regex, skill_name) do
+        if Regex.match?(name_segment_regex(), namespace) and
+             Regex.match?(name_segment_regex(), skill_name) do
           {:ok, namespace}
         else
           {:error, :invalid_name_format}
         end
 
       [bare_name] when bare_name != "" ->
-        if Regex.match?(@name_segment_regex, bare_name) do
+        if Regex.match?(name_segment_regex(), bare_name) do
           {:ok, bare_name}
         else
           {:error, :invalid_name_format}

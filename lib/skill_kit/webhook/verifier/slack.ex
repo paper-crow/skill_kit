@@ -24,19 +24,23 @@ defmodule SkillKit.Webhook.Verifier.Slack do
 
   alias SkillKit.Webhook.Verifier.Hmac
 
-  @defaults %{
-    algorithm: :sha256,
-    signing_template: "v0:$TIMESTAMP:$BODY",
-    signature_header: "x-slack-signature",
-    signature_pattern: ~r/v0=([a-f0-9]+)/,
-    timestamp_header: "x-slack-request-timestamp",
-    timestamp_pattern: ~r/(\d+)/,
-    max_skew: 300
-  }
+  # Compiled regexes can't be escaped into a module attribute under OTP 28
+  # (they hold a #Reference), so build the defaults map in a function.
+  defp defaults do
+    %{
+      algorithm: :sha256,
+      signing_template: "v0:$TIMESTAMP:$BODY",
+      signature_header: "x-slack-signature",
+      signature_pattern: ~r/v0=([a-f0-9]+)/,
+      timestamp_header: "x-slack-request-timestamp",
+      timestamp_pattern: ~r/(\d+)/,
+      max_skew: 300
+    }
+  end
 
   @impl true
   def verify(raw_body, conn, config, agent) do
-    merged = Map.merge(@defaults, config)
+    merged = Map.merge(defaults(), config)
     post_verify(Hmac.verify(raw_body, conn, merged, agent), raw_body, conn)
   end
 
