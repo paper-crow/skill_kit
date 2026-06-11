@@ -17,7 +17,7 @@ defmodule SkillKit.Eval.CaseTest do
     assert Code.ensure_loaded?(CaseExampleTest)
   end
 
-  test "generates one ExUnit test function per fixture eval" do
+  test "generates one ExUnit test function per fixture eval case" do
     Code.ensure_loaded(CaseExampleTest)
 
     functions = CaseExampleTest.__info__(:functions)
@@ -27,6 +27,6 @@ defmodule SkillKit.Eval.CaseTest do
         arity == 1 and String.starts_with?(Atom.to_string(name), "test ")
       end)
 
-    assert length(test_fns) == 2
+    assert length(test_fns) == 3
   end
 end

@@ -1,10 +1,10 @@
 ---
-name: "runs a shell command"
 tools:
   - "SkillKit.Tools.Shell"
 ---
-## Prompt
+## runs a shell command
+### Prompt
 Run: echo hello
 
-## Expect
+### Expect
 The assistant runs the command with its shell tool and reports the output `hello`.

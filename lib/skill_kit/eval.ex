@@ -1,61 +1,65 @@
 defmodule SkillKit.Eval do
   @moduledoc """
-  An evaluation case for a skill, expressed as a markdown `EVAL.md` file.
+  An evaluation case for a skill, expressed in a markdown `EVAL.md` file.
 
   Evals are the test counterpart to skills. Where a `SKILL.md` injects
-  instructions into an agent, an `EVAL.md` describes a behavior the skill
-  should produce and the criteria for success. The eval harness loads the
-  skill(s) under test into a fresh agent, sends the eval's prompt, and asks an
-  LLM judge whether the resulting transcript meets the criteria.
+  instructions into an agent, an `EVAL.md` describes behaviors the skill should
+  produce and the criteria for success. The harness loads the skill under test
+  into a fresh agent, sends each case's prompt, and asks an LLM judge whether
+  the resulting transcript meets the criteria.
 
   `SkillKit.Eval.Case` turns a directory of `EVAL.md` files into ExUnit tests,
   so `mix test` runs your skill evals as part of the suite.
 
   ## File Format
 
-  Frontmatter is just wiring — which skill is under test and how to run it. The
-  body carries the test itself in two sections: `## Prompt` (the message sent
-  to the agent) and `## Expect` (the natural-language rubric the LLM judge
-  scores against).
+  An `EVAL.md` is a suite of cases. Each `##` heading is one case (its text is
+  the case name); under it, a `### Prompt` section is the message sent to the
+  agent and a `### Expect` section is the rubric the LLM judge scores against.
+
+  ```markdown
+  ## greets the user by name
+  ### Prompt
+  Hi, I'm Sam
+  ### Expect
+  The assistant greets the user by their name in a warm, friendly tone.
+
+  ## handles a missing name
+  ### Prompt
+  Hello there
+  ### Expect
+  The assistant greets politely without inventing a name.
+  ```
+
+  ### Skill under test
+
+  When the `EVAL.md` lives next to a `SKILL.md`, that skill is loaded
+  automatically — no frontmatter needed. To test a skill elsewhere (or add
+  tools / pin a model), use optional frontmatter:
 
   ```markdown
   ---
-  name: "greets the user by name"
-  description: "The greeter should address the user warmly"
   skills:
     - "skills/greeter"
   tools:
     - "SkillKit.Tools.Shell"
   model: "anthropic:claude-sonnet-4-20250514"
+  system: "You are being evaluated."
   ---
-  ## Prompt
-  Hi, I'm Sam
-
-  ## Expect
-  The assistant greets the user by their name in a warm, friendly tone.
+  ## greets the user by name
+  ...
   ```
 
-  ### Frontmatter Fields
+  | Frontmatter (all optional) | Notes |
+  |----------------------------|-------|
+  | `skills` | Skill providers under test (paths or module names). Overrides location inference. |
+  | `tools` | Tool providers, same forms as `skills`. |
+  | `model` | Model URI for the eval agent; falls back to the default provider. |
+  | `system` | System prompt for the eval agent. |
 
-  | Field | Type | Notes |
-  |-------|------|-------|
-  | `name` | `String.t()` | Required. Used as the ExUnit test name. |
-  | `description` | `String.t()` | Optional human-readable summary. |
-  | `system` | `String.t()` | Optional system prompt for the eval agent. |
-  | `model` | `String.t()` | Optional model URI; falls back to the default provider. |
-  | `skills` | `[String.t()]` | Skill providers under test (paths or module names). |
-  | `tools` | `[String.t()]` | Tool providers (paths or module names). |
-
-  ### Body Sections
-
-  | Section | Required | Role |
-  |---------|----------|------|
-  | `## Prompt` | yes | The user message sent to the agent under test. |
-  | `## Expect` | yes | The rubric the LLM judge scores the transcript against. |
-
-  Headings are matched case-insensitively at any level (`#`–`######`). Only the
-  exact words `Prompt` and `Expect` start a section, so a `#`-prefixed line
-  inside a section (e.g. a shell comment) stays part of that section's content.
+  Headings matching `Prompt`/`Expect` (case-insensitive, any level) are section
+  markers; every other `##` heading starts a new case. Other heading levels
+  inside a section stay part of its content.
 
   ### Provider strings
 
@@ -65,13 +69,13 @@ defmodule SkillKit.Eval do
   (`"skills/greeter"`).
   """
 
+  alias SkillKit.Eval.SkillFile
   alias SkillKit.Frontmatter
 
   @type provider :: module() | String.t() | {module(), keyword()}
 
   @type t :: %__MODULE__{
           name: String.t() | nil,
-          description: String.t() | nil,
           prompt: String.t() | nil,
           system: String.t() | nil,
           model: String.t() | nil,
@@ -84,7 +88,6 @@ defmodule SkillKit.Eval do
 
   defstruct [
     :name,
-    :description,
     :prompt,
     :system,
     :model,
@@ -98,26 +101,23 @@ defmodule SkillKit.Eval do
   @known_sections ~w(prompt expect)
 
   @doc """
-  Parses `EVAL.md` content into an `%Eval{}` struct.
+  Parses `EVAL.md` content into a list of `%Eval{}` cases.
 
-  Returns `{:ok, eval}` or `{:error, reason}`. `location` is stored on the
-  struct for diagnostics and is otherwise optional.
+  Returns `{:ok, evals}` or `{:error, reason}`. `location` is stored on each
+  case for diagnostics and skill inference.
   """
-  @spec parse(String.t(), String.t() | nil) :: {:ok, t()} | {:error, term()}
+  @spec parse(String.t(), String.t() | nil) :: {:ok, [t()]} | {:error, term()}
   def parse(content, location \\ nil) do
-    with {:ok, yaml, body} <- Frontmatter.parse(content),
-         {:ok, name} <- fetch_required(yaml, "name"),
-         sections = sections(body),
-         {:ok, prompt} <- fetch_section(sections, "prompt"),
-         {:ok, rubric} <- fetch_section(sections, "expect") do
-      {:ok, build(yaml, name, prompt, rubric, location)}
+    with {:ok, yaml, body} <- split_content(content),
+         {:ok, cases} <- parse_cases(body) do
+      {:ok, build_evals(yaml, cases, location)}
     end
   end
 
   @doc """
-  Loads and parses a single `EVAL.md` file from disk.
+  Loads and parses a single `EVAL.md` file from disk into its list of cases.
   """
-  @spec load_file(Path.t()) :: {:ok, t()} | {:error, term()}
+  @spec load_file(Path.t()) :: {:ok, [t()]} | {:error, term()}
   def load_file(path) do
     case File.read(path) do
       {:ok, content} -> parse(content, path)
@@ -126,11 +126,11 @@ defmodule SkillKit.Eval do
   end
 
   @doc """
-  Loads every eval under `dir`.
+  Loads every eval case under `dir`.
 
-  Discovers files named `EVAL.md` or `*.eval.md` at any depth. Returns
-  `{:ok, evals}` sorted by path, or `{:error, {path, reason}}` on the first
-  file that fails to parse.
+  Discovers files named `EVAL.md` or `*.eval.md` at any depth and flattens
+  their cases. Returns `{:ok, evals}` ordered by path, or `{:error, {path,
+  reason}}` on the first file that fails to parse.
   """
   @spec load_dir(Path.t()) :: {:ok, [t()]} | {:error, {Path.t(), term()}}
   def load_dir(dir) do
@@ -152,6 +152,24 @@ defmodule SkillKit.Eval do
     end
   end
 
+  @doc """
+  Resolves the skill providers for an eval.
+
+  Returns the explicit `skills` when set, otherwise infers a sibling `SKILL.md`
+  next to the eval's file (loaded via `SkillKit.Eval.SkillFile`), or `[]` when
+  neither applies.
+  """
+  @spec skill_providers(t()) :: [provider()]
+  def skill_providers(%__MODULE__{skills: [_ | _] = skills}), do: skills
+  def skill_providers(%__MODULE__{location: location}), do: colocated_skill(location)
+
+  defp colocated_skill(nil), do: []
+
+  defp colocated_skill(location) do
+    path = Path.join(Path.dirname(location), "SKILL.md")
+    if File.exists?(path), do: [{SkillFile, path: path}], else: []
+  end
+
   # ---------------------------------------------------------------------------
   # Directory loading
   # ---------------------------------------------------------------------------
@@ -165,53 +183,90 @@ defmodule SkillKit.Eval do
 
   defp load_into(path, {:ok, acc}) do
     case load_file(path) do
-      {:ok, eval} -> {:cont, {:ok, [eval | acc]}}
+      {:ok, evals} -> {:cont, {:ok, acc ++ evals}}
       {:error, reason} -> {:halt, {:error, {path, reason}}}
     end
   end
 
-  defp finalize_dir({:ok, acc}), do: {:ok, Enum.reverse(acc)}
+  defp finalize_dir({:ok, _evals} = ok), do: ok
   defp finalize_dir({:error, _} = error), do: error
 
   # ---------------------------------------------------------------------------
-  # Body section parsing
+  # Frontmatter (optional)
   # ---------------------------------------------------------------------------
 
-  # Splits the markdown body into a map of normalized section title => content.
-  # Only the headings in @known_sections start a new section; every other line
-  # (including other `#` lines) is content under the current section.
-  defp sections(body) do
-    {_current, acc} =
+  defp split_content("---\n" <> _rest = content), do: Frontmatter.parse(content)
+  defp split_content(content), do: {:ok, %{}, content}
+
+  # ---------------------------------------------------------------------------
+  # Case parsing
+  # ---------------------------------------------------------------------------
+
+  # Walks the body line by line into a list of `{name, prompt, rubric}` cases.
+  # A `##` heading whose text isn't Prompt/Expect starts a new case; a heading
+  # named Prompt/Expect (any level) starts a section within the current case;
+  # everything else is content under the active section.
+  defp parse_cases(body) do
+    {current, _section, acc} =
       body
       |> String.split("\n")
-      |> Enum.reduce({nil, %{}}, &reduce_section_line/2)
+      |> Enum.reduce({nil, nil, []}, &reduce_case_line/2)
 
-    Map.new(acc, fn {title, lines} -> {title, join_section(lines)} end)
+    current
+    |> push_case(acc)
+    |> Enum.reverse()
+    |> Enum.reduce_while({:ok, []}, &build_case/2)
+    |> finalize_cases()
   end
 
-  defp reduce_section_line(line, {current, acc}) do
-    case section_boundary(line) do
-      {:ok, title} -> {title, Map.put_new(acc, title, [])}
-      :error -> {current, add_line(acc, current, line)}
+  defp reduce_case_line(line, state), do: apply_line(line_kind(line), line, state)
+
+  defp line_kind(line) do
+    cond do
+      section_heading?(line) -> {:section, heading_key(line)}
+      case_heading?(line) -> {:case, case_name(line)}
+      true -> :content
     end
   end
 
-  defp section_boundary("#" <> _rest = line) do
-    title = heading_text(line)
-    if title in @known_sections, do: {:ok, title}, else: :error
+  defp apply_line({:case, name}, _line, {current, _section, acc}) do
+    {{name, %{}}, nil, push_case(current, acc)}
   end
 
-  defp section_boundary(_line), do: :error
+  defp apply_line({:section, _key}, _line, {nil, _section, acc}), do: {nil, nil, acc}
+  defp apply_line({:section, key}, _line, {current, _section, acc}), do: {current, key, acc}
 
-  defp heading_text(line) do
-    line
-    |> String.trim_leading("#")
-    |> String.trim()
-    |> String.downcase()
+  defp apply_line(:content, line, {current, section, acc}) do
+    {add_content(current, section, line), section, acc}
   end
 
-  defp add_line(acc, nil, _line), do: acc
-  defp add_line(acc, title, line), do: Map.update(acc, title, [line], &[line | &1])
+  defp add_content(nil, _section, _line), do: nil
+  defp add_content(current, nil, _line), do: current
+
+  defp add_content({name, sections}, section, line) do
+    {name, Map.update(sections, section, [line], &[line | &1])}
+  end
+
+  defp push_case(nil, acc), do: acc
+  defp push_case(case_tuple, acc), do: [case_tuple | acc]
+
+  defp build_case({name, sections}, {:ok, list}) do
+    with {:ok, prompt} <- section_value(sections, "prompt", name),
+         {:ok, rubric} <- section_value(sections, "expect", name) do
+      {:cont, {:ok, [{name, prompt, rubric} | list]}}
+    else
+      error -> {:halt, error}
+    end
+  end
+
+  defp section_value(sections, key, name) do
+    value =
+      sections
+      |> Map.get(key, [])
+      |> join_section()
+
+    if value == "", do: {:error, {:missing_section, key, name}}, else: {:ok, value}
+  end
 
   defp join_section(lines) do
     lines
@@ -220,26 +275,44 @@ defmodule SkillKit.Eval do
     |> String.trim()
   end
 
-  defp fetch_section(sections, key) do
-    case Map.get(sections, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _ -> {:error, {:missing_section, key}}
-    end
+  defp finalize_cases({:ok, list}), do: {:ok, Enum.reverse(list)}
+  defp finalize_cases({:error, _} = error), do: error
+
+  # ---------------------------------------------------------------------------
+  # Heading detection
+  # ---------------------------------------------------------------------------
+
+  defp section_heading?("#" <> _rest = line), do: heading_key(line) in @known_sections
+  defp section_heading?(_line), do: false
+
+  defp case_heading?("## " <> _rest), do: true
+  defp case_heading?(_line), do: false
+
+  defp case_name("## " <> rest), do: String.trim(rest)
+
+  defp heading_key(line) do
+    line
+    |> String.trim_leading("#")
+    |> String.trim()
+    |> String.downcase()
   end
 
   # ---------------------------------------------------------------------------
   # Struct construction
   # ---------------------------------------------------------------------------
 
-  defp build(yaml, name, prompt, rubric, location) do
+  defp build_evals(yaml, cases, location) do
+    Enum.map(cases, &build_eval(&1, yaml, location))
+  end
+
+  defp build_eval({name, prompt, rubric}, yaml, location) do
     %__MODULE__{
       name: name,
-      description: Map.get(yaml, "description"),
       prompt: prompt,
-      system: Map.get(yaml, "system"),
-      model: Map.get(yaml, "model"),
       rubric: rubric,
       location: location,
+      system: Map.get(yaml, "system"),
+      model: Map.get(yaml, "model"),
       skills: providers(Map.get(yaml, "skills")),
       tools: providers(Map.get(yaml, "tools")),
       metadata: Map.get(yaml, "metadata", %{})
@@ -257,11 +330,4 @@ defmodule SkillKit.Eval do
   defp resolve_provider(spec), do: spec
 
   defp module_name?(string), do: Regex.match?(~r/^[A-Z][A-Za-z0-9_.]*$/, string)
-
-  defp fetch_required(yaml, key) do
-    case Map.get(yaml, key) do
-      value when is_binary(value) and value != "" -> {:ok, value}
-      _ -> {:error, {:missing_field, key}}
-    end
-  end
 end

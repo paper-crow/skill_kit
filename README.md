@@ -144,21 +144,26 @@ provide granted scopes via a struct implementing `SkillKit.Scope`.
 
 ### [Evals](guides/evals.md)
 
-Evals are the test counterpart to skills. An `EVAL.md` describes a behavior a
-skill should produce and how to score it; the harness loads the skill into a
-fresh agent, sends the `## Prompt`, and an LLM judge scores the transcript
-against the `## Expect` rubric:
+Evals are the test counterpart to skills. An `EVAL.md` sitting next to a
+`SKILL.md` describes behaviors the skill should produce and how to score them.
+Each `##` heading is a case; the harness sends its `### Prompt` to a fresh agent
+loaded with the skill, then an LLM judge scores the transcript against the
+`### Expect` rubric. No frontmatter needed when colocated:
 
 ```markdown
----
-name: "greets the user by name"
-skills: ["skills/greeter"]
----
-## Prompt
+## greets the user by name
+### Prompt
 Hi, I'm Sam
 
-## Expect
+### Expect
 The assistant greets the user by their name in a warm, friendly tone.
+
+## handles a missing name
+### Prompt
+Hello there
+
+### Expect
+The assistant greets politely without inventing a name.
 ```
 
 `SkillKit.Eval.Case` turns a directory of evals into ExUnit tests, so skill
@@ -166,7 +171,7 @@ evals run as part of `mix test`:
 
 ```elixir
 defmodule MyApp.SkillEvalTest do
-  use SkillKit.Eval.Case, dir: "test/evals"
+  use SkillKit.Eval.Case, dir: "skills"
 end
 ```
 

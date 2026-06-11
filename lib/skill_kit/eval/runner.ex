@@ -62,7 +62,7 @@ defmodule SkillKit.Eval.Runner do
   end
 
   defp start_opts(eval) do
-    [tools: eval.tools, skills: eval.skills, caller: self()]
+    [tools: eval.tools, skills: Eval.skill_providers(eval), caller: self()]
   end
 
   defp agent_definition(eval, opts) do
