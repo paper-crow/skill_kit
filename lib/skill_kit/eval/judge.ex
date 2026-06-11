@@ -1,14 +1,16 @@
 defmodule SkillKit.Eval.Judge do
   @moduledoc """
-  LLM-as-judge scoring for an eval's natural-language rubric.
+  LLM-as-judge scoring for an eval's `## Expect` rubric.
 
-  When an eval has a markdown body, the harness asks a model to decide whether
-  the agent's transcript satisfies that rubric. The judge is instructed to
-  emit a single `VERDICT: PASS` / `VERDICT: FAIL` line followed by a short
-  justification; the full text is returned as the reasoning either way.
+  After the agent under test runs, the harness asks a model to decide whether
+  the transcript satisfies the rubric. The judge is given the original user
+  prompt (for context), the tools the agent called, and its final response,
+  and is instructed to emit a single `VERDICT: PASS` / `VERDICT: FAIL` line
+  followed by a short justification; the full text is returned as the
+  reasoning either way.
 
-  The judge calls go through `SkillKit.LLM`, so the configured provider (real
-  in `--include eval` runs, the mock in unit tests) decides the verdict.
+  Judge calls go through `SkillKit.LLM`, so the configured provider (real in
+  `--include eval` runs, the mock in unit tests) decides the verdict.
   """
 
   alias SkillKit.Eval.Transcript
@@ -21,6 +23,7 @@ defmodule SkillKit.Eval.Judge do
   Scores `transcript` against `rubric`.
 
   Options:
+    * `:prompt` — the user prompt that was sent to the agent (judge context)
     * `:model` — model URI for the judge call (defaults to the default provider)
 
   Returns `{:pass, reasoning}`, `{:fail, reasoning}`, or `{:error, reason}`
@@ -28,7 +31,8 @@ defmodule SkillKit.Eval.Judge do
   """
   @spec judge(String.t(), Transcript.t(), keyword()) :: verdict()
   def judge(rubric, %Transcript{} = transcript, opts \\ []) do
-    messages = [%UserMessage{content: build_prompt(rubric, transcript)}]
+    content = build_prompt(rubric, transcript, Keyword.get(opts, :prompt))
+    messages = [%UserMessage{content: content}]
 
     case SkillKit.LLM.stream(messages, model: Keyword.get(opts, :model)) do
       {:ok, stream} -> verdict(collect_text(stream))
@@ -61,11 +65,14 @@ defmodule SkillKit.Eval.Judge do
   # Prompt construction
   # ---------------------------------------------------------------------------
 
-  defp build_prompt(rubric, transcript) do
+  defp build_prompt(rubric, transcript, prompt) do
     """
     You are an impartial evaluator scoring an AI assistant's behavior against a
     rubric. Judge only against the success criteria below — do not invent extra
     requirements.
+
+    ## User prompt sent to the assistant
+    #{format_prompt(prompt)}
 
     ## Success criteria
     #{rubric}
@@ -80,6 +87,9 @@ defmodule SkillKit.Eval.Judge do
     a single line "VERDICT: PASS" or "VERDICT: FAIL", then a brief justification.
     """
   end
+
+  defp format_prompt(nil), do: "(not provided)"
+  defp format_prompt(prompt), do: prompt
 
   defp format_tools([]), do: "(none)"
   defp format_tools(tool_calls), do: Enum.map_join(tool_calls, "\n", &"- #{&1}")

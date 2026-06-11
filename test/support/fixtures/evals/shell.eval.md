@@ -1,8 +1,10 @@
 ---
 name: "runs a shell command"
-prompt: "Run: echo hello"
 tools:
   - "SkillKit.Tools.Shell"
-expect:
-  tools: ["bash"]
 ---
+## Prompt
+Run: echo hello
+
+## Expect
+The assistant runs the command with its shell tool and reports the output `hello`.

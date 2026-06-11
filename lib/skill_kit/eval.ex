@@ -5,30 +5,33 @@ defmodule SkillKit.Eval do
   Evals are the test counterpart to skills. Where a `SKILL.md` injects
   instructions into an agent, an `EVAL.md` describes a behavior the skill
   should produce and the criteria for success. The eval harness loads the
-  skill(s) under test into a fresh agent, sends the eval's prompt, and scores
-  the resulting transcript against the eval's expectations — both deterministic
-  (`expect`) and natural-language (the body, scored by an LLM judge).
+  skill(s) under test into a fresh agent, sends the eval's prompt, and asks an
+  LLM judge whether the resulting transcript meets the criteria.
 
   `SkillKit.Eval.Case` turns a directory of `EVAL.md` files into ExUnit tests,
   so `mix test` runs your skill evals as part of the suite.
 
   ## File Format
 
+  Frontmatter is just wiring — which skill is under test and how to run it. The
+  body carries the test itself in two sections: `## Prompt` (the message sent
+  to the agent) and `## Expect` (the natural-language rubric the LLM judge
+  scores against).
+
   ```markdown
   ---
   name: "greets the user by name"
-  description: "The greeter skill should address the user warmly"
+  description: "The greeter should address the user warmly"
   skills:
-    - "test/eval/fixtures/greeter"
+    - "skills/greeter"
   tools:
     - "SkillKit.Tools.Shell"
-  prompt: "Hi, I'm Sam"
   model: "anthropic:claude-sonnet-4-20250514"
-  expect:
-    response: ["Sam"]
-    not_response: ["error"]
-    tools: ["bash"]
   ---
+  ## Prompt
+  Hi, I'm Sam
+
+  ## Expect
   The assistant greets the user by their name in a warm, friendly tone.
   ```
 
@@ -37,25 +40,29 @@ defmodule SkillKit.Eval do
   | Field | Type | Notes |
   |-------|------|-------|
   | `name` | `String.t()` | Required. Used as the ExUnit test name. |
-  | `prompt` | `String.t()` | Required. The user message sent to the agent. |
   | `description` | `String.t()` | Optional human-readable summary. |
   | `system` | `String.t()` | Optional system prompt for the eval agent. |
   | `model` | `String.t()` | Optional model URI; falls back to the default provider. |
   | `skills` | `[String.t()]` | Skill providers under test (paths or module names). |
   | `tools` | `[String.t()]` | Tool providers (paths or module names). |
-  | `expect.response` | `String.t() \\| [String.t()]` | Substrings the final response must contain. |
-  | `expect.not_response` | `String.t() \\| [String.t()]` | Substrings the response must NOT contain. |
-  | `expect.tools` | `String.t() \\| [String.t()]` | Tool names the agent must call. |
 
-  The markdown body (below the second `---`) is the LLM-judge rubric. Leave it
-  empty to skip judging and rely on the deterministic `expect` checks alone.
+  ### Body Sections
+
+  | Section | Required | Role |
+  |---------|----------|------|
+  | `## Prompt` | yes | The user message sent to the agent under test. |
+  | `## Expect` | yes | The rubric the LLM judge scores the transcript against. |
+
+  Headings are matched case-insensitively at any level (`#`–`######`). Only the
+  exact words `Prompt` and `Expect` start a section, so a `#`-prefixed line
+  inside a section (e.g. a shell comment) stays part of that section's content.
 
   ### Provider strings
 
   Entries in `skills`/`tools` are resolved like `SkillKit.start_agent/2`
   providers: a value starting with an uppercase letter is treated as an Elixir
   module name (`"SkillKit.Tools.Shell"`), anything else as a filesystem path
-  (`"test/eval/fixtures/greeter"`).
+  (`"skills/greeter"`).
   """
 
   alias SkillKit.Frontmatter
@@ -72,9 +79,6 @@ defmodule SkillKit.Eval do
           location: String.t() | nil,
           skills: [provider()],
           tools: [provider()],
-          expect_response: [String.t()],
-          refute_response: [String.t()],
-          expect_tools: [String.t()],
           metadata: %{optional(String.t()) => term()}
         }
 
@@ -88,11 +92,10 @@ defmodule SkillKit.Eval do
     :location,
     skills: [],
     tools: [],
-    expect_response: [],
-    refute_response: [],
-    expect_tools: [],
     metadata: %{}
   ]
+
+  @known_sections ~w(prompt expect)
 
   @doc """
   Parses `EVAL.md` content into an `%Eval{}` struct.
@@ -104,8 +107,10 @@ defmodule SkillKit.Eval do
   def parse(content, location \\ nil) do
     with {:ok, yaml, body} <- Frontmatter.parse(content),
          {:ok, name} <- fetch_required(yaml, "name"),
-         {:ok, prompt} <- fetch_required(yaml, "prompt") do
-      {:ok, build(yaml, body, name, prompt, location)}
+         sections = sections(body),
+         {:ok, prompt} <- fetch_section(sections, "prompt"),
+         {:ok, rubric} <- fetch_section(sections, "expect") do
+      {:ok, build(yaml, name, prompt, rubric, location)}
     end
   end
 
@@ -169,35 +174,77 @@ defmodule SkillKit.Eval do
   defp finalize_dir({:error, _} = error), do: error
 
   # ---------------------------------------------------------------------------
+  # Body section parsing
+  # ---------------------------------------------------------------------------
+
+  # Splits the markdown body into a map of normalized section title => content.
+  # Only the headings in @known_sections start a new section; every other line
+  # (including other `#` lines) is content under the current section.
+  defp sections(body) do
+    {_current, acc} =
+      body
+      |> String.split("\n")
+      |> Enum.reduce({nil, %{}}, &reduce_section_line/2)
+
+    Map.new(acc, fn {title, lines} -> {title, join_section(lines)} end)
+  end
+
+  defp reduce_section_line(line, {current, acc}) do
+    case section_boundary(line) do
+      {:ok, title} -> {title, Map.put_new(acc, title, [])}
+      :error -> {current, add_line(acc, current, line)}
+    end
+  end
+
+  defp section_boundary("#" <> _rest = line) do
+    title = heading_text(line)
+    if title in @known_sections, do: {:ok, title}, else: :error
+  end
+
+  defp section_boundary(_line), do: :error
+
+  defp heading_text(line) do
+    line
+    |> String.trim_leading("#")
+    |> String.trim()
+    |> String.downcase()
+  end
+
+  defp add_line(acc, nil, _line), do: acc
+  defp add_line(acc, title, line), do: Map.update(acc, title, [line], &[line | &1])
+
+  defp join_section(lines) do
+    lines
+    |> Enum.reverse()
+    |> Enum.join("\n")
+    |> String.trim()
+  end
+
+  defp fetch_section(sections, key) do
+    case Map.get(sections, key) do
+      value when is_binary(value) and value != "" -> {:ok, value}
+      _ -> {:error, {:missing_section, key}}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Struct construction
   # ---------------------------------------------------------------------------
 
-  defp build(yaml, body, name, prompt, location) do
-    expect = expect_map(Map.get(yaml, "expect"))
-
+  defp build(yaml, name, prompt, rubric, location) do
     %__MODULE__{
       name: name,
       description: Map.get(yaml, "description"),
       prompt: prompt,
       system: Map.get(yaml, "system"),
       model: Map.get(yaml, "model"),
-      rubric: rubric(body),
+      rubric: rubric,
       location: location,
       skills: providers(Map.get(yaml, "skills")),
       tools: providers(Map.get(yaml, "tools")),
-      expect_response: to_list(Map.get(expect, "response")),
-      refute_response: to_list(Map.get(expect, "not_response")),
-      expect_tools: to_list(Map.get(expect, "tools")),
       metadata: Map.get(yaml, "metadata", %{})
     }
   end
-
-  defp expect_map(map) when is_map(map), do: map
-  defp expect_map(_other), do: %{}
-
-  defp rubric(nil), do: nil
-  defp rubric(""), do: nil
-  defp rubric(body) when is_binary(body), do: body
 
   defp providers(nil), do: []
   defp providers(specs) when is_list(specs), do: Enum.map(specs, &resolve_provider/1)
@@ -210,10 +257,6 @@ defmodule SkillKit.Eval do
   defp resolve_provider(spec), do: spec
 
   defp module_name?(string), do: Regex.match?(~r/^[A-Z][A-Za-z0-9_.]*$/, string)
-
-  defp to_list(nil), do: []
-  defp to_list(list) when is_list(list), do: list
-  defp to_list(value), do: [value]
 
   defp fetch_required(yaml, key) do
     case Map.get(yaml, key) do

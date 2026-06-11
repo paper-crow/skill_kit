@@ -3,10 +3,11 @@ defmodule SkillKit.Eval.Runner do
   Runs a single eval and scores it.
 
   The runner spins up a throwaway agent loaded with the eval's `skills` and
-  `tools`, sends the eval's `prompt`, and collects the resulting transcript
-  (final response + tool calls). It then scores the transcript with
-  `SkillKit.Eval.Expectation` (deterministic) and, when the eval has a rubric,
-  `SkillKit.Eval.Judge` (LLM-as-judge), returning a `SkillKit.Eval.Result`.
+  `tools`, sends the eval's prompt, and collects the resulting transcript
+  (final response + tool calls). A run is scored by two kinds of check: a
+  deterministic **completion** check (did the agent respond at all, vs.
+  erroring or timing out) and the **LLM judge** scoring the transcript against
+  the eval's `## Expect` rubric.
 
   The agent and judge both run through `SkillKit.LLM`, so the configured
   provider decides behavior: a real provider for `mix test --include eval`,
@@ -16,7 +17,6 @@ defmodule SkillKit.Eval.Runner do
   alias SkillKit.Agent
   alias SkillKit.Eval
   alias SkillKit.Eval.Check
-  alias SkillKit.Eval.Expectation
   alias SkillKit.Eval.Judge
   alias SkillKit.Eval.Result
   alias SkillKit.Eval.Transcript
@@ -34,17 +34,15 @@ defmodule SkillKit.Eval.Runner do
 
   Options:
     * `:timeout` — ms to wait for the agent to respond (default `#{@default_timeout}`)
-    * `:judge` — set `false` to skip the LLM-judge check even when a rubric
-      is present (default `true`)
+    * `:judge` — set `false` to skip the LLM-judge check (default `true`)
     * `:model` — overrides the eval's agent model
     * `:judge_model` — model URI for the judge (defaults to the eval's model)
   """
   @spec run(Eval.t(), keyword()) :: Result.t()
   def run(%Eval{} = eval, opts \\ []) do
     transcript = run_agent(eval, opts)
-    deterministic = Expectation.evaluate(eval, transcript)
-    judged = judge_checks(eval, transcript, opts)
-    %Result{eval: eval, transcript: transcript, checks: deterministic ++ judged}
+    checks = completion_checks(transcript) ++ judge_checks(eval, transcript, opts)
+    %Result{eval: eval, transcript: transcript, checks: checks}
   end
 
   # ---------------------------------------------------------------------------
@@ -102,10 +100,26 @@ defmodule SkillKit.Eval.Runner do
   end
 
   # ---------------------------------------------------------------------------
-  # Judging
+  # Scoring
   # ---------------------------------------------------------------------------
 
+  defp completion_checks(%Transcript{status: :ok}), do: []
+
+  defp completion_checks(%Transcript{status: :error, error: reason}) do
+    [Check.fail("agent completed", "agent errored: #{inspect(reason)}")]
+  end
+
+  defp completion_checks(%Transcript{status: :timeout}) do
+    [Check.fail("agent completed", "agent timed out before responding")]
+  end
+
+  defp completion_checks(%Transcript{status: :pending}) do
+    [Check.fail("agent completed", "agent produced no response")]
+  end
+
+  # No judging without a rubric, or when the run didn't complete cleanly.
   defp judge_checks(%Eval{rubric: nil}, _transcript, _opts), do: []
+  defp judge_checks(_eval, %Transcript{status: status}, _opts) when status != :ok, do: []
 
   defp judge_checks(eval, transcript, opts) do
     if Keyword.get(opts, :judge, true) do
@@ -116,10 +130,10 @@ defmodule SkillKit.Eval.Runner do
   end
 
   defp judge_check(eval, transcript, opts) do
-    judge_model = Keyword.get(opts, :judge_model, eval.model)
+    judge_opts = [model: Keyword.get(opts, :judge_model, eval.model), prompt: eval.prompt]
 
     eval.rubric
-    |> Judge.judge(transcript, model: judge_model)
+    |> Judge.judge(transcript, judge_opts)
     |> verdict_check()
   end
 

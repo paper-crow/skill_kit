@@ -146,17 +146,18 @@ provide granted scopes via a struct implementing `SkillKit.Scope`.
 
 Evals are the test counterpart to skills. An `EVAL.md` describes a behavior a
 skill should produce and how to score it; the harness loads the skill into a
-fresh agent, sends a prompt, and checks the transcript — both deterministically
-and with an LLM-as-judge:
+fresh agent, sends the `## Prompt`, and an LLM judge scores the transcript
+against the `## Expect` rubric:
 
 ```markdown
 ---
 name: "greets the user by name"
 skills: ["skills/greeter"]
-prompt: "Hi, I'm Sam"
-expect:
-  response: ["Sam"]
 ---
+## Prompt
+Hi, I'm Sam
+
+## Expect
 The assistant greets the user by their name in a warm, friendly tone.
 ```
 
@@ -357,7 +358,7 @@ full design.
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter
 - [Conversations](guides/conversations.md) — conversation persistence and custom stores
-- [Evals](guides/evals.md) — `EVAL.md` format, the ExUnit plugin, deterministic + LLM-judge scoring
+- [Evals](guides/evals.md) — `EVAL.md` format, the ExUnit plugin, LLM-judge scoring
 - [Telemetry](guides/telemetry.md) — event reference, handler examples, testing
 
 ## Standards Compatibility

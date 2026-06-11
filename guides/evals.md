@@ -2,48 +2,51 @@
 
 Evals are the test counterpart to skills. Where a `SKILL.md` injects
 instructions into an agent, an `EVAL.md` describes a behavior the skill should
-produce and the criteria for success. The eval harness loads the skill(s) under
-test into a fresh agent, sends the eval's prompt, and scores the resulting
-transcript — both with deterministic checks and an LLM-as-judge.
+produce and the criteria for success. The eval harness loads the skill(s)
+under test into a fresh agent, sends the eval's prompt, and asks an LLM judge
+whether the resulting transcript meets the criteria.
 
 `SkillKit.Eval.Case` plugs evals into ExUnit, so `mix test` runs your skill
 evals alongside your unit tests.
 
 ## Writing an eval
 
-An eval is a markdown file named `EVAL.md` (or `*.eval.md`) with YAML
-frontmatter and an optional body:
+An eval is a markdown file named `EVAL.md` (or `*.eval.md`). The frontmatter is
+just wiring — which skill is under test and how to run it. The body holds the
+test itself in two sections:
 
 ```markdown
 ---
 name: "greets the user by name"
-description: "The greeter skill should address the user warmly"
+description: "The greeter should address the user warmly"
 skills:
   - "skills/greeter"
-prompt: "Hi, I'm Sam"
-expect:
-  response: ["Sam"]
-  not_response: ["error"]
 ---
+## Prompt
+Hi, I'm Sam
+
+## Expect
 The assistant greets the user by their name, Sam, in a warm, friendly tone.
 ```
 
-| Field | Notes |
-|-------|-------|
+| Frontmatter | Notes |
+|-------------|-------|
 | `name` | Required. Used as the ExUnit test name. |
-| `prompt` | Required. The user message sent to the agent. |
 | `description` | Optional human-readable summary. |
 | `system` | Optional system prompt for the eval agent. |
 | `model` | Optional model URI; falls back to the default provider. |
 | `skills` | Skill providers under test — paths (`"skills/greeter"`) or module names (`"SkillKit.Tools.Shell"`). |
 | `tools` | Tool providers, same forms as `skills`. |
-| `expect.response` | Substrings the final response must contain. |
-| `expect.not_response` | Substrings the response must NOT contain. |
-| `expect.tools` | Tool names the agent must call. |
 
-The body below the second `---` is the **LLM-judge rubric** — a
-natural-language description of what success looks like. Leave it empty to skip
-judging and rely on the deterministic `expect` checks alone.
+| Body section | Role |
+|--------------|------|
+| `## Prompt` | The user message sent to the agent under test. |
+| `## Expect` | The natural-language rubric the LLM judge scores against. |
+
+Both sections are required. Headings match case-insensitively at any level
+(`#`–`######`); only the exact words `Prompt` and `Expect` start a section, so
+a `#`-prefixed line *inside* a section (a shell comment, say) stays part of
+that section's content.
 
 ## Running evals as tests
 
@@ -59,8 +62,8 @@ This discovers every eval under `dir` at compile time and defines one test per
 eval. Each test runs the eval through `SkillKit.Eval.Runner` and asserts that
 all of its checks pass.
 
-Generated tests are tagged `:eval`. Because they drive a real agent (and an LLM
-judge), exclude them from the default suite and opt in explicitly:
+Generated tests are tagged `:eval`. Because they drive a real agent and an LLM
+judge, exclude them from the default suite and opt in explicitly:
 
 ```elixir
 # test_helper.exs
@@ -75,7 +78,7 @@ LLM_PROVIDER=anthropic mix test --include eval
 Forward options to the runner with `:run`:
 
 ```elixir
-use SkillKit.Eval.Case, dir: "test/evals", run: [timeout: 60_000, judge: false]
+use SkillKit.Eval.Case, dir: "test/evals", run: [timeout: 60_000]
 ```
 
 ## How scoring works
@@ -84,15 +87,18 @@ For each eval the runner produces a `SkillKit.Eval.Result` made of
 `SkillKit.Eval.Check`s. The eval passes only when **every** check passes:
 
 1. **Completion** — the agent produced a response (not an error or timeout).
-2. **`expect.response` / `expect.not_response`** — substring checks on the final
-   response.
-3. **`expect.tools`** — each named tool was called during the run.
-4. **LLM judge** — when the eval has a rubric, `SkillKit.Eval.Judge` asks a
-   model whether the transcript satisfies it, emitting a `VERDICT: PASS` /
-   `VERDICT: FAIL` line that becomes a pass/fail check.
+   A run that doesn't complete fails here and is not sent to the judge.
+2. **LLM judge** — `SkillKit.Eval.Judge` gives a model the user prompt, the
+   tools the agent called, and its final response, and asks whether the
+   transcript satisfies the `## Expect` rubric. The model emits a
+   `VERDICT: PASS` / `VERDICT: FAIL` line that becomes a pass/fail check.
 
 When a check fails, ExUnit prints the failing checks and the captured
-transcript (response + tool calls) via `SkillKit.Eval.Result.failure_message/1`.
+transcript via `SkillKit.Eval.Result.failure_message/1`.
+
+Pass `run: [judge: false]` (or `Runner.run(eval, judge: false)`) to skip the
+judge — useful as a cheap smoke test that the agent responds at all without
+spending judge tokens.
 
 ## Running an eval directly
 
@@ -108,8 +114,8 @@ SkillKit.Eval.Result.passed?(result)
 
 ## Evals as meta-skills
 
-Because an eval captures the *intended behavior* of a skill independently of its
-prose, it doubles as a specification you can author a skill against: write the
-eval first, draft the `SKILL.md`, and iterate until the eval is green —
+Because an eval captures the *intended behavior* of a skill independently of
+its prose, it doubles as a specification you can author a skill against: write
+the eval first, draft the `SKILL.md`, and iterate until the eval is green —
 test-driven development for skills. A generator that drafts and refines the
 application skill from its eval builds directly on this harness.

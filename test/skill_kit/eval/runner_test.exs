@@ -17,44 +17,53 @@ defmodule SkillKit.Eval.RunnerTest do
     :ok
   end
 
-  test "passes deterministic expectations against the agent's response" do
-    SkillKit.Test.expect_response(%Text{content: "Hello there, Sam!"})
-
-    eval = %Eval{name: "greets", prompt: "Hi, I'm Sam", expect_response: ["Sam"]}
-    result = Runner.run(eval)
-
-    assert Result.passed?(result)
-    assert result.transcript.response == "Hello there, Sam!"
+  defp eval(opts \\ []) do
+    %Eval{
+      name: "greets",
+      prompt: Keyword.get(opts, :prompt, "Hi, I'm Sam"),
+      rubric: Keyword.get(opts, :rubric, "Greets the user by name.")
+    }
   end
 
-  test "fails when the response is missing an expected substring" do
-    SkillKit.Test.expect_response(%Text{content: "Hello there"})
-
-    eval = %Eval{name: "greets", prompt: "Hi", expect_response: ["Goodbye"]}
-    result = Runner.run(eval)
-
-    refute Result.passed?(result)
-    assert Enum.any?(Result.failures(result), &(&1.name == "response contains \"Goodbye\""))
-  end
-
-  test "runs the LLM judge when the eval has a rubric" do
+  test "passes when the judge votes PASS" do
     SkillKit.Test.expect_responses([
       %Text{content: "Hello, Sam!"},
       %Text{content: "VERDICT: PASS — greeted by name."}
     ])
 
-    eval = %Eval{name: "greets", prompt: "Hi", rubric: "Greets the user by name."}
-    result = Runner.run(eval)
+    result = Runner.run(eval())
 
     assert Result.passed?(result)
+    assert result.transcript.response == "Hello, Sam!"
     assert Enum.any?(result.checks, &(&1.name == "llm-judge: rubric satisfied" and &1.passed))
   end
 
-  test "skips the judge when judge: false even with a rubric" do
+  test "fails when the judge votes FAIL" do
+    SkillKit.Test.expect_responses([
+      %Text{content: "Hello there"},
+      %Text{content: "VERDICT: FAIL — never used the name."}
+    ])
+
+    result = Runner.run(eval())
+
+    refute Result.passed?(result)
+    assert Enum.any?(Result.failures(result), &(&1.name == "llm-judge: rubric satisfied"))
+  end
+
+  test "fails the completion check and skips the judge when the agent errors" do
+    SkillKit.Test.expect_error(500, "boom")
+
+    result = Runner.run(eval())
+
+    refute Result.passed?(result)
+    assert Enum.any?(Result.failures(result), &(&1.name == "agent completed"))
+    assert Enum.all?(result.checks, &(&1.name != "llm-judge: rubric satisfied"))
+  end
+
+  test "skips the judge when judge: false" do
     SkillKit.Test.expect_response(%Text{content: "Hello, Sam!"})
 
-    eval = %Eval{name: "greets", prompt: "Hi", rubric: "Greets the user by name."}
-    result = Runner.run(eval, judge: false)
+    result = Runner.run(eval(), judge: false)
 
     assert Result.passed?(result)
     assert Enum.all?(result.checks, &(&1.name != "llm-judge: rubric satisfied"))

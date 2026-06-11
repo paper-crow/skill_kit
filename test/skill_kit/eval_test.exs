@@ -6,23 +6,22 @@ defmodule SkillKit.EvalTest do
   @fixtures Path.expand("../support/fixtures/evals", __DIR__)
 
   describe "parse/2" do
-    test "parses frontmatter, expectations, and the body as the rubric" do
+    test "parses frontmatter wiring and the Prompt/Expect body sections" do
       content = """
       ---
       name: "greets the user"
       description: "warm greeting"
       system: "You are a greeter."
       model: "anthropic:claude-sonnet-4-20250514"
-      prompt: "Hi, I'm Sam"
       skills:
-        - "test/fixtures/greeter"
+        - "skills/greeter"
       tools:
         - "SkillKit.Tools.Shell"
-      expect:
-        response: ["Sam"]
-        not_response: ["error"]
-        tools: ["bash"]
       ---
+      ## Prompt
+      Hi, I'm Sam
+
+      ## Expect
       Greets the user by name in a friendly tone.
       """
 
@@ -34,21 +33,59 @@ defmodule SkillKit.EvalTest do
       assert eval.prompt == "Hi, I'm Sam"
       assert eval.rubric == "Greets the user by name in a friendly tone."
       assert eval.location == "EVAL.md"
-      assert eval.expect_response == ["Sam"]
-      assert eval.refute_response == ["error"]
-      assert eval.expect_tools == ["bash"]
+      assert eval.skills == ["skills/greeter"]
+      assert eval.tools == [SkillKit.Tools.Shell]
+    end
+
+    test "matches section headings case-insensitively at any level" do
+      content = """
+      ---
+      name: "case"
+      ---
+      ### prompt
+      go
+
+      # EXPECT
+      done
+      """
+
+      assert {:ok, eval} = Eval.parse(content)
+      assert eval.prompt == "go"
+      assert eval.rubric == "done"
+    end
+
+    test "keeps `#`-prefixed lines inside a section as content" do
+      content = """
+      ---
+      name: "hashes"
+      ---
+      ## Prompt
+      Run this:
+      # not a heading
+      echo hi
+
+      ## Expect
+      Runs the command.
+      """
+
+      assert {:ok, eval} = Eval.parse(content)
+      assert eval.prompt == "Run this:\n# not a heading\necho hi"
     end
 
     test "resolves module-name providers to atoms and paths to strings" do
       content = """
       ---
       name: "providers"
-      prompt: "go"
       skills:
         - "skills/local"
       tools:
         - "SkillKit.Tools.Shell"
       ---
+      ## Prompt
+      go
+
+      ## Expect
+      done
       """
 
       assert {:ok, eval} = Eval.parse(content)
@@ -56,35 +93,19 @@ defmodule SkillKit.EvalTest do
       assert eval.tools == [SkillKit.Tools.Shell]
     end
 
-    test "an empty body yields a nil rubric" do
-      content = """
-      ---
-      name: "no rubric"
-      prompt: "go"
-      ---
-      """
-
-      assert {:ok, eval} = Eval.parse(content)
-      assert eval.rubric == nil
+    test "requires name" do
+      content = "---\ndesc: x\n---\n## Prompt\ngo\n\n## Expect\ndone\n"
+      assert {:error, {:missing_field, "name"}} = Eval.parse(content)
     end
 
-    test "coerces a single scalar expectation into a list" do
-      content = """
-      ---
-      name: "scalar"
-      prompt: "go"
-      expect:
-        response: "ok"
-      ---
-      """
-
-      assert {:ok, eval} = Eval.parse(content)
-      assert eval.expect_response == ["ok"]
+    test "requires a Prompt section" do
+      content = "---\nname: x\n---\n## Expect\ndone\n"
+      assert {:error, {:missing_section, "prompt"}} = Eval.parse(content)
     end
 
-    test "requires name and prompt" do
-      assert {:error, {:missing_field, "name"}} = Eval.parse("---\nprompt: \"x\"\n---\n")
-      assert {:error, {:missing_field, "prompt"}} = Eval.parse("---\nname: \"x\"\n---\n")
+    test "requires an Expect section" do
+      content = "---\nname: x\n---\n## Prompt\ngo\n"
+      assert {:error, {:missing_section, "expect"}} = Eval.parse(content)
     end
   end
 

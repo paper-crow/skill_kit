@@ -38,4 +38,12 @@ defmodule SkillKit.Eval.JudgeTest do
 
     assert {:error, {500, "boom"}} = Judge.judge(@rubric, @transcript)
   end
+
+  test "includes the user prompt as judge context" do
+    SkillKit.Test.assert_response(%Text{content: "VERDICT: PASS"}, fn [message], _opts ->
+      assert message.content =~ "Hi, I'm Sam"
+    end)
+
+    assert {:pass, _reasoning} = Judge.judge(@rubric, @transcript, prompt: "Hi, I'm Sam")
+  end
 end
