@@ -125,6 +125,37 @@ transcript via `SkillKit.Eval.Result.failure_message/1`. Pass
 `run: [judge: false]` to skip the judge — a cheap smoke test that the agent
 responds at all without spending judge tokens.
 
+## Caching
+
+Evals are expensive — each is an agent run plus a judge call — so the runner
+can skip a case that already passed when nothing in its *scope* has changed.
+Enable it with `run: [cache: true]`:
+
+```elixir
+use SkillKit.Eval.Case, dir: "skills", run: [cache: true]
+```
+
+The scope fingerprint (`SkillKit.Eval.Cache`) covers the case text (name,
+prompt, rubric, system), the agent and judge models, the source of every skill
+and tool under test (file contents on disk, or the module name for module
+providers), and a harness-version token bumped when scoring changes. A case
+whose fingerprint matches a recorded **pass** is skipped — its result is marked
+`cached: true` and no LLM is called. Failures and unknown fingerprints always
+run; failures are never cached.
+
+The cache is a term file. `cache: true` stores it under `_build/<env>/`
+(ephemeral, already gitignored — a fresh CI checkout runs every eval); pass a
+path string to put it elsewhere and commit it to share skips with CI:
+
+```elixir
+use SkillKit.Eval.Case, dir: "skills", run: [cache: ".skill_kit/eval_cache.bin"]
+```
+
+Because LLMs are non-deterministic, a cache hit means "this exact scope already
+passed, trust it" rather than a guaranteed-identical re-run — the right
+contract for an expensive suite, like a build cache. Delete the cache file to
+force a full re-run.
+
 ## Running an eval directly
 
 The harness is plain functions, so you can run a case outside ExUnit:

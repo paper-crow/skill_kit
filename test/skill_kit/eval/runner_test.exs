@@ -4,6 +4,7 @@ defmodule SkillKit.Eval.RunnerTest do
   import Mox
 
   alias SkillKit.Eval
+  alias SkillKit.Eval.Cache
   alias SkillKit.Eval.Result
   alias SkillKit.Eval.Runner
   alias SkillKit.Response.Text
@@ -67,5 +68,43 @@ defmodule SkillKit.Eval.RunnerTest do
 
     assert Result.passed?(result)
     assert Enum.all?(result.checks, &(&1.name != "llm-judge: rubric satisfied"))
+  end
+
+  defp tmp_cache do
+    path = Path.join(System.tmp_dir!(), "runner_cache_#{System.unique_integer([:positive])}.bin")
+    on_exit(fn -> File.rm(path) end)
+    path
+  end
+
+  test "skips a previously-passing eval on a cache hit" do
+    path = tmp_cache()
+
+    SkillKit.Test.expect_responses([
+      %Text{content: "Hello, Sam!"},
+      %Text{content: "VERDICT: PASS"}
+    ])
+
+    first = Runner.run(eval(), cache: path)
+    assert Result.passed?(first)
+    refute first.cached
+
+    # No further Mox expectations: a cache hit must not call the LLM at all.
+    second = Runner.run(eval(), cache: path)
+    assert Result.passed?(second)
+    assert second.cached
+  end
+
+  test "does not record a failing eval in the cache" do
+    path = tmp_cache()
+
+    SkillKit.Test.expect_responses([
+      %Text{content: "Hello there"},
+      %Text{content: "VERDICT: FAIL"}
+    ])
+
+    result = Runner.run(eval(), cache: path)
+    refute Result.passed?(result)
+
+    assert Cache.get(path, Cache.fingerprint(eval())) == :miss
   end
 end

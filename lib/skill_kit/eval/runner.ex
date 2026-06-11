@@ -16,6 +16,7 @@ defmodule SkillKit.Eval.Runner do
 
   alias SkillKit.Agent
   alias SkillKit.Eval
+  alias SkillKit.Eval.Cache
   alias SkillKit.Eval.Check
   alias SkillKit.Eval.Judge
   alias SkillKit.Eval.Result
@@ -37,9 +38,44 @@ defmodule SkillKit.Eval.Runner do
     * `:judge` — set `false` to skip the LLM-judge check (default `true`)
     * `:model` — overrides the eval's agent model
     * `:judge_model` — model URI for the judge (defaults to the eval's model)
+    * `:cache` — skip cases whose scope already passed. `true` uses the default
+      cache under `_build`, a string uses that path, `false` (default) disables
+      caching. See `SkillKit.Eval.Cache`.
   """
   @spec run(Eval.t(), keyword()) :: Result.t()
   def run(%Eval{} = eval, opts \\ []) do
+    run_cached(Keyword.get(opts, :cache, false), eval, opts)
+  end
+
+  defp run_cached(false, eval, opts), do: score(eval, opts)
+
+  defp run_cached(cache, eval, opts) do
+    path = cache_path(cache)
+    fingerprint = Cache.fingerprint(eval, opts)
+
+    case Cache.get(path, fingerprint) do
+      :pass -> cached_result(eval)
+      :miss -> score_and_record(eval, opts, path, fingerprint)
+    end
+  end
+
+  defp cache_path(true), do: Cache.default_path()
+  defp cache_path(path) when is_binary(path), do: path
+
+  defp score_and_record(eval, opts, path, fingerprint) do
+    result = score(eval, opts)
+    record_if_passed(Result.passed?(result), path, fingerprint, eval.name)
+    result
+  end
+
+  defp record_if_passed(true, path, fingerprint, name), do: Cache.put(path, fingerprint, name)
+  defp record_if_passed(false, _path, _fingerprint, _name), do: :ok
+
+  defp cached_result(eval) do
+    %Result{eval: eval, transcript: %Transcript{status: :ok}, checks: [], cached: true}
+  end
+
+  defp score(eval, opts) do
     transcript = run_agent(eval, opts)
     checks = completion_checks(transcript) ++ judge_checks(eval, transcript, opts)
     %Result{eval: eval, transcript: transcript, checks: checks}

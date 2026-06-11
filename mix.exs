@@ -150,6 +150,7 @@ defmodule SkillKit.MixProject do
           SkillKit.Eval.Case,
           SkillKit.Eval.Runner,
           SkillKit.Eval.Judge,
+          SkillKit.Eval.Cache,
           SkillKit.Eval.Result,
           SkillKit.Eval.Check,
           SkillKit.Eval.Transcript

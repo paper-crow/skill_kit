@@ -15,11 +15,12 @@ defmodule SkillKit.Eval.Result do
   @type t :: %__MODULE__{
           eval: Eval.t(),
           transcript: Transcript.t(),
-          checks: [Check.t()]
+          checks: [Check.t()],
+          cached: boolean()
         }
 
   @enforce_keys [:eval, :transcript, :checks]
-  defstruct [:eval, :transcript, :checks]
+  defstruct [:eval, :transcript, :checks, cached: false]
 
   @doc "True when every check passed."
   @spec passed?(t()) :: boolean()
