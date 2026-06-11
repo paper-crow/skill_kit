@@ -142,6 +142,36 @@ Scope-based access control restricts which skills a caller may discover and
 activate. Skills declare `required_scope` in their frontmatter; callers
 provide granted scopes via a struct implementing `SkillKit.Scope`.
 
+### [Evals](guides/evals.md)
+
+Evals are the test counterpart to skills. An `EVAL.md` describes a behavior a
+skill should produce and how to score it; the harness loads the skill into a
+fresh agent, sends a prompt, and checks the transcript — both deterministically
+and with an LLM-as-judge:
+
+```markdown
+---
+name: "greets the user by name"
+skills: ["skills/greeter"]
+prompt: "Hi, I'm Sam"
+expect:
+  response: ["Sam"]
+---
+The assistant greets the user by their name in a warm, friendly tone.
+```
+
+`SkillKit.Eval.Case` turns a directory of evals into ExUnit tests, so skill
+evals run as part of `mix test`:
+
+```elixir
+defmodule MyApp.SkillEvalTest do
+  use SkillKit.Eval.Case, dir: "test/evals"
+end
+```
+
+Generated tests are tagged `:eval` — gate them behind a real provider with
+`mix test --include eval`.
+
 ## Loading Kits
 
 `start_agent/2` takes an agent source as its first argument and a `skills:`
@@ -327,6 +357,7 @@ full design.
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter
 - [Conversations](guides/conversations.md) — conversation persistence and custom stores
+- [Evals](guides/evals.md) — `EVAL.md` format, the ExUnit plugin, deterministic + LLM-judge scoring
 - [Telemetry](guides/telemetry.md) — event reference, handler examples, testing
 
 ## Standards Compatibility

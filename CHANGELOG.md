@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Evals: skill evaluation cases expressed as markdown `EVAL.md` files. An eval declares the skill(s) under test, a prompt, deterministic `expect` checks (response substrings, forbidden substrings, required tool calls), and an optional LLM-judge rubric (the markdown body). `SkillKit.Eval.Case` (`use SkillKit.Eval.Case, dir: "test/evals"`) discovers evals at compile time and defines one ExUnit test per eval — running skill evals as part of `mix test`. Generated tests are tagged `:eval` so they can be gated behind a real LLM provider (`mix test --include eval`) while the harness itself is unit-tested against the mock. New modules: `SkillKit.Eval`, `SkillKit.Eval.Case`, `SkillKit.Eval.Runner`, `SkillKit.Eval.Judge`, `SkillKit.Eval.Expectation`, `SkillKit.Eval.Result`, `SkillKit.Eval.Check`, `SkillKit.Eval.Transcript`. See the [Evals guide](guides/evals.md).
+
 ## [0.2.1] - 2026-06-08
 
 ### Fixed
