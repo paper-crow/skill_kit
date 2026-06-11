@@ -11,14 +11,16 @@ end
 defmodule SkillKit.Eval.CaseTest do
   use ExUnit.Case, async: true
 
+  alias SkillKit.Eval.CaseExampleTest
+
   test "the macro expands into a compiled ExUnit module" do
-    assert Code.ensure_loaded?(SkillKit.Eval.CaseExampleTest)
+    assert Code.ensure_loaded?(CaseExampleTest)
   end
 
   test "generates one ExUnit test function per fixture eval" do
-    Code.ensure_loaded(SkillKit.Eval.CaseExampleTest)
+    Code.ensure_loaded(CaseExampleTest)
 
-    functions = SkillKit.Eval.CaseExampleTest.__info__(:functions)
+    functions = CaseExampleTest.__info__(:functions)
 
     test_fns =
       Enum.filter(functions, fn {name, arity} ->
