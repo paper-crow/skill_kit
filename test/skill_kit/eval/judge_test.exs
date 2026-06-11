@@ -1,10 +1,13 @@
 defmodule SkillKit.Eval.JudgeTest do
   use ExUnit.Case, async: true
-  use SkillKit.Test
+
+  import Mox
 
   alias SkillKit.Eval.Judge
   alias SkillKit.Eval.Transcript
   alias SkillKit.Response.Text
+
+  setup :verify_on_exit!
 
   @rubric "Greets the user by name."
   @transcript %Transcript{response: "Hello, Sam!", tool_calls: [], status: :ok}
