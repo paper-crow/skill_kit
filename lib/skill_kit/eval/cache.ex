@@ -44,6 +44,7 @@ defmodule SkillKit.Eval.Cache do
       eval.system,
       Keyword.get(opts, :model, eval.model),
       Keyword.get(opts, :judge_model, eval.model),
+      module_token(eval.module),
       scope_token(eval)
     }
 
@@ -90,8 +91,25 @@ defmodule SkillKit.Eval.Cache do
     |> file_hash()
   end
 
+  defp provider_source({module, opts}) when is_atom(module) and is_list(opts) do
+    beam_md5(module) <> ":" <> inspect(opts)
+  end
+
   defp provider_source(path) when is_binary(path), do: tree_hash(path)
+  defp provider_source(module) when is_atom(module), do: beam_md5(module)
   defp provider_source(spec), do: hash(inspect(spec))
+
+  # A module's compiled hash — changes when its code changes — so an eval that
+  # exercises a module provider re-runs when that module is recompiled. Falls
+  # back to the name if the module isn't loaded.
+  defp module_token(nil), do: ""
+  defp module_token(module) when is_atom(module), do: beam_md5(module)
+
+  defp beam_md5(module) do
+    module.module_info(:md5)
+  rescue
+    _error -> Atom.to_string(module)
+  end
 
   defp tree_hash(path) do
     cond do

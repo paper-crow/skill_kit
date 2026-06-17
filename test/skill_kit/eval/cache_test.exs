@@ -45,6 +45,24 @@ defmodule SkillKit.Eval.CacheTest do
 
       refute before == Cache.fingerprint(eval)
     end
+
+    test "incorporates the subject module's compiled hash" do
+      base = %Eval{name: "n", prompt: "p", rubric: "r"}
+      anchored = %{base | module: SkillKit.Tools.Shell}
+
+      refute Cache.fingerprint(base) == Cache.fingerprint(anchored)
+    end
+
+    test "distinguishes module providers by code, not just name" do
+      shell = %Eval{name: "n", prompt: "p", rubric: "r", tools: [SkillKit.Tools.Shell]}
+      other = %{shell | tools: [SkillKit.Eval.SkillFile]}
+
+      # different modules → different fingerprints (each folds in its own MD5)
+      refute Cache.fingerprint(shell) == Cache.fingerprint(other)
+      # and a module provider is hashed by its compiled code, not the bare name
+      named = %{shell | tools: ["SkillKit.Tools.Shell"]}
+      refute Cache.fingerprint(shell) == Cache.fingerprint(named)
+    end
   end
 
   describe "get/2 and put/3" do

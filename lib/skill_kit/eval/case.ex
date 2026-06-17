@@ -1,20 +1,27 @@
 defmodule SkillKit.Eval.Case do
   @moduledoc """
-  Turns a directory of `EVAL.md` files into ExUnit tests.
+  Turns `EVAL.md` files and module-colocated `@eval` attributes into ExUnit
+  tests.
 
-  `use SkillKit.Eval.Case` discovers every eval case under `:dir` at compile
-  time and defines one test per case. Each generated test runs the case
-  through `SkillKit.Eval.Runner` and asserts that all of its checks pass; a
-  failure renders the failing checks and transcript via
+  `use SkillKit.Eval.Case` discovers eval cases at compile time and defines one
+  test per case. Each generated test runs the case through
+  `SkillKit.Eval.Runner` and asserts that all of its checks pass; a failure
+  renders the failing checks and transcript via
   `SkillKit.Eval.Result.failure_message/1`.
 
       defmodule MyApp.SkillEvalTest do
+        # files: EVAL.md / *.eval.md under a directory
         use SkillKit.Eval.Case, dir: "test/evals"
       end
 
-  Test names are qualified by the eval file's directory (e.g.
-  `"greeter: greets the user by name"`) so cases from different files don't
-  collide.
+      defmodule MyApp.CodeEvalTest do
+        # @eval attributes colocated in application modules
+        use SkillKit.Eval.Case, modules: [MyApp.Greeter, MyApp.Billing]
+      end
+
+  Provide `:dir`, `:modules`, or both. Test names are qualified — by the eval
+  file's directory (`"greeter: greets the user by name"`) or by the module
+  (`"MyApp.Greeter: greets the user by name"`) — so cases don't collide.
 
   Generated tests are tagged `:eval`. Because they drive a real agent (and an
   LLM judge), exclude them from the default suite and opt in explicitly:
@@ -27,8 +34,11 @@ defmodule SkillKit.Eval.Case do
 
   ## Options
 
-    * `:dir` (required) — directory to scan for `EVAL.md` / `*.eval.md` files,
-      relative to the project root.
+    * `:dir` — directory to scan for `EVAL.md` / `*.eval.md` files, relative to
+      the project root. An `EVAL.md` may set `module:` in its frontmatter to
+      anchor the cache to that module's compiled hash (the sidecar pattern).
+    * `:modules` — modules that `use SkillKit.Eval` and carry `@eval`
+      attributes; their cases are collected via `__skill_evals__/0`.
     * `:run` — keyword options forwarded to `SkillKit.Eval.Runner.run/2`
       (e.g. `[timeout: 60_000, judge: false]`).
     * `:storage` — storage provider to use while these eval tests run, default
@@ -54,10 +64,9 @@ defmodule SkillKit.Eval.Case do
 
   @doc false
   defmacro __using__(opts) do
-    dir = Keyword.fetch!(opts, :dir)
     run_opts = Keyword.get(opts, :run, [])
     storage = Keyword.get(opts, :storage, SkillKit.Storage.File)
-    tests = Enum.map(Eval.load_dir!(dir), &eval_test(&1, run_opts))
+    tests = Enum.map(collect_evals(opts), &eval_test(&1, run_opts))
 
     quote do
       use ExUnit.Case, async: false
@@ -91,6 +100,22 @@ defmodule SkillKit.Eval.Case do
   defp restore_storage(nil), do: Application.delete_env(:skill_kit, SkillKit.Storage)
   defp restore_storage(previous), do: Application.put_env(:skill_kit, SkillKit.Storage, previous)
 
+  defp collect_evals(opts) do
+    dir_evals(Keyword.get(opts, :dir)) ++ module_evals(Keyword.get(opts, :modules, []))
+  end
+
+  defp dir_evals(nil), do: []
+  defp dir_evals(dir), do: Eval.load_dir!(dir)
+
+  defp module_evals(modules) do
+    Enum.flat_map(modules, &module_eval_cases/1)
+  end
+
+  defp module_eval_cases(module) do
+    Code.ensure_compiled!(module)
+    module.__skill_evals__()
+  end
+
   defp eval_test(eval, run_opts) do
     quote do
       @tag :eval
@@ -111,6 +136,10 @@ defmodule SkillKit.Eval.Case do
     end
 
     :ok
+  end
+
+  defp test_name(%{module: module, name: name}) when not is_nil(module) do
+    "#{inspect(module)}: #{name}"
   end
 
   defp test_name(%{location: nil, name: name}), do: "eval: #{name}"

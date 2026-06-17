@@ -77,6 +77,50 @@ system: "You are being evaluated."
 The skill under test resolves in this order: explicit `skills:` frontmatter, else
 a `SKILL.md` sitting next to the `EVAL.md`, else nothing.
 
+## Colocating evals with code
+
+When an eval exercises **application code** — a tool module, or a skill whose
+behavior runs through your modules — keep the eval next to that code. The eval
+then anchors to the module, and the eval cache keys on the module's compiled
+hash (`Module.module_info(:md5)`): change the code and the eval re-runs; leave
+it untouched and a prior pass is reused. No dependency lists to maintain.
+
+Two forms, both setting the eval's subject `module`:
+
+**`@eval` attribute** — the eval lives in the module, doctest-style:
+
+```elixir
+defmodule MyApp.Greeter do
+  use SkillKit.Eval
+
+  @eval """
+  ## greets the user by name
+  ### Prompt
+  Hi, I'm Sam
+  ### Expect
+  Greets the user by name.
+  """
+  def greet(name), do: ...
+end
+```
+
+**Sidecar `EVAL.md`** — keep the markdown in a file, name its target module in
+frontmatter:
+
+```markdown
+---
+module: "MyApp.Greeter"
+---
+## greets the user by name
+...
+```
+
+If the subject module is itself a `SkillKit.Tool` it's offered to the agent as a
+tool; if it's a kit/skill provider it's loaded as a skill. Either way the
+module's MD5 anchors the cache. Discover `@eval` modules with
+`use SkillKit.Eval.Case, modules: [MyApp.Greeter]`; sidecars are found by `dir:`
+like any other `EVAL.md`.
+
 ## Running evals as tests
 
 Point `SkillKit.Eval.Case` at a directory of evals:
@@ -175,11 +219,14 @@ use SkillKit.Eval.Case, dir: "skills", run: [cache: true]
 
 The scope fingerprint (`SkillKit.Eval.Cache`) covers the case text (name,
 prompt, rubric, system), the agent and judge models, the source of every skill
-and tool under test (file contents on disk, or the module name for module
-providers), and a harness-version token bumped when scoring changes. A case
-whose fingerprint matches a recorded **pass** is skipped — its result is marked
+and tool under test (file contents for path providers, the **compiled MD5** for
+module providers), the subject `module`'s MD5 when the eval is colocated with
+code, and a harness-version token bumped when scoring changes. A case whose
+fingerprint matches a recorded **pass** is skipped — its result is marked
 `cached: true` and no LLM is called. Failures and unknown fingerprints always
-run; failures are never cached.
+run; failures are never cached. Because module providers and module-anchored
+evals hash compiled code, changing the application code an eval exercises
+re-runs it rather than serving a stale pass.
 
 The cache is a term file. `cache: true` stores it under `_build/<env>/`
 (ephemeral, already gitignored — a fresh CI checkout runs every eval); pass a

@@ -43,7 +43,7 @@ defmodule SkillKit.Eval do
     - "skills/greeter"
   tools:
     - "SkillKit.Tools.Shell"
-  model: "anthropic:claude-sonnet-4-20250514"
+  model: "anthropic:claude-sonnet-4-6"
   system: "You are being evaluated."
   ---
   ## greets the user by name
@@ -81,6 +81,7 @@ defmodule SkillKit.Eval do
           model: String.t() | nil,
           rubric: String.t() | nil,
           location: String.t() | nil,
+          module: module() | nil,
           skills: [provider()],
           tools: [provider()],
           metadata: %{optional(String.t()) => term()}
@@ -93,12 +94,71 @@ defmodule SkillKit.Eval do
     :model,
     :rubric,
     :location,
+    :module,
     skills: [],
     tools: [],
     metadata: %{}
   ]
 
   @known_sections ~w(prompt expect)
+
+  @doc """
+  Colocates evals with the module they exercise via an `@eval` attribute.
+
+  `use SkillKit.Eval` registers an accumulating `@eval` string attribute. Each
+  value is a chunk of `EVAL.md` markdown (one or more `##` cases, optional
+  frontmatter); they are parsed at compile time and exposed as
+  `__skill_evals__/0`. Every case records `module: __MODULE__`, so the eval
+  cache keys on the module's compiled hash — change the module's code (or the
+  `@eval` text) and the eval re-runs; leave it untouched and a prior pass is
+  reused.
+
+      defmodule MyApp.Greeter do
+        use SkillKit.Eval
+
+        @eval \"\"\"
+        ## greets the user by name
+        ### Prompt
+        Hi, I'm Sam
+        ### Expect
+        Greets the user by name.
+        \"\"\"
+        def greet(name), do: ...
+      end
+
+  Point `SkillKit.Eval.Case` at the module(s) with `modules: [MyApp.Greeter]`.
+  """
+  defmacro __using__(_opts) do
+    quote do
+      Module.register_attribute(__MODULE__, :eval, accumulate: true)
+      @before_compile SkillKit.Eval
+    end
+  end
+
+  @doc false
+  defmacro __before_compile__(env) do
+    evals =
+      env.module
+      |> Module.get_attribute(:eval, [])
+      |> Enum.reverse()
+      |> Enum.flat_map(&parse_attribute!(&1, env.module, env.file))
+      |> Macro.escape()
+
+    quote do
+      @doc false
+      def __skill_evals__, do: unquote(evals)
+    end
+  end
+
+  defp parse_attribute!(content, module, file) do
+    case parse(content, file) do
+      {:ok, cases} ->
+        Enum.map(cases, &%{&1 | module: module})
+
+      {:error, reason} ->
+        raise ArgumentError, "invalid @eval in #{inspect(module)}: #{inspect(reason)}"
+    end
+  end
 
   @doc """
   Parses `EVAL.md` content into a list of `%Eval{}` cases.
@@ -161,7 +221,35 @@ defmodule SkillKit.Eval do
   """
   @spec skill_providers(t()) :: [provider()]
   def skill_providers(%__MODULE__{skills: [_ | _] = skills}), do: skills
+
+  def skill_providers(%__MODULE__{module: module}) when is_atom(module) and not is_nil(module) do
+    if kit_module?(module), do: [module], else: []
+  end
+
   def skill_providers(%__MODULE__{location: location}), do: colocated_skill(location)
+
+  @doc """
+  Resolves the tool providers for an eval — its explicit `tools`, plus the
+  eval's subject `module` when that module is itself a `SkillKit.Tool`.
+  """
+  @spec tool_providers(t()) :: [provider()]
+  def tool_providers(%__MODULE__{tools: tools, module: module}) do
+    maybe_add_tool_module(tools, module)
+  end
+
+  defp maybe_add_tool_module(tools, nil), do: tools
+
+  defp maybe_add_tool_module(tools, module) do
+    if tool_module?(module) and module not in tools, do: tools ++ [module], else: tools
+  end
+
+  defp kit_module?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :load_kits, 1)
+  end
+
+  defp tool_module?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :definition, 0)
+  end
 
   defp colocated_skill(nil), do: []
 
@@ -311,6 +399,7 @@ defmodule SkillKit.Eval do
       prompt: prompt,
       rubric: rubric,
       location: location,
+      module: resolve_module(Map.get(yaml, "module")),
       system: Map.get(yaml, "system"),
       model: Map.get(yaml, "model"),
       skills: providers(Map.get(yaml, "skills")),
@@ -318,6 +407,10 @@ defmodule SkillKit.Eval do
       metadata: Map.get(yaml, "metadata", %{})
     }
   end
+
+  defp resolve_module(nil), do: nil
+  defp resolve_module(name) when is_binary(name), do: Module.concat([name])
+  defp resolve_module(module) when is_atom(module), do: module
 
   defp providers(nil), do: []
   defp providers(specs) when is_list(specs), do: Enum.map(specs, &resolve_provider/1)

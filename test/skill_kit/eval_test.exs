@@ -45,7 +45,7 @@ defmodule SkillKit.EvalTest do
     test "applies optional frontmatter to every case" do
       content = """
       ---
-      model: "anthropic:claude-sonnet-4-20250514"
+      model: "anthropic:claude-sonnet-4-6"
       system: "You are being evaluated."
       skills:
         - "skills/greeter"
@@ -68,7 +68,7 @@ defmodule SkillKit.EvalTest do
       assert {:ok, [one, two]} = Eval.parse(content)
 
       for eval <- [one, two] do
-        assert eval.model == "anthropic:claude-sonnet-4-20250514"
+        assert eval.model == "anthropic:claude-sonnet-4-6"
         assert eval.system == "You are being evaluated."
         assert eval.skills == ["skills/greeter"]
         assert eval.tools == [SkillKit.Tools.Shell]
@@ -110,6 +110,22 @@ defmodule SkillKit.EvalTest do
     test "an empty file yields no cases" do
       assert {:ok, []} = Eval.parse("")
     end
+
+    test "reads a subject `module:` from frontmatter (sidecar pattern)" do
+      content = "---\nmodule: \"SkillKit.Tools.Shell\"\n---\n## c\n### Prompt\na\n### Expect\nb\n"
+      assert {:ok, [eval]} = Eval.parse(content)
+      assert eval.module == SkillKit.Tools.Shell
+    end
+  end
+
+  describe "@eval attributes" do
+    test "are collected into __skill_evals__/0, each tagged with the module" do
+      assert [eval] = SkillKit.Test.EvalSubject.__skill_evals__()
+      assert eval.name == "greets by name"
+      assert eval.prompt == "Hi, I'm Sam"
+      assert eval.rubric == "Greets the user by name."
+      assert eval.module == SkillKit.Test.EvalSubject
+    end
   end
 
   describe "skill_providers/1" do
@@ -124,8 +140,35 @@ defmodule SkillKit.EvalTest do
       assert [{SkillKit.Eval.SkillFile, path: ^skill_md}] = Eval.skill_providers(eval)
     end
 
+    test "loads a subject module as a skill when it is a kit provider" do
+      eval = %Eval{name: "x", module: SkillKit.Eval.SkillFile}
+      assert Eval.skill_providers(eval) == [SkillKit.Eval.SkillFile]
+    end
+
+    test "does not treat a non-kit subject module as a skill" do
+      eval = %Eval{name: "x", module: SkillKit.Tools.Shell}
+      assert Eval.skill_providers(eval) == []
+    end
+
     test "returns [] when there is no location and no skills" do
       assert Eval.skill_providers(%Eval{name: "x"}) == []
+    end
+  end
+
+  describe "tool_providers/1" do
+    test "adds the subject module when it is a SkillKit.Tool" do
+      eval = %Eval{name: "x", module: SkillKit.Tools.Shell}
+      assert Eval.tool_providers(eval) == [SkillKit.Tools.Shell]
+    end
+
+    test "leaves tools untouched for a non-tool subject module" do
+      eval = %Eval{name: "x", tools: [SkillKit.Tools.Shell], module: SkillKit.Eval.SkillFile}
+      assert Eval.tool_providers(eval) == [SkillKit.Tools.Shell]
+    end
+
+    test "does not duplicate a subject module already listed in tools" do
+      eval = %Eval{name: "x", tools: [SkillKit.Tools.Shell], module: SkillKit.Tools.Shell}
+      assert Eval.tool_providers(eval) == [SkillKit.Tools.Shell]
     end
   end
 
