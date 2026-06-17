@@ -95,9 +95,21 @@ defmodule SkillKit.Eval.Case do
       @tag :eval
       test unquote(test_name(eval)) do
         result = Runner.run(unquote(Macro.escape(eval)), unquote(Macro.escape(run_opts)))
+        SkillKit.Eval.Case.emit_warnings(unquote(test_name(eval)), result)
         assert Result.passed?(result), Result.failure_message(result)
       end
     end
+  end
+
+  @doc false
+  # Surfaces non-fatal judge warnings on a passing eval — ExUnit prints nothing
+  # for a pass, so a warning would otherwise be invisible.
+  def emit_warnings(name, result) do
+    for warning <- SkillKit.Eval.Result.warnings(result) do
+      IO.puts(:stderr, "  ⚠ #{name}: #{warning}")
+    end
+
+    :ok
   end
 
   defp test_name(%{location: nil, name: name}), do: "eval: #{name}"

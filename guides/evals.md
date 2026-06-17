@@ -140,13 +140,26 @@ For each case the runner produces a `SkillKit.Eval.Result` made of
    A run that doesn't complete fails here and is not sent to the judge.
 2. **LLM judge** — `SkillKit.Eval.Judge` gives a model the user prompt, the
    tools the agent called, and its final response, and asks whether the
-   transcript satisfies the `## Expect` rubric. The model emits a
-   `VERDICT: PASS` / `VERDICT: FAIL` line that becomes a pass/fail check.
+   transcript satisfies the `## Expect` rubric. The verdict is
+   **severity-weighted** and always resolves to pass or fail:
+
+   - `FAIL` is reserved for *critical* shortfalls — a security or safety
+     problem, a vulnerability, incorrect/harmful output, or a core rubric
+     requirement left unmet.
+   - Everything else `PASS`es. When the core criteria are met but the
+     transcript deviates in a minor way (style, optional suggestions, extra
+     caveats), the judge passes it and attaches a one-line `WARNING:`.
+
+   This keeps a capable agent from failing over non-critical nitpicks while
+   still hard-failing genuinely bad behavior.
 
 When a check fails, ExUnit prints the failing checks and the captured
-transcript via `SkillKit.Eval.Result.failure_message/1`. Pass
-`run: [judge: false]` to skip the judge — a cheap smoke test that the agent
-responds at all without spending judge tokens.
+transcript (prompt, tools called, response) via
+`SkillKit.Eval.Result.failure_message/1`. Warnings on a *passing* eval are
+printed too — ExUnit shows nothing for a pass otherwise — and are available via
+`SkillKit.Eval.Result.warnings/1`. Pass `run: [judge: false]` to skip the judge
+— a cheap smoke test that the agent responds at all without spending judge
+tokens.
 
 ## Caching
 

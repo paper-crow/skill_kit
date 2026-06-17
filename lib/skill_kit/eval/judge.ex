@@ -4,20 +4,32 @@ defmodule SkillKit.Eval.Judge do
 
   After the agent under test runs, the harness asks a model to decide whether
   the transcript satisfies the rubric. The judge is given the original user
-  prompt (for context), the tools the agent called, and its final response,
-  and is instructed to emit a single `VERDICT: PASS` / `VERDICT: FAIL` line
-  followed by a short justification; the full text is returned as the
-  reasoning either way.
+  prompt (for context), the tools the agent called, and its final response.
+
+  The verdict is **severity-weighted** and always coalesces to pass or fail:
+
+    * `FAIL` is reserved for *critical* shortfalls — a security or safety
+      problem, a vulnerability, incorrect/harmful output, or a core requirement
+      of the rubric left unmet.
+    * Everything else is a `PASS`. When the core criteria are met but the
+      transcript deviates in a minor way (style, optional suggestions, extra
+      caveats), the judge still passes it and attaches a one-line `WARNING:`.
+
+  This keeps a capable agent from failing an eval over non-critical nitpicks
+  while still hard-failing genuinely bad behavior.
 
   Judge calls go through `SkillKit.LLM`, so the configured provider (real in
-  `--include eval` runs, the mock in unit tests) decides the verdict.
+  `--only eval` runs, the mock in unit tests) decides the verdict.
   """
 
   alias SkillKit.Eval.Transcript
   alias SkillKit.Event.Delta
   alias SkillKit.Types.UserMessage
 
-  @type verdict :: {:pass | :fail, String.t()} | {:error, term()}
+  @type verdict ::
+          {:pass, String.t(), String.t() | nil}
+          | {:fail, String.t()}
+          | {:error, term()}
 
   @doc """
   Scores `transcript` against `rubric`.
@@ -26,8 +38,8 @@ defmodule SkillKit.Eval.Judge do
     * `:prompt` — the user prompt that was sent to the agent (judge context)
     * `:model` — model URI for the judge call (defaults to the default provider)
 
-  Returns `{:pass, reasoning}`, `{:fail, reasoning}`, or `{:error, reason}`
-  when the LLM call itself fails.
+  Returns `{:pass, reasoning, warning}` (warning is a string or `nil`),
+  `{:fail, reasoning}`, or `{:error, reason}` when the LLM call itself fails.
   """
   @spec judge(String.t(), Transcript.t(), keyword()) :: verdict()
   def judge(rubric, %Transcript{} = transcript, opts \\ []) do
@@ -44,11 +56,22 @@ defmodule SkillKit.Eval.Judge do
   # Verdict parsing
   # ---------------------------------------------------------------------------
 
+  # A FAIL line always wins (critical findings take precedence); a PASS carries
+  # any WARNING line; anything unparseable coalesces to a fail.
   defp verdict(text) do
+    trimmed = String.trim(text)
+
     cond do
-      Regex.match?(~r/VERDICT:\s*PASS/i, text) -> {:pass, String.trim(text)}
-      Regex.match?(~r/VERDICT:\s*FAIL/i, text) -> {:fail, String.trim(text)}
-      true -> {:fail, "judge returned no verdict; output: #{String.trim(text)}"}
+      Regex.match?(~r/VERDICT:\s*FAIL/i, trimmed) -> {:fail, trimmed}
+      Regex.match?(~r/VERDICT:\s*PASS/i, trimmed) -> {:pass, trimmed, warning(trimmed)}
+      true -> {:fail, "judge returned no verdict; output: #{trimmed}"}
+    end
+  end
+
+  defp warning(text) do
+    case Regex.run(~r/WARNING:\s*(.+)/i, text) do
+      [_full, note] -> String.trim(note)
+      nil -> nil
     end
   end
 
@@ -83,8 +106,19 @@ defmodule SkillKit.Eval.Judge do
     ## Assistant's final response
     #{format_response(transcript.response)}
 
-    Decide whether the assistant satisfied ALL the success criteria. Reply with
-    a single line "VERDICT: PASS" or "VERDICT: FAIL", then a brief justification.
+    Decide whether the assistant satisfied the success criteria, weighting your
+    verdict by severity:
+
+    - Answer "VERDICT: FAIL" only when the assistant falls short in a critical
+      way: a security or safety problem, a vulnerability, incorrect or harmful
+      output, or a core requirement of the criteria left unmet.
+    - Otherwise answer "VERDICT: PASS". If the assistant met the core criteria
+      but deviated in a minor, non-critical way (style, optional suggestions,
+      extra caveats, wording), still PASS — and add a "WARNING:" line
+      summarizing the deviation in one sentence.
+
+    Reply with a single "VERDICT: PASS" or "VERDICT: FAIL" line, an optional
+    "WARNING: ..." line, then a brief justification.
     """
   end
 

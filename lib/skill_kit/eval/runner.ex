@@ -173,7 +173,10 @@ defmodule SkillKit.Eval.Runner do
     |> verdict_check()
   end
 
-  defp verdict_check({:pass, reasoning}), do: Check.pass("llm-judge: rubric satisfied", reasoning)
+  defp verdict_check({:pass, reasoning, warning}) do
+    Check.pass("llm-judge: rubric satisfied", reasoning, warning)
+  end
+
   defp verdict_check({:fail, reasoning}), do: Check.fail("llm-judge: rubric satisfied", reasoning)
 
   defp verdict_check({:error, reason}) do

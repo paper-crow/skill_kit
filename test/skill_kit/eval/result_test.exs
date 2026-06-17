@@ -37,6 +37,18 @@ defmodule SkillKit.Eval.ResultTest do
     refute message =~ "agent completed"
   end
 
+  test "warnings/1 collects notes from passing checks" do
+    checks = [
+      Check.pass("agent completed"),
+      Check.pass("llm-judge: rubric satisfied", "VERDICT: PASS", "did not say LGTM")
+    ]
+
+    result = result(checks, %Transcript{status: :ok, response: "ok"})
+
+    assert Result.passed?(result)
+    assert Result.warnings(result) == ["did not say LGTM"]
+  end
+
   test "failure_message reports an errored run instead of a response" do
     transcript = %Transcript{status: :error, error: :boom}
     checks = [Check.fail("agent completed", "agent errored: :boom")]

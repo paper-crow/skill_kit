@@ -30,6 +30,14 @@ defmodule SkillKit.Eval.Result do
   @spec failures(t()) :: [Check.t()]
   def failures(%__MODULE__{checks: checks}), do: Enum.reject(checks, & &1.passed)
 
+  @doc "Non-fatal warning notes from checks that passed (e.g. the judge's)."
+  @spec warnings(t()) :: [String.t()]
+  def warnings(%__MODULE__{checks: checks}) do
+    checks
+    |> Enum.filter(& &1.warning)
+    |> Enum.map(& &1.warning)
+  end
+
   @doc """
   A human-readable explanation of why the eval failed, for ExUnit output.
 

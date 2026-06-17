@@ -12,10 +12,19 @@ defmodule SkillKit.Eval.JudgeTest do
   @rubric "Greets the user by name."
   @transcript %Transcript{response: "Hello, Sam!", tool_calls: [], status: :ok}
 
-  test "returns {:pass, reasoning} when the judge votes PASS" do
+  test "returns {:pass, reasoning, nil} when the judge votes PASS with no warning" do
     SkillKit.Test.expect_response(%Text{content: "VERDICT: PASS — warm and named."})
 
-    assert {:pass, reasoning} = Judge.judge(@rubric, @transcript)
+    assert {:pass, reasoning, nil} = Judge.judge(@rubric, @transcript)
+    assert reasoning =~ "PASS"
+  end
+
+  test "passes with a warning, extracting the WARNING line" do
+    SkillKit.Test.expect_response(%Text{
+      content: "VERDICT: PASS\nWARNING: did not repeat the name\nGood enough."
+    })
+
+    assert {:pass, reasoning, "did not repeat the name"} = Judge.judge(@rubric, @transcript)
     assert reasoning =~ "PASS"
   end
 
@@ -24,6 +33,14 @@ defmodule SkillKit.Eval.JudgeTest do
 
     assert {:fail, reasoning} = Judge.judge(@rubric, @transcript)
     assert reasoning =~ "FAIL"
+  end
+
+  test "a FAIL verdict wins over a PASS line that also appears" do
+    SkillKit.Test.expect_response(%Text{
+      content: "VERDICT: FAIL\nSecurity hole. (I first wrote VERDICT: PASS, then reconsidered.)"
+    })
+
+    assert {:fail, _reasoning} = Judge.judge(@rubric, @transcript)
   end
 
   test "treats a missing verdict as a failure" do
@@ -44,6 +61,7 @@ defmodule SkillKit.Eval.JudgeTest do
       assert message.content =~ "Hi, I'm Sam"
     end)
 
-    assert {:pass, _reasoning} = Judge.judge(@rubric, @transcript, prompt: "Hi, I'm Sam")
+    assert {:pass, _reasoning, _warning} =
+             Judge.judge(@rubric, @transcript, prompt: "Hi, I'm Sam")
   end
 end
