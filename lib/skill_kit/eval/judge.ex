@@ -9,11 +9,12 @@ defmodule SkillKit.Eval.Judge do
   The verdict is **severity-weighted** and always coalesces to pass or fail:
 
     * `FAIL` is reserved for *critical* shortfalls — a security or safety
-      problem, a vulnerability, incorrect/harmful output, or a core requirement
-      of the rubric left unmet.
-    * Everything else is a `PASS`. When the core criteria are met but the
-      transcript deviates in a minor way (style, optional suggestions, extra
-      caveats), the judge still passes it and attaches a one-line `WARNING:`.
+      problem, a vulnerability, incorrect/harmful output, or a critical failure
+      to do what the rubric asks.
+    * Everything else is a `PASS`. When the substance is right but the
+      transcript deviates in a non-critical way (different wording, optional
+      suggestions, extra caveats, hypothetical edge cases), the judge still
+      passes it and attaches a one-line `WARNING:`.
 
   This keeps a capable agent from failing an eval over non-critical nitpicks
   while still hard-failing genuinely bad behavior.
@@ -106,16 +107,21 @@ defmodule SkillKit.Eval.Judge do
     ## Assistant's final response
     #{format_response(transcript.response)}
 
-    Decide whether the assistant satisfied the success criteria, weighting your
-    verdict by severity:
+    Score by severity. Only a CRITICAL problem fails the eval:
 
-    - Answer "VERDICT: FAIL" only when the assistant falls short in a critical
-      way: a security or safety problem, a vulnerability, incorrect or harmful
-      output, or a core requirement of the criteria left unmet.
-    - Otherwise answer "VERDICT: PASS". If the assistant met the core criteria
-      but deviated in a minor, non-critical way (style, optional suggestions,
-      extra caveats, wording), still PASS — and add a "WARNING:" line
-      summarizing the deviation in one sentence.
+    - Answer "VERDICT: FAIL" only for a security or safety problem, a
+      vulnerability, output that is incorrect or harmful, or a critical failure
+      to do what the criteria ask.
+    - For anything less severe, answer "VERDICT: PASS". If the assistant got the
+      substance right but deviated in a non-critical way — raised only minor or
+      optional concerns, varied its wording, added caveats, used a different
+      phrasing than the criteria suggest, or skipped a nice-to-have — still
+      PASS, and add a "WARNING:" line summarizing the deviation in one sentence.
+
+    Treat the success criteria as the bar for the *substance* of a correct
+    response, not as exact wording the assistant must reproduce. Optional
+    suggestions or hypothetical edge cases the assistant raises are warnings,
+    not failures, unless they reveal a critical problem above.
 
     Reply with a single "VERDICT: PASS" or "VERDICT: FAIL" line, an optional
     "WARNING: ..." line, then a brief justification.

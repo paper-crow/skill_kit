@@ -144,11 +144,13 @@ For each case the runner produces a `SkillKit.Eval.Result` made of
    **severity-weighted** and always resolves to pass or fail:
 
    - `FAIL` is reserved for *critical* shortfalls — a security or safety
-     problem, a vulnerability, incorrect/harmful output, or a core rubric
-     requirement left unmet.
-   - Everything else `PASS`es. When the core criteria are met but the
-     transcript deviates in a minor way (style, optional suggestions, extra
-     caveats), the judge passes it and attaches a one-line `WARNING:`.
+     problem, a vulnerability, incorrect/harmful output, or a critical failure
+     to do what the rubric asks.
+   - Everything else `PASS`es. When the substance is right but the transcript
+     deviates in a non-critical way (different wording, optional suggestions,
+     extra caveats, hypothetical edge cases), the judge passes it and attaches
+     a one-line `WARNING:`. The rubric sets the bar for *substance*, not exact
+     wording the agent must reproduce.
 
    This keeps a capable agent from failing over non-critical nitpicks while
    still hard-failing genuinely bad behavior.
