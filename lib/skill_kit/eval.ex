@@ -67,6 +67,21 @@ defmodule SkillKit.Eval do
   providers: a value starting with an uppercase letter is treated as an Elixir
   module name (`"SkillKit.Tools.Shell"`), anything else as a filesystem path
   (`"skills/greeter"`).
+
+  ## Colocating evals with what they test
+
+  Beyond a standalone `EVAL.md`, an eval can be anchored to its subject so the
+  result cache keys on that subject's source and re-runs when it changes:
+
+    * **Application code** — `use SkillKit.Eval` enables a doctest-style `@eval`
+      attribute (see `__using__/1`), or an `EVAL.md` names its subject `module:`
+      in frontmatter. The module's compiled MD5 anchors the cache.
+    * **A whole agent** — an `EVAL.md` next to an `AGENT.md` (or an explicit
+      `agent:`) runs that entire agent — identity, skills, sub-agents — via
+      `SkillKit.start_agent/2` and judges its transcript (see `agent_source/1`).
+      The agent directory's contents anchor the cache.
+
+  See the [evals guide](guides/evals.md) for worked examples.
   """
 
   alias SkillKit.Eval.SkillFile

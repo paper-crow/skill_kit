@@ -178,6 +178,18 @@ end
 Generated tests are tagged `:eval` — gate them behind a real provider with
 `mix test --include eval`.
 
+An eval can also be **colocated with what it tests**, keying the result cache on
+that thing so a change re-runs it:
+
+- a skill — `EVAL.md` next to its `SKILL.md` (file hash);
+- application code — a doctest-style `@eval` attribute or `module:` frontmatter
+  (the module's compiled MD5);
+- a whole agent — `EVAL.md` next to an `AGENT.md`, which boots the entire agent
+  (identity, skills, sub-agents) and judges its transcript (the agent dir's
+  contents).
+
+See the [evals guide](guides/evals.md) for all three.
+
 ## Loading Kits
 
 `start_agent/2` takes an agent source as its first argument and a `skills:`
