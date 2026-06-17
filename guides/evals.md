@@ -121,6 +121,38 @@ module's MD5 anchors the cache. Discover `@eval` modules with
 `use SkillKit.Eval.Case, modules: [MyApp.Greeter]`; sidecars are found by `dir:`
 like any other `EVAL.md`.
 
+## Evaluating whole agents
+
+To eval an agent rather than a single skill, drop an `EVAL.md` next to its
+`AGENT.md`:
+
+```
+agents/researcher/
+  AGENT.md
+  EVAL.md
+```
+
+The runner boots the **whole agent** — its `AGENT.md` identity, skills, and
+sub-agents — via `SkillKit.start_agent/2`, sends the prompt, and judges the
+transcript. The eval anchors to the agent directory, so the cache keys on its
+contents (`AGENT.md` + every skill under it); change anything the agent is made
+of and the eval re-runs.
+
+The colocated `AGENT.md` is inferred automatically; point elsewhere with an
+`agent:` frontmatter key. The model is taken from `:run`/frontmatter (so the
+eval hits a known provider) and otherwise falls back to the agent's own model.
+
+```markdown
+---
+agent: "agents/researcher"
+---
+## cites sources
+### Prompt
+What logging library does this project use?
+### Expect
+Names the library and cites the file where it's configured.
+```
+
 ## Running evals as tests
 
 Point `SkillKit.Eval.Case` at a directory of evals:

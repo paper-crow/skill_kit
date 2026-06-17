@@ -82,6 +82,7 @@ defmodule SkillKit.Eval do
           rubric: String.t() | nil,
           location: String.t() | nil,
           module: module() | nil,
+          agent: String.t() | nil,
           skills: [provider()],
           tools: [provider()],
           metadata: %{optional(String.t()) => term()}
@@ -95,6 +96,7 @@ defmodule SkillKit.Eval do
     :rubric,
     :location,
     :module,
+    :agent,
     skills: [],
     tools: [],
     metadata: %{}
@@ -258,6 +260,24 @@ defmodule SkillKit.Eval do
     if File.exists?(path), do: [{SkillFile, path: path}], else: []
   end
 
+  @doc """
+  Resolves the agent an eval targets, if any — the directory of an `AGENT.md`
+  whose whole identity (system prompt, skills, sub-agents) is run as the
+  subject. Returns the explicit `agent:` frontmatter, else the eval's own
+  directory when an `AGENT.md` sits beside it (the sidecar pattern), else `nil`.
+  When set, the eval runs the agent rather than loading a bare skill.
+  """
+  @spec agent_source(t()) :: String.t() | nil
+  def agent_source(%__MODULE__{agent: path}) when is_binary(path), do: path
+  def agent_source(%__MODULE__{location: location}), do: colocated_agent(location)
+
+  defp colocated_agent(nil), do: nil
+
+  defp colocated_agent(location) do
+    dir = Path.dirname(location)
+    if File.exists?(Path.join(dir, "AGENT.md")), do: dir, else: nil
+  end
+
   # ---------------------------------------------------------------------------
   # Directory loading
   # ---------------------------------------------------------------------------
@@ -400,6 +420,7 @@ defmodule SkillKit.Eval do
       rubric: rubric,
       location: location,
       module: resolve_module(Map.get(yaml, "module")),
+      agent: Map.get(yaml, "agent"),
       system: Map.get(yaml, "system"),
       model: Map.get(yaml, "model"),
       skills: providers(Map.get(yaml, "skills")),

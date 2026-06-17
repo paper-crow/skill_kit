@@ -39,6 +39,28 @@ defmodule SkillKit.Eval.RunnerTest do
     assert Enum.any?(result.checks, &(&1.name == "llm-judge: rubric satisfied" and &1.passed))
   end
 
+  test "runs a whole agent loaded from an AGENT.md directory" do
+    previous = Application.get_env(:skill_kit, Storage)
+    Application.put_env(:skill_kit, Storage, provider: Storage.File)
+    on_exit(fn -> Application.put_env(:skill_kit, Storage, previous) end)
+
+    SkillKit.Test.expect_response(%Text{content: "I am the simple agent."})
+
+    agent_dir = Path.expand("../../support/fixtures/agents/valid/simple", __DIR__)
+
+    eval = %Eval{
+      name: "x",
+      prompt: "who are you?",
+      rubric: "Identifies itself.",
+      agent: agent_dir
+    }
+
+    result = Runner.run(eval, judge: false)
+
+    assert Result.passed?(result)
+    assert result.transcript.response == "I am the simple agent."
+  end
+
   test "fails when the judge votes FAIL" do
     SkillKit.Test.expect_responses([
       %Text{content: "Hello there"},

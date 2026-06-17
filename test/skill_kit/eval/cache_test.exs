@@ -63,6 +63,20 @@ defmodule SkillKit.Eval.CacheTest do
       named = %{shell | tools: ["SkillKit.Tools.Shell"]}
       refute Cache.fingerprint(shell) == Cache.fingerprint(named)
     end
+
+    test "incorporates the target agent directory's contents" do
+      dir = tmp_dir()
+      File.write!(Path.join(dir, "AGENT.md"), "---\nname: a\n---\nv1")
+      eval = %Eval{name: "n", prompt: "p", rubric: "r", agent: dir}
+
+      before = Cache.fingerprint(eval)
+      # an agent-anchored eval differs from one with no agent
+      refute before == Cache.fingerprint(%{eval | agent: nil})
+
+      # and re-runs when the agent directory changes
+      File.write!(Path.join(dir, "AGENT.md"), "---\nname: a\n---\nv2")
+      refute before == Cache.fingerprint(eval)
+    end
   end
 
   describe "get/2 and put/3" do

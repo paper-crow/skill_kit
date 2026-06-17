@@ -6,6 +6,7 @@ defmodule SkillKit.EvalTest do
 
   @fixtures Path.expand("../support/fixtures/evals", __DIR__)
   @colocated Path.expand("../support/fixtures/colocated_skill", __DIR__)
+  @agent_dir Path.expand("../support/fixtures/agents/valid/simple", __DIR__)
 
   describe "parse/2" do
     test "parses multiple `##` cases, each with its Prompt and Expect" do
@@ -170,6 +171,24 @@ defmodule SkillKit.EvalTest do
     test "does not duplicate a subject module already listed in tools" do
       eval = %Eval{name: "x", tools: [SkillKit.Tools.Shell], module: SkillKit.Tools.Shell}
       assert Eval.tool_providers(eval) == [SkillKit.Tools.Shell]
+    end
+  end
+
+  describe "agent_source/1" do
+    test "returns the explicit agent: path" do
+      eval = %Eval{name: "x", agent: "examples/agents/neve"}
+      assert Eval.agent_source(eval) == "examples/agents/neve"
+    end
+
+    test "infers the eval's directory when an AGENT.md sits beside it" do
+      eval = %Eval{name: "x", location: Path.join(@agent_dir, "EVAL.md")}
+      assert Eval.agent_source(eval) == @agent_dir
+    end
+
+    test "returns nil with neither an explicit agent nor a sibling AGENT.md" do
+      eval = %Eval{name: "x", location: Path.join(@colocated, "EVAL.md")}
+      assert Eval.agent_source(eval) == nil
+      assert Eval.agent_source(%Eval{name: "x"}) == nil
     end
   end
 

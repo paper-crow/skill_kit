@@ -45,6 +45,7 @@ defmodule SkillKit.Eval.Cache do
       Keyword.get(opts, :model, eval.model),
       Keyword.get(opts, :judge_model, eval.model),
       module_token(eval.module),
+      agent_token(Eval.agent_source(eval)),
       scope_token(eval)
     }
 
@@ -104,6 +105,11 @@ defmodule SkillKit.Eval.Cache do
   # back to the name if the module isn't loaded.
   defp module_token(nil), do: ""
   defp module_token(module) when is_atom(module), do: beam_md5(module)
+
+  # A whole-agent eval keys on the contents of its `AGENT.md` directory, so any
+  # change to the agent's identity, skills, or sub-agents re-runs it.
+  defp agent_token(nil), do: ""
+  defp agent_token(dir) when is_binary(dir), do: tree_hash(dir)
 
   defp beam_md5(module) do
     module.module_info(:md5)

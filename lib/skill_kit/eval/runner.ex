@@ -23,6 +23,7 @@ defmodule SkillKit.Eval.Runner do
   alias SkillKit.Eval.Transcript
   alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Kit.Local
   alias SkillKit.Types.AssistantMessage
 
   @default_timeout 30_000
@@ -87,7 +88,8 @@ defmodule SkillKit.Eval.Runner do
 
   defp run_agent(eval, opts) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
-    {:ok, agent} = SkillKit.start_agent(agent_definition(eval, opts), start_opts(eval))
+    {source, start_opts} = build_agent(Eval.agent_source(eval), eval, opts)
+    {:ok, agent} = SkillKit.start_agent(source, start_opts)
 
     try do
       :ok = SkillKit.send_message(agent, eval.prompt)
@@ -97,18 +99,50 @@ defmodule SkillKit.Eval.Runner do
     end
   end
 
-  defp start_opts(eval) do
-    [tools: Eval.tool_providers(eval), skills: Eval.skill_providers(eval), caller: self()]
-  end
-
-  defp agent_definition(eval, opts) do
-    %Agent{
-      name: "eval-#{:erlang.unique_integer([:positive])}",
+  # No agent target: run the prompt against a bare agent loaded with the eval's
+  # skill/tool providers.
+  defp build_agent(nil, eval, opts) do
+    source = %Agent{
+      name: agent_name(),
       description: "SkillKit eval harness agent",
       system_prompt: eval.system || @default_system,
       model: Keyword.get(opts, :model, eval.model),
       max_agent_depth: 2
     }
+
+    start_opts = [
+      tools: Eval.tool_providers(eval),
+      skills: Eval.skill_providers(eval),
+      caller: self()
+    ]
+
+    {source, start_opts}
+  end
+
+  # Agent target: run the whole `AGENT.md` — its identity, skills, and
+  # sub-agents — overriding only the model so the eval hits a known provider.
+  defp build_agent(dir, eval, opts) do
+    identity = load_agent_identity(dir)
+    source = %{identity | name: agent_name(), model: agent_model(opts, eval, identity)}
+    start_opts = [skills: [{Local, dir: dir}], tools: eval.tools, caller: self()]
+    {source, start_opts}
+  end
+
+  defp agent_model(opts, eval, identity) do
+    Keyword.get(opts, :model) || eval.model || identity.model
+  end
+
+  defp agent_name, do: "eval-#{:erlang.unique_integer([:positive])}"
+
+  defp load_agent_identity(dir) do
+    case Local.load_kits(dir: dir) do
+      {:ok, kits} -> find_agent(kits, dir)
+      {:error, reason} -> raise "failed to load agent #{dir}: #{inspect(reason)}"
+    end
+  end
+
+  defp find_agent(kits, dir) do
+    Enum.find_value(kits, & &1.agent) || raise "no AGENT.md found in #{dir}"
   end
 
   defp collect(name, timeout, acc) do
