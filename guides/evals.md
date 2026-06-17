@@ -9,6 +9,10 @@ whether the resulting transcript meets the criteria.
 `SkillKit.Eval.Case` plugs evals into ExUnit, so `mix test` runs your skill
 evals alongside your unit tests.
 
+SkillKit dogfoods its own harness: the skills under `examples/skills/` carry
+colocated `EVAL.md` suites, wired up in `test/examples/skills_eval_test.exs`.
+Run them against a real provider with `mix test --include eval`.
+
 ## Writing an eval
 
 An `EVAL.md` is a *suite* of cases. Each `##` heading is one case (its text is
