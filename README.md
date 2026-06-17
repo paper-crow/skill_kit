@@ -142,6 +142,54 @@ Scope-based access control restricts which skills a caller may discover and
 activate. Skills declare `required_scope` in their frontmatter; callers
 provide granted scopes via a struct implementing `SkillKit.Scope`.
 
+### [Evals](guides/evals.md)
+
+Evals are the test counterpart to skills. An `EVAL.md` sitting next to a
+`SKILL.md` describes behaviors the skill should produce and how to score them.
+Each `##` heading is a case; the harness sends its `### Prompt` to a fresh agent
+loaded with the skill, then an LLM judge scores the transcript against the
+`### Expect` rubric. No frontmatter needed when colocated:
+
+```markdown
+## greets the user by name
+### Prompt
+Hi, I'm Sam
+
+### Expect
+The assistant greets the user by their name in a warm, friendly tone.
+
+## handles a missing name
+### Prompt
+Hello there
+
+### Expect
+The assistant greets politely without inventing a name.
+```
+
+`SkillKit.Eval.Case` turns a directory of evals into ExUnit tests, so skill
+evals run as part of `mix test`:
+
+```elixir
+defmodule MyApp.SkillEvalTest do
+  use SkillKit.Eval.Case, dir: "skills"
+end
+```
+
+Generated tests are tagged `:eval` — gate them behind a real provider with
+`mix test --include eval`.
+
+An eval can also be **colocated with what it tests**, keying the result cache on
+that thing so a change re-runs it:
+
+- a skill — `EVAL.md` next to its `SKILL.md` (file hash);
+- application code — a doctest-style `@eval` attribute, or a `greeter.EVAL.md`
+  sidecar next to `greeter.ex` (the module's compiled MD5);
+- a whole agent — `EVAL.md` next to an `AGENT.md`, which boots the entire agent
+  (identity, skills, sub-agents) and judges its transcript (the agent dir's
+  contents).
+
+See the [evals guide](guides/evals.md) for all three.
+
 ## Loading Kits
 
 `start_agent/2` takes an agent source as its first argument and a `skills:`
@@ -327,6 +375,7 @@ full design.
 - [Authorization](guides/authorization.md) — scope format, authorization API, catalog integration
 - [LLM Providers](guides/llm-providers.md) — adding a new LLM provider adapter
 - [Conversations](guides/conversations.md) — conversation persistence and custom stores
+- [Evals](guides/evals.md) — `EVAL.md` format, the ExUnit plugin, LLM-judge scoring
 - [Telemetry](guides/telemetry.md) — event reference, handler examples, testing
 
 ## Standards Compatibility

@@ -66,6 +66,7 @@ defmodule SkillKit.MixProject do
         "guides/authorization.md",
         "guides/telemetry.md",
         "guides/conversations.md",
+        "guides/evals.md",
         "guides/ralph-loop.md"
       ],
       groups_for_extras: [
@@ -143,6 +144,16 @@ defmodule SkillKit.MixProject do
         ],
         Telemetry: [
           SkillKit.Telemetry
+        ],
+        Evals: [
+          SkillKit.Eval,
+          SkillKit.Eval.Case,
+          SkillKit.Eval.Runner,
+          SkillKit.Eval.Judge,
+          SkillKit.Eval.Cache,
+          SkillKit.Eval.Result,
+          SkillKit.Eval.Check,
+          SkillKit.Eval.Transcript
         ]
       ]
     ]

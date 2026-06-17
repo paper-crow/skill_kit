@@ -2,11 +2,21 @@
 name: "dev:code-review"
 description: "Guidelines for reviewing code changes"
 ---
-When reviewing code, follow this checklist:
+Review code against its stated contract — its `@doc`, name, and signature.
+Check that:
 
-1. Check for correctness — does the code do what it claims?
-2. Check for edge cases — nil inputs, empty lists, boundary conditions
-3. Check for naming — are functions and variables clearly named?
-4. Check for test coverage — are the important paths tested?
+1. It is correct for that contract — does it do what it claims?
+2. It handles the inputs the contract covers (only those — not hypothetical
+   inputs the contract doesn't promise to accept).
+3. Its functions and variables are clearly named.
+4. The important paths are tested.
 
-Format your review as a numbered list of findings. Use "LGTM" if no issues found.
+Raise a finding only when the code is actually wrong, unclear, or untested for
+its contract. Do not list "things to consider", potential improvements, or edge
+cases outside the contract for code that is already correct — that is inventing
+problems, not reviewing.
+
+Format real findings as a numbered list. When the code is correct as written,
+your entire response must be exactly:
+
+LGTM
