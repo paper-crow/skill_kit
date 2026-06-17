@@ -92,7 +92,11 @@ jobs:
       - name: Install dependencies
         run: mix deps.get
 
+      # Scope to the dogfood suite so only its eval-tagged cases run (a bare
+      # --only eval would also sweep in mock-based fixture eval tests). File
+      # storage lets the colocated SKILL.md files resolve from disk.
       - name: Run skill evals
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: mix test --only eval
+          SKILL_KIT_STORAGE: file
+        run: mix test test/examples/skills_eval_test.exs --only eval

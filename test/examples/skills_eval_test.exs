@@ -7,7 +7,11 @@ defmodule SkillKit.Examples.SkillsEvalTest do
   judge against Anthropic (`ANTHROPIC_API_KEY` required), so they are tagged
   `:eval` and excluded from the default suite. Run them on their own with:
 
-      ANTHROPIC_API_KEY=... mix test --only eval
+      ANTHROPIC_API_KEY=... SKILL_KIT_STORAGE=file \
+        mix test test/examples/skills_eval_test.exs --only eval
+
+  `SKILL_KIT_STORAGE=file` is needed because the test environment defaults to
+  in-memory storage, but the colocated `SKILL.md` files live on disk.
 
   The agent and judge models are pinned to an explicit `anthropic:` URI so the
   cases hit the real provider rather than the test mock. Passes are recorded in

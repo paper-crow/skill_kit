@@ -103,8 +103,14 @@ ExUnit.start(exclude: [:eval])
 
 ```bash
 # run only the skill evals against a real provider
-ANTHROPIC_API_KEY=... mix test --only eval
+ANTHROPIC_API_KEY=... SKILL_KIT_STORAGE=file mix test --only eval
 ```
+
+If your skills under test live on disk (the colocated case), the eval run needs
+the `File` storage backend. SkillKit's test env defaults to in-memory storage,
+so its `config/runtime.exs` switches to `SkillKit.Storage.File` when
+`SKILL_KIT_STORAGE=file` is set — omit this if your evals provide skills through
+whatever backend you've already configured.
 
 Because the default test provider is the mock, pin the agent (and judge) to an
 explicit provider URI so the cases hit the real API:
@@ -191,8 +197,13 @@ only changed skills cost an API call:
 - name: Run skill evals
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  run: mix test --only eval
+    SKILL_KIT_STORAGE: file
+  run: mix test test/examples/skills_eval_test.exs --only eval
 ```
+
+The run is scoped to the dogfood suite file: a bare `--only eval` sweeps in
+every `:eval`-tagged test in the repo, including mock-based fixtures that have
+no real provider and can't pass on their own.
 
 A plain `actions/cache` keyed on `mix.lock` (like the deps cache) will **not**
 work for results: that key only changes with dependencies, and a cache is
