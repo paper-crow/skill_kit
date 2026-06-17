@@ -113,10 +113,26 @@ defmodule SkillKit.EvalTest do
       assert {:ok, []} = Eval.parse("")
     end
 
-    test "reads a subject `module:` from frontmatter (sidecar pattern)" do
+    test "reads an explicit subject `module:` from frontmatter" do
       content = "---\nmodule: \"SkillKit.Tools.Shell\"\n---\n## c\n### Prompt\na\n### Expect\nb\n"
       assert {:ok, [eval]} = Eval.parse(content)
       assert eval.module == SkillKit.Tools.Shell
+    end
+  end
+
+  describe "sidecar module inference" do
+    @sidecar Path.expand("../support/fixtures/module_sidecar/greeter.EVAL.md", __DIR__)
+
+    test "infers the subject module from a `<source>.EVAL.md` next to `<source>.ex`" do
+      assert {:ok, [eval]} = Eval.load_file(@sidecar)
+      assert eval.module == SkillKit.Test.SidecarGreeter
+      assert eval.name == "greets by name"
+    end
+
+    test "infers nothing for a bare EVAL.md with no sibling source" do
+      content = "## c\n### Prompt\na\n### Expect\nb\n"
+      assert {:ok, [eval]} = Eval.parse(content, "some/dir/EVAL.md")
+      assert eval.module == nil
     end
   end
 

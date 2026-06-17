@@ -74,8 +74,9 @@ defmodule SkillKit.Eval do
   result cache keys on that subject's source and re-runs when it changes:
 
     * **Application code** — `use SkillKit.Eval` enables a doctest-style `@eval`
-      attribute (see `__using__/1`), or an `EVAL.md` names its subject `module:`
-      in frontmatter. The module's compiled MD5 anchors the cache.
+      attribute (see `__using__/1`), or a `<source>.EVAL.md` sidecar next to
+      `<source>.ex` infers its subject module from that file. The module's
+      compiled MD5 anchors the cache.
     * **A whole agent** — an `EVAL.md` next to an `AGENT.md` (or an explicit
       `agent:`) runs that entire agent — identity, skills, sub-agents — via
       `SkillKit.start_agent/2` and judges its transcript (see `agent_source/1`).
@@ -205,9 +206,10 @@ defmodule SkillKit.Eval do
   @doc """
   Loads every eval case under `dir`.
 
-  Discovers files named `EVAL.md` or `*.eval.md` at any depth and flattens
-  their cases. Returns `{:ok, evals}` ordered by path, or `{:error, {path,
-  reason}}` on the first file that fails to parse.
+  Discovers files named `EVAL.md`, `*.eval.md`, or `*.EVAL.md` at any depth and
+  flattens their cases. A `<source>.EVAL.md` next to `<source>.ex` infers its
+  subject module from that file. Returns `{:ok, evals}` ordered by path, or
+  `{:error, {path, reason}}` on the first file that fails to parse.
   """
   @spec load_dir(Path.t()) :: {:ok, [t()]} | {:error, {Path.t(), term()}}
   def load_dir(dir) do
@@ -298,7 +300,11 @@ defmodule SkillKit.Eval do
   # ---------------------------------------------------------------------------
 
   defp eval_files(dir) do
-    [Path.join(dir, "**/EVAL.md"), Path.join(dir, "**/*.eval.md")]
+    [
+      Path.join(dir, "**/EVAL.md"),
+      Path.join(dir, "**/*.eval.md"),
+      Path.join(dir, "**/*.EVAL.md")
+    ]
     |> Enum.flat_map(&Path.wildcard/1)
     |> Enum.uniq()
     |> Enum.sort()
@@ -434,7 +440,7 @@ defmodule SkillKit.Eval do
       prompt: prompt,
       rubric: rubric,
       location: location,
-      module: resolve_module(Map.get(yaml, "module")),
+      module: build_module(Map.get(yaml, "module"), location),
       agent: Map.get(yaml, "agent"),
       system: Map.get(yaml, "system"),
       model: Map.get(yaml, "model"),
@@ -444,9 +450,52 @@ defmodule SkillKit.Eval do
     }
   end
 
-  defp resolve_module(nil), do: nil
+  # The subject module is the explicit `module:` frontmatter, else inferred
+  # from a `<source>.EVAL.md` sidecar: the module defined in the sibling
+  # `<source>.ex`. So `greeter.ex` + `greeter.EVAL.md` needs no frontmatter.
+  defp build_module(nil, location), do: infer_module(location)
+  defp build_module(name, _location), do: resolve_module(name)
+
   defp resolve_module(name) when is_binary(name), do: Module.concat([name])
   defp resolve_module(module) when is_atom(module), do: module
+
+  defp infer_module(nil), do: nil
+
+  defp infer_module(location) do
+    location
+    |> Path.basename()
+    |> sidecar_prefix()
+    |> source_module(Path.dirname(location))
+  end
+
+  defp source_module(nil, _dir), do: nil
+
+  defp source_module(prefix, dir) do
+    path = Path.join(dir, prefix <> ".ex")
+    if File.exists?(path), do: module_in_file(path), else: nil
+  end
+
+  defp sidecar_prefix(basename) do
+    cond do
+      String.ends_with?(basename, ".EVAL.md") -> String.replace_suffix(basename, ".EVAL.md", "")
+      String.ends_with?(basename, ".eval.md") -> String.replace_suffix(basename, ".eval.md", "")
+      true -> nil
+    end
+  end
+
+  defp module_in_file(path) do
+    case File.read(path) do
+      {:ok, content} -> first_defmodule(content)
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp first_defmodule(content) do
+    case Regex.run(~r/defmodule\s+([A-Z][\w.]*)/, content) do
+      [_, name] -> Module.concat([name])
+      _other -> nil
+    end
+  end
 
   defp providers(nil), do: []
   defp providers(specs) when is_list(specs), do: Enum.map(specs, &resolve_provider/1)

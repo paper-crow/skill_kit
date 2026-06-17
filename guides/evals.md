@@ -104,22 +104,22 @@ defmodule MyApp.Greeter do
 end
 ```
 
-**Sidecar `EVAL.md`** — keep the markdown in a file, name its target module in
-frontmatter:
+**Sidecar file** — keep the markdown in a file named after the source file. The
+subject module is read from the sibling `.ex`; no frontmatter:
 
-```markdown
----
-module: "MyApp.Greeter"
----
-## greets the user by name
-...
+```
+lib/my_app/
+  greeter.ex          # defmodule MyApp.Greeter
+  greeter.EVAL.md     # ## greets the user by name …
 ```
 
 If the subject module is itself a `SkillKit.Tool` it's offered to the agent as a
 tool; if it's a kit/skill provider it's loaded as a skill. Either way the
 module's MD5 anchors the cache. Discover `@eval` modules with
-`use SkillKit.Eval.Case, modules: [MyApp.Greeter]`; sidecars are found by `dir:`
-like any other `EVAL.md`.
+`use SkillKit.Eval.Case, modules: [MyApp.Greeter]`; sidecars are found by
+pointing `dir:` at your source tree (e.g. `dir: "lib"`). For the rare case where
+the sidecar can't sit beside its `.ex`, an explicit `module:` frontmatter key
+still works.
 
 ## Evaluating whole agents
 
