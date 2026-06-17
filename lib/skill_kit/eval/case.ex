@@ -50,6 +50,7 @@ defmodule SkillKit.Eval.Case do
   """
 
   alias SkillKit.Eval
+  alias SkillKit.Eval.Result
 
   @doc false
   defmacro __using__(opts) do
@@ -105,7 +106,7 @@ defmodule SkillKit.Eval.Case do
   # Surfaces non-fatal judge warnings on a passing eval — ExUnit prints nothing
   # for a pass, so a warning would otherwise be invisible.
   def emit_warnings(name, result) do
-    for warning <- SkillKit.Eval.Result.warnings(result) do
+    for warning <- Result.warnings(result) do
       IO.puts(:stderr, "  ⚠ #{name}: #{warning}")
     end
 
