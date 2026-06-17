@@ -32,6 +32,10 @@ defmodule SkillKit.Eval.Result do
 
   @doc """
   A human-readable explanation of why the eval failed, for ExUnit output.
+
+  Renders the failing checks (including the judge's verdict and reasoning) plus
+  the captured transcript — the prompt sent, the tools the agent called, and its
+  response — so a failure shows both *what* was judged and *why*.
   """
   @spec failure_message(t()) :: String.t()
   def failure_message(%__MODULE__{} = result) do
@@ -39,6 +43,8 @@ defmodule SkillKit.Eval.Result do
     eval #{inspect(result.eval.name)} failed #{count(result)}:
 
     #{format_failures(failures(result))}
+
+    #{format_transcript(result)}
     """
   end
 
@@ -49,9 +55,41 @@ defmodule SkillKit.Eval.Result do
   end
 
   defp format_failures(failures) do
-    Enum.map_join(failures, "\n", &format_failure/1)
+    Enum.map_join(failures, "\n\n", &format_failure/1)
   end
 
   defp format_failure(%Check{name: name, detail: nil}), do: "  ✗ #{name}"
-  defp format_failure(%Check{name: name, detail: detail}), do: "  ✗ #{name}\n      #{detail}"
+  defp format_failure(%Check{name: name, detail: detail}), do: "  ✗ #{name}\n#{indent(detail)}"
+
+  defp format_transcript(%__MODULE__{eval: eval, transcript: transcript}) do
+    [
+      "── transcript ──",
+      labeled("prompt", eval.prompt),
+      "  tools called: #{format_tools(transcript.tool_calls)}",
+      transcript_body(transcript)
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp transcript_body(%Transcript{status: :ok, response: response}) do
+    labeled("response", response)
+  end
+
+  defp transcript_body(%Transcript{status: :error, error: error}) do
+    "  error: #{inspect(error)}"
+  end
+
+  defp transcript_body(%Transcript{status: status}), do: "  status: #{status}"
+
+  defp labeled(label, nil), do: "  #{label}: (none)"
+  defp labeled(label, text), do: "  #{label}:\n#{indent(text)}"
+
+  defp format_tools([]), do: "(none)"
+  defp format_tools(names), do: Enum.join(names, ", ")
+
+  defp indent(text) do
+    text
+    |> String.split("\n")
+    |> Enum.map_join("\n", &("      " <> &1))
+  end
 end
