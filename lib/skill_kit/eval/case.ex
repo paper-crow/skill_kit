@@ -66,7 +66,8 @@ defmodule SkillKit.Eval.Case do
   defmacro __using__(opts) do
     run_opts = Keyword.get(opts, :run, [])
     storage = Keyword.get(opts, :storage, SkillKit.Storage.File)
-    tests = Enum.map(collect_evals(opts), &eval_test(&1, run_opts))
+    evals = collect_evals(Keyword.get(opts, :dir), module_atoms(opts, __CALLER__))
+    tests = Enum.map(evals, &eval_test(&1, run_opts))
 
     quote do
       use ExUnit.Case, async: false
@@ -100,8 +101,16 @@ defmodule SkillKit.Eval.Case do
   defp restore_storage(nil), do: Application.delete_env(:skill_kit, SkillKit.Storage)
   defp restore_storage(previous), do: Application.put_env(:skill_kit, SkillKit.Storage, previous)
 
-  defp collect_evals(opts) do
-    dir_evals(Keyword.get(opts, :dir)) ++ module_evals(Keyword.get(opts, :modules, []))
+  # Module names arrive as `{:__aliases__, ...}` AST in the macro opts; expand
+  # them against the caller's env to get the actual module atoms.
+  defp module_atoms(opts, caller) do
+    opts
+    |> Keyword.get(:modules, [])
+    |> Enum.map(&Macro.expand(&1, caller))
+  end
+
+  defp collect_evals(dir, modules) do
+    dir_evals(dir) ++ module_evals(modules)
   end
 
   defp dir_evals(nil), do: []

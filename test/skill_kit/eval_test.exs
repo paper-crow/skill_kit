@@ -147,7 +147,7 @@ defmodule SkillKit.EvalTest do
     end
 
     test "does not treat a non-kit subject module as a skill" do
-      eval = %Eval{name: "x", module: SkillKit.Tools.Shell}
+      eval = %Eval{name: "x", module: SkillKit.Eval.Transcript}
       assert Eval.skill_providers(eval) == []
     end
 
