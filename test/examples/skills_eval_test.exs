@@ -7,23 +7,22 @@ defmodule SkillKit.Examples.SkillsEvalTest do
   judge against Anthropic (`ANTHROPIC_API_KEY` required), so they are tagged
   `:eval` and excluded from the default suite. Run them on their own with:
 
-      ANTHROPIC_API_KEY=... SKILL_KIT_STORAGE=file \
-        mix test test/examples/skills_eval_test.exs --only eval
-
-  `SKILL_KIT_STORAGE=file` is needed because the test environment defaults to
-  in-memory storage, but the colocated `SKILL.md` files live on disk.
+      ANTHROPIC_API_KEY=... mix test test/examples/skills_eval_test.exs --only eval
 
   The agent and judge models are pinned to an explicit `anthropic:` URI so the
-  cases hit the real provider rather than the test mock. Passes are recorded in
-  `.skill_kit/eval_cache.bin`; re-runs skip any case whose skill source, prompt,
-  rubric, and models are unchanged. CI persists that file via the GitHub Actions
-  cache, so only changed skills pay for an API call.
+  cases hit the real provider rather than the test mock. `SkillKit.Eval.Case`
+  swaps in `File` storage for the duration of these tests (the test env defaults
+  to in-memory storage) so the colocated `SKILL.md` files resolve from disk.
+
+  Passes are recorded in `.skill_kit/eval_cache.bin`; re-runs skip any case whose
+  skill source, prompt, rubric, and models are unchanged. CI persists that file
+  via the GitHub Actions cache, so only changed skills pay for an API call.
   """
   use SkillKit.Eval.Case,
     dir: "examples/skills",
     run: [
-      model: "anthropic:claude-sonnet-4-20250514",
-      judge_model: "anthropic:claude-sonnet-4-20250514",
+      model: "anthropic:claude-sonnet-4-6",
+      judge_model: "anthropic:claude-sonnet-4-6",
       cache: ".skill_kit/eval_cache.bin"
     ]
 end

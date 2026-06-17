@@ -93,10 +93,9 @@ jobs:
         run: mix deps.get
 
       # Scope to the dogfood suite so only its eval-tagged cases run (a bare
-      # --only eval would also sweep in mock-based fixture eval tests). File
-      # storage lets the colocated SKILL.md files resolve from disk.
+      # --only eval would also sweep in mock-based fixture eval tests). The Case
+      # macro's setup swaps in File storage so colocated SKILL.md files resolve.
       - name: Run skill evals
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SKILL_KIT_STORAGE: file
         run: mix test test/examples/skills_eval_test.exs --only eval

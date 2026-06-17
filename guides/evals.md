@@ -11,7 +11,7 @@ evals alongside your unit tests.
 
 SkillKit dogfoods its own harness: the skills under `examples/skills/` carry
 colocated `EVAL.md` suites, wired up in `test/examples/skills_eval_test.exs`.
-Run them against a real provider with `mix test --include eval`.
+Run them against a real provider with `mix test --only eval`.
 
 ## Writing an eval
 
@@ -60,7 +60,7 @@ skills:
   - "skills/greeter"
 tools:
   - "SkillKit.Tools.Shell"
-model: "anthropic:claude-sonnet-4-20250514"
+model: "anthropic:claude-sonnet-4-6"
 system: "You are being evaluated."
 ---
 ## greets the user by name
@@ -103,14 +103,8 @@ ExUnit.start(exclude: [:eval])
 
 ```bash
 # run only the skill evals against a real provider
-ANTHROPIC_API_KEY=... SKILL_KIT_STORAGE=file mix test --only eval
+ANTHROPIC_API_KEY=... mix test --only eval
 ```
-
-If your skills under test live on disk (the colocated case), the eval run needs
-the `File` storage backend. SkillKit's test env defaults to in-memory storage,
-so its `config/runtime.exs` switches to `SkillKit.Storage.File` when
-`SKILL_KIT_STORAGE=file` is set — omit this if your evals provide skills through
-whatever backend you've already configured.
 
 Because the default test provider is the mock, pin the agent (and judge) to an
 explicit provider URI so the cases hit the real API:
@@ -119,10 +113,17 @@ explicit provider URI so the cases hit the real API:
 use SkillKit.Eval.Case,
   dir: "skills",
   run: [
-    model: "anthropic:claude-sonnet-4-20250514",
-    judge_model: "anthropic:claude-sonnet-4-20250514"
+    model: "anthropic:claude-sonnet-4-6",
+    judge_model: "anthropic:claude-sonnet-4-6"
   ]
 ```
+
+Eval skills are loaded from real files on disk, but the test environment
+defaults to in-memory storage. `SkillKit.Eval.Case` handles this for you: a
+per-test `setup` swaps in `SkillKit.Storage.File` while each `:eval` test runs
+(and restores the prior provider after), so colocated `SKILL.md` files resolve.
+Pass `storage: false` to the macro to leave your configured provider in place,
+or `storage: MyApp.Storage` to swap in a different one.
 
 Forward options to the runner with `:run`:
 
@@ -197,7 +198,6 @@ only changed skills cost an API call:
 - name: Run skill evals
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-    SKILL_KIT_STORAGE: file
   run: mix test test/examples/skills_eval_test.exs --only eval
 ```
 
@@ -221,7 +221,7 @@ The harness is plain functions, so you can run a case outside ExUnit:
 
 ```elixir
 {:ok, [eval | _]} = SkillKit.Eval.load_file("skills/greeter/EVAL.md")
-result = SkillKit.Eval.Runner.run(eval, model: "anthropic:claude-sonnet-4-20250514")
+result = SkillKit.Eval.Runner.run(eval, model: "anthropic:claude-sonnet-4-6")
 
 SkillKit.Eval.Result.passed?(result)
 #=> true

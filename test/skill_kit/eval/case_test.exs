@@ -30,3 +30,25 @@ defmodule SkillKit.Eval.CaseTest do
     assert length(test_fns) == 3
   end
 end
+
+defmodule SkillKit.Eval.CaseStorageTest do
+  # async: false — these mutate the global storage provider configuration.
+  use ExUnit.Case, async: false
+
+  test "swaps the storage provider for an eval-tagged context" do
+    SkillKit.Eval.Case.put_storage(%{eval: true}, SkillKit.Storage.File)
+    assert Application.get_env(:skill_kit, SkillKit.Storage)[:provider] == SkillKit.Storage.File
+  end
+
+  test "leaves the provider untouched when storage is false" do
+    before = Application.get_env(:skill_kit, SkillKit.Storage)
+    assert SkillKit.Eval.Case.put_storage(%{eval: true}, false) == :ok
+    assert Application.get_env(:skill_kit, SkillKit.Storage) == before
+  end
+
+  test "leaves the provider untouched for a non-eval context" do
+    before = Application.get_env(:skill_kit, SkillKit.Storage)
+    assert SkillKit.Eval.Case.put_storage(%{}, SkillKit.Storage.File) == :ok
+    assert Application.get_env(:skill_kit, SkillKit.Storage) == before
+  end
+end

@@ -22,8 +22,8 @@ defmodule SkillKit.Eval.Case do
       # test_helper.exs
       ExUnit.start(exclude: [:eval])
 
-      # run the skill evals against a configured provider
-      LLM_PROVIDER=anthropic mix test --include eval
+      # run only the skill evals against a real provider
+      ANTHROPIC_API_KEY=... mix test --only eval
 
   ## Options
 
@@ -31,6 +31,22 @@ defmodule SkillKit.Eval.Case do
       relative to the project root.
     * `:run` — keyword options forwarded to `SkillKit.Eval.Runner.run/2`
       (e.g. `[timeout: 60_000, judge: false]`).
+    * `:storage` — storage provider to use while these eval tests run, default
+      `SkillKit.Storage.File`. Eval skills are loaded from real files on disk,
+      but the test environment otherwise configures in-memory storage; a
+      per-test `setup` swaps the provider in (and restores it after) so
+      colocated `SKILL.md` files resolve. Set to `false` to leave the
+      configured provider untouched.
+
+  Because the agent and judge call a real provider, pin a provider URI via
+  `:run` so eval cases don't fall back to the test mock:
+
+      use SkillKit.Eval.Case,
+        dir: "skills",
+        run: [
+          model: "anthropic:claude-sonnet-4-6",
+          judge_model: "anthropic:claude-sonnet-4-6"
+        ]
   """
 
   alias SkillKit.Eval
@@ -39,6 +55,7 @@ defmodule SkillKit.Eval.Case do
   defmacro __using__(opts) do
     dir = Keyword.fetch!(opts, :dir)
     run_opts = Keyword.get(opts, :run, [])
+    storage = Keyword.get(opts, :storage, SkillKit.Storage.File)
     tests = Enum.map(Eval.load_dir!(dir), &eval_test(&1, run_opts))
 
     quote do
@@ -47,9 +64,31 @@ defmodule SkillKit.Eval.Case do
       alias SkillKit.Eval.Result
       alias SkillKit.Eval.Runner
 
+      setup context do
+        SkillKit.Eval.Case.put_storage(context, unquote(storage))
+      end
+
       unquote_splicing(tests)
     end
   end
+
+  @doc false
+  # Swaps the storage provider for an `:eval`-tagged test so disk-backed skill
+  # files resolve, restoring the prior configuration afterward. The eval-tag
+  # match keeps this inert for any non-eval test sharing the module.
+  def put_storage(_context, false), do: :ok
+
+  def put_storage(%{eval: true}, provider) do
+    previous = Application.get_env(:skill_kit, SkillKit.Storage)
+    Application.put_env(:skill_kit, SkillKit.Storage, provider: provider)
+    ExUnit.Callbacks.on_exit(fn -> restore_storage(previous) end)
+    :ok
+  end
+
+  def put_storage(_context, _provider), do: :ok
+
+  defp restore_storage(nil), do: Application.delete_env(:skill_kit, SkillKit.Storage)
+  defp restore_storage(previous), do: Application.put_env(:skill_kit, SkillKit.Storage, previous)
 
   defp eval_test(eval, run_opts) do
     quote do
