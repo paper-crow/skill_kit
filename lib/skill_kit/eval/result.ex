@@ -62,13 +62,14 @@ defmodule SkillKit.Eval.Result do
   defp format_failure(%Check{name: name, detail: detail}), do: "  ✗ #{name}\n#{indent(detail)}"
 
   defp format_transcript(%__MODULE__{eval: eval, transcript: transcript}) do
-    [
+    lines = [
       "── transcript ──",
       labeled("prompt", eval.prompt),
       "  tools called: #{format_tools(transcript.tool_calls)}",
       transcript_body(transcript)
     ]
-    |> Enum.join("\n")
+
+    Enum.join(lines, "\n")
   end
 
   defp transcript_body(%Transcript{status: :ok, response: response}) do
