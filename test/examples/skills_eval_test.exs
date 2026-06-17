@@ -4,13 +4,22 @@ defmodule SkillKit.Examples.SkillsEvalTest do
 
   Each `EVAL.md` sits next to its `SKILL.md`, so the skill under test loads
   automatically with no frontmatter. These tests drive a real agent and an LLM
-  judge, so they are tagged `:eval` and excluded from the default suite — opt in
-  with a configured provider:
+  judge against Anthropic (`ANTHROPIC_API_KEY` required), so they are tagged
+  `:eval` and excluded from the default suite. Run them on their own with:
 
-      LLM_PROVIDER=anthropic mix test --include eval
+      ANTHROPIC_API_KEY=... mix test --only eval
 
-  `cache: true` records passes under `_build/` so re-runs skip cases whose skill
-  source, prompt, rubric, and models are unchanged.
+  The agent and judge models are pinned to an explicit `anthropic:` URI so the
+  cases hit the real provider rather than the test mock. Passes are recorded in
+  `.skill_kit/eval_cache.bin`; re-runs skip any case whose skill source, prompt,
+  rubric, and models are unchanged. CI persists that file via the GitHub Actions
+  cache, so only changed skills pay for an API call.
   """
-  use SkillKit.Eval.Case, dir: "examples/skills", run: [cache: true]
+  use SkillKit.Eval.Case,
+    dir: "examples/skills",
+    run: [
+      model: "anthropic:claude-sonnet-4-20250514",
+      judge_model: "anthropic:claude-sonnet-4-20250514",
+      cache: ".skill_kit/eval_cache.bin"
+    ]
 end

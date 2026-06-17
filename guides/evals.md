@@ -102,8 +102,20 @@ ExUnit.start(exclude: [:eval])
 ```
 
 ```bash
-# run the skill evals against a configured provider
-LLM_PROVIDER=anthropic mix test --include eval
+# run only the skill evals against a real provider
+ANTHROPIC_API_KEY=... mix test --only eval
+```
+
+Because the default test provider is the mock, pin the agent (and judge) to an
+explicit provider URI so the cases hit the real API:
+
+```elixir
+use SkillKit.Eval.Case,
+  dir: "skills",
+  run: [
+    model: "anthropic:claude-sonnet-4-20250514",
+    judge_model: "anthropic:claude-sonnet-4-20250514"
+  ]
 ```
 
 Forward options to the runner with `:run`:
@@ -159,6 +171,38 @@ Because LLMs are non-deterministic, a cache hit means "this exact scope already
 passed, trust it" rather than a guaranteed-identical re-run — the right
 contract for an expensive suite, like a build cache. Delete the cache file to
 force a full re-run.
+
+## Running evals in CI
+
+SkillKit's own CI (`.github/workflows/ci.yml`) runs the dogfood evals as a
+separate, blocking `evals` job, and persists the result cache across runs so
+only changed skills cost an API call:
+
+```yaml
+- name: Cache eval results
+  uses: actions/cache@v4
+  with:
+    path: .skill_kit/eval_cache.bin
+    # run_id never pre-exists, so the cache is re-saved every run; restore-keys
+    # loads the most recent prior copy.
+    key: ${{ runner.os }}-evalcache-${{ github.run_id }}
+    restore-keys: ${{ runner.os }}-evalcache-
+
+- name: Run skill evals
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  run: mix test --only eval
+```
+
+A plain `actions/cache` keyed on `mix.lock` (like the deps cache) will **not**
+work for results: that key only changes with dependencies, and a cache is
+immutable per key, so an existing entry is never re-saved. The rolling
+`run_id` key above re-saves on every run.
+
+The eval job is gated by a `RUN_EVALS` flag so any repo can opt out: set the
+`RUN_EVALS` repository variable to `"false"` to skip it, or trigger a one-off
+run with the workflow's `run_evals` input. It is on by default and blocking — a
+failing eval fails the check.
 
 ## Running an eval directly
 

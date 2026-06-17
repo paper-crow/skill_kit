@@ -5,6 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_evals:
+        description: "Run the skill evals against the Anthropic API"
+        type: boolean
+        default: true
 
 env:
   MIX_ENV: test
@@ -47,3 +53,46 @@ jobs:
 
       - name: Test
         run: mix test
+
+  # Real-provider skill evals. Gated by the RUN_EVALS flag so any repo can turn
+  # them off: set the RUN_EVALS variable to "false" to skip, or use the manual
+  # run_evals input. Default is on, and a failure blocks the check.
+  evals:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_evals) ||
+      (github.event_name != 'workflow_dispatch' && vars.RUN_EVALS != 'false')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17"
+          otp-version: "27"
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+
+      # Rolling cache: the run_id key never pre-exists, so the result cache is
+      # re-saved every run, while restore-keys loads the most recent prior copy.
+      - name: Cache eval results
+        uses: actions/cache@v4
+        with:
+          path: .skill_kit/eval_cache.bin
+          key: ${{ runner.os }}-evalcache-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-evalcache-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Run skill evals
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: mix test --only eval
