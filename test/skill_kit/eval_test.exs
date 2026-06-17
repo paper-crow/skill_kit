@@ -2,6 +2,7 @@ defmodule SkillKit.EvalTest do
   use ExUnit.Case, async: true
 
   alias SkillKit.Eval
+  alias SkillKit.Test.EvalSubject
 
   @fixtures Path.expand("../support/fixtures/evals", __DIR__)
   @colocated Path.expand("../support/fixtures/colocated_skill", __DIR__)
@@ -120,11 +121,11 @@ defmodule SkillKit.EvalTest do
 
   describe "@eval attributes" do
     test "are collected into __skill_evals__/0, each tagged with the module" do
-      assert [eval] = SkillKit.Test.EvalSubject.__skill_evals__()
+      assert [eval] = EvalSubject.__skill_evals__()
       assert eval.name == "greets by name"
       assert eval.prompt == "Hi, I'm Sam"
       assert eval.rubric == "Greets the user by name."
-      assert eval.module == SkillKit.Test.EvalSubject
+      assert eval.module == EvalSubject
     end
   end
 
