@@ -1099,7 +1099,7 @@ The following items surfaced during the spec audit but are outside the orchestra
 
 2. **User message entry point.** The public API for sending messages into a primary agent from the host application (e.g. `Agent.send(agent_name, message)`). Defines the boundary between the host and the orchestration layer.
 
-3. **Agent.Definition LLM opts.** The Definition struct needs to carry enough LLM configuration to build opts for `SkillKit.LLM.stream/2` — backend, model, and any provider-specific config. May use the same `skill_kit:backend:*` metadata convention as skills.
+3. **Agent.Definition LLM opts.** The Definition struct needs to carry enough LLM configuration to build opts for `SkillKit.LLM.stream/2` — backend, model, and any provider-specific config. May use the same `metadata.model` provider-URI convention as skills.
 
 4. **Context window management.** Conversation history grows unbounded. Needs truncation, summarization, or sliding window strategy before hitting provider context limits.
 

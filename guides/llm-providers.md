@@ -190,6 +190,12 @@ Once registered, the provider is addressable via model URI strings:
 SkillKit.LLM.stream(messages, model: "my_provider://my-model-latest?max_tokens=4096")
 ```
 
+Query-string params on the URI (`?max_tokens=4096`) are decoded and handed to
+your `stream/2` as an opaque string map under `opts[:params]` — e.g.
+`%{"max_tokens" => "4096"}`. SkillKit does not coerce or validate them: your
+adapter picks out the params it supports and casts them to the types its API
+expects (see how `SkillKit.LLM.Anthropic` merges `:params`).
+
 ## Message encoding
 
 `SkillKit.LLM.stream/2` passes `SkillKit.Types.*` message structs to the adapter.
