@@ -8,7 +8,7 @@ defmodule Mix.Tasks.SkillKit.Demo do
   use Mix.Task
 
   alias SkillKit.Event.Delta
-  alias SkillKit.Event.Error
+  alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Types.AssistantMessage
 
   @shortdoc "Run a single-turn agent conversation"
@@ -38,28 +38,19 @@ defmodule Mix.Tasks.SkillKit.Demo do
     Mix.shell().info("Sent: #{prompt}")
     :ok = SkillKit.send_message(agent, prompt)
 
-    receive_events(agent.name)
+    agent.name
+    |> SkillKit.Stream.stream(timeout: @idle_timeout)
+    |> Stream.each(&print/1)
+    |> Enum.reduce(:timeout, fn event, _ -> event end)
+    |> report()
 
     SkillKit.stop_agent(agent)
   end
 
-  defp receive_events(agent_name) do
-    receive do
-      %Delta{agent: ^agent_name, text: text} ->
-        IO.write(text)
-        receive_events(agent_name)
+  defp print(%Delta{text: text}), do: IO.write(text)
+  defp print(_event), do: :ok
 
-      %AssistantMessage{agent: ^agent_name} ->
-        IO.puts("\n--- Turn complete ---")
-        receive_events(agent_name)
-
-      %Error{agent: ^agent_name, reason: reason} ->
-        Mix.shell().error("\nError: #{inspect(reason)}")
-
-      _other ->
-        receive_events(agent_name)
-    after
-      @idle_timeout -> :ok
-    end
-  end
+  defp report(%AssistantMessage{}), do: IO.puts("--- Turn complete ---")
+  defp report(%EventError{reason: reason}), do: Mix.shell().error("\nError: #{inspect(reason)}")
+  defp report(:timeout), do: :ok
 end

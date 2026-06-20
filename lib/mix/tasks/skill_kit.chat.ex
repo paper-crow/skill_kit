@@ -27,6 +27,8 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   use Mix.Task
 
+  alias Mix.SkillKit.Dotenv
+  alias SkillKit.AgentRef
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error
   alias SkillKit.Event.ToolCallComplete
@@ -40,7 +42,7 @@ defmodule Mix.Tasks.SkillKit.Chat do
 
   @impl true
   def run(args) do
-    load_dotenv()
+    Dotenv.load()
     Mix.Task.run("app.start")
 
     agents_dir = System.get_env("SKILL_KIT_AGENTS", "examples/agents")
@@ -91,53 +93,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     Process.exit(http_sup, :shutdown)
     Process.exit(webhook_sup, :shutdown)
   end
-
-  # Loads KEY=value pairs from a project-root `.env` into the process
-  # environment. Lines starting with `#` are ignored. Existing env vars
-  # take precedence (so a shell export can override the file).
-  defp load_dotenv do
-    case File.read(".env") do
-      {:ok, content} -> apply_dotenv(content)
-      {:error, _} -> :ok
-    end
-  end
-
-  defp apply_dotenv(content) do
-    content
-    |> String.split("\n")
-    |> Enum.each(&put_env_line/1)
-  end
-
-  defp put_env_line(line) do
-    trimmed = String.trim(line)
-    put_env_kv(trimmed)
-  end
-
-  defp put_env_kv(""), do: :ok
-  defp put_env_kv("#" <> _), do: :ok
-
-  defp put_env_kv(line) do
-    case String.split(line, "=", parts: 2) do
-      [key, value] -> put_env_if_missing(String.trim(key), unquote_value(value))
-      _ -> :ok
-    end
-  end
-
-  defp put_env_if_missing(key, value) do
-    case System.get_env(key) do
-      nil -> System.put_env(key, value)
-      _existing -> :ok
-    end
-  end
-
-  defp unquote_value(value) do
-    trimmed = String.trim(value)
-    strip_quotes(trimmed)
-  end
-
-  defp strip_quotes(<<?", rest::binary>>), do: String.trim_trailing(rest, ~s("))
-  defp strip_quotes(<<?', rest::binary>>), do: String.trim_trailing(rest, "'")
-  defp strip_quotes(value), do: value
 
   defp webhook_port do
     case System.get_env("SKILL_KIT_WEBHOOK_PORT") do
@@ -269,13 +224,13 @@ defmodule Mix.Tasks.SkillKit.Chat do
   defp printer_loop(root_name) do
     receive do
       %Delta{agent: agent, text: text} ->
-        print_delta(origin(agent, root_name), text)
+        print_delta(AgentRef.origin(agent, root_name), text)
 
       %ToolCallComplete{agent: agent, name: name, input: input} ->
-        print_tool_call(origin(agent, root_name), name, input)
+        print_tool_call(AgentRef.origin(agent, root_name), name, input)
 
       %ToolResult{agent: agent} = result ->
-        print_tool_result(origin(agent, root_name), result)
+        print_tool_result(AgentRef.origin(agent, root_name), result)
 
       %AssistantMessage{agent: agent} ->
         if agent == root_name, do: IO.puts("\n")
@@ -292,16 +247,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
     printer_loop(root_name)
   end
 
-  defp origin(agent_name, root_name) do
-    cond do
-      agent_name == root_name -> :root
-      String.starts_with?(agent_name, root_name <> "/skill:") -> :skill
-      String.starts_with?(agent_name, root_name <> "/delivery:") -> :delivery
-      String.starts_with?(agent_name, root_name <> "/") -> :subloop
-      true -> :other
-    end
-  end
-
   defp print_delta(:root, text), do: IO.write(text)
   defp print_delta(:delivery, text), do: IO.write(IO.ANSI.format([:cyan, text]))
   defp print_delta(_origin, _text), do: :ok
@@ -311,14 +256,23 @@ defmodule Mix.Tasks.SkillKit.Chat do
   end
 
   defp print_tool_call(:root, name, input) do
-    IO.puts(IO.ANSI.format([:faint, "  ↳ #{name}(#{format_input(name, input)})"]))
+    IO.puts(IO.ANSI.format([:faint, tool_trace(name, input)]))
   end
 
   defp print_tool_call(origin, name, input) when origin in [:skill, :delivery, :subloop] do
-    IO.puts(IO.ANSI.format([:cyan, "  ↳ #{name}(#{format_input(name, input)})"]))
+    IO.puts(IO.ANSI.format([:cyan, tool_trace(name, input)]))
   end
 
   defp print_tool_call(:other, _name, _input), do: :ok
+
+  defp tool_trace(name, input) do
+    "  ↳ #{name}(#{format_input(input)})"
+  end
+
+  defp format_input(%{"command" => command}), do: command
+  defp format_input(%{"name" => name}), do: name
+  defp format_input(input) when map_size(input) == 0, do: ""
+  defp format_input(input), do: inspect(input, limit: 3)
 
   # Skip printing the final `activate_skill` tool result — the sub-loop
   # already streamed that text via Delta events, so printing it again
@@ -350,11 +304,6 @@ defmodule Mix.Tasks.SkillKit.Chat do
   end
 
   defp truncate(content), do: inspect(content, limit: 4)
-
-  defp format_input("bash", %{"command" => cmd}), do: cmd
-  defp format_input("activate_skill", %{"name" => name}), do: name
-  defp format_input(_name, input) when map_size(input) == 0, do: ""
-  defp format_input(_name, input), do: inspect(input, limit: 3)
 end
 
 defmodule Mix.Tasks.SkillKit.Chat.WebhookHost do

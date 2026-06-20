@@ -37,6 +37,7 @@ defmodule Mix.Tasks.SkillKit.Ralph do
 
   use Mix.Task
 
+  alias Mix.SkillKit.Dotenv
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Event.ToolCallComplete
@@ -48,7 +49,7 @@ defmodule Mix.Tasks.SkillKit.Ralph do
 
   @impl true
   def run(args) do
-    load_dotenv()
+    Dotenv.load()
     Mix.Task.run("app.start")
 
     {opts, positional, _} = OptionParser.parse(args, switches: @switches)
@@ -97,9 +98,9 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     trigger = "Plan a TODO file at #{todo_path} for this goal: #{goal}"
     :ok = SkillKit.send_message(agent, trigger)
 
-    case wait_for_turn() do
-      {:ok, _msg} -> :ok
-      {:error, reason} -> abort!(agent, "planning failed: #{inspect(reason)}")
+    case run_turn(agent.name) do
+      %AssistantMessage{} -> :ok
+      %EventError{reason: reason} -> abort!(agent, "planning failed: #{inspect(reason)}")
     end
   end
 
@@ -120,10 +121,17 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     IO.puts(IO.ANSI.format([:bright, :magenta, "\n--- iter #{iter} ---", :reset]))
     :ok = SkillKit.send_message(agent, "Iterate on #{todo_path}.")
 
-    case wait_for_turn() do
-      {:ok, %AssistantMessage{content: content}} -> next_step(content, agent, todo_path, iter)
-      {:error, reason} -> {:error, reason}
+    case run_turn(agent.name) do
+      %AssistantMessage{content: content} -> next_step(content, agent, todo_path, iter)
+      %EventError{reason: reason} -> {:error, reason}
     end
+  end
+
+  defp run_turn(agent_name) do
+    agent_name
+    |> SkillKit.Stream.stream(timeout: :infinity)
+    |> Stream.each(&print/1)
+    |> Enum.reduce(nil, fn event, _ -> event end)
   end
 
   defp next_step(content, agent, todo_path, iter) do
@@ -133,30 +141,18 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     end
   end
 
-  defp wait_for_turn do
-    receive do
-      %AssistantMessage{} = msg ->
-        {:ok, msg}
+  defp print(%Delta{text: text}), do: IO.write(text)
 
-      %EventError{reason: reason} ->
-        {:error, reason}
-
-      %Delta{text: text} ->
-        IO.write(text)
-        wait_for_turn()
-
-      %ToolCallComplete{name: name, input: input} ->
-        IO.puts(IO.ANSI.format([:faint, "\n  ↳ #{name}(#{format_input(input)})", :reset]))
-        wait_for_turn()
-
-      _other ->
-        wait_for_turn()
-    end
+  defp print(%ToolCallComplete{name: name, input: input}) do
+    trace = "  ↳ #{name}(#{format_input(input)})"
+    IO.puts(IO.ANSI.format([:faint, "\n" <> trace, :reset]))
   end
 
-  defp format_input(%{"command" => cmd}), do: cmd
+  defp print(_event), do: :ok
+
+  defp format_input(%{"command" => command}), do: command
   defp format_input(%{"name" => name}), do: name
-  defp format_input(input) when is_map(input) and map_size(input) == 0, do: ""
+  defp format_input(input) when map_size(input) == 0, do: ""
   defp format_input(input), do: inspect(input, limit: 3)
 
   defp report(:done) do
@@ -167,50 +163,4 @@ defmodule Mix.Tasks.SkillKit.Ralph do
     IO.puts(IO.ANSI.format([:red, "\nRalph failed: ", :reset, inspect(reason), "\n"]))
     exit({:shutdown, 1})
   end
-
-  # --- dotenv (mirror of skill_kit.chat) -----------------------------------
-
-  defp load_dotenv do
-    case File.read(".env") do
-      {:ok, content} -> apply_dotenv(content)
-      {:error, _} -> :ok
-    end
-  end
-
-  defp apply_dotenv(content) do
-    content
-    |> String.split("\n")
-    |> Enum.each(&put_env_line/1)
-  end
-
-  defp put_env_line(line) do
-    trimmed = String.trim(line)
-    put_env_kv(trimmed)
-  end
-
-  defp put_env_kv(""), do: :ok
-  defp put_env_kv("#" <> _), do: :ok
-
-  defp put_env_kv(line) do
-    case String.split(line, "=", parts: 2) do
-      [key, value] -> put_env_if_missing(String.trim(key), unquote_value(value))
-      _ -> :ok
-    end
-  end
-
-  defp put_env_if_missing(key, value) do
-    case System.get_env(key) do
-      nil -> System.put_env(key, value)
-      _existing -> :ok
-    end
-  end
-
-  defp unquote_value(value) do
-    trimmed = String.trim(value)
-    strip_quotes(trimmed)
-  end
-
-  defp strip_quotes(<<?", rest::binary>>), do: String.trim_trailing(rest, ~s("))
-  defp strip_quotes(<<?', rest::binary>>), do: String.trim_trailing(rest, "'")
-  defp strip_quotes(value), do: value
 end

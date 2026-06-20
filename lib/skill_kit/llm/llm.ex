@@ -125,18 +125,17 @@ defmodule SkillKit.LLM do
 
   @doc "Looks up a provider module by scheme name."
   @spec get_provider(atom() | String.t()) :: {:ok, module()} | {:error, term()}
-  def get_provider(name) when is_binary(name) do
-    name
-    |> String.to_existing_atom()
-    |> get_provider()
-  rescue
-    ArgumentError -> {:error, {:unknown_provider, name}}
-  end
-
   def get_provider(name) when is_atom(name) do
     case Keyword.fetch(providers(), name) do
       {:ok, mod} -> {:ok, mod}
       :error -> {:error, {:unknown_provider, name}}
+    end
+  end
+
+  def get_provider(name) when is_binary(name) do
+    case Enum.find(providers(), fn {key, _mod} -> Atom.to_string(key) == name end) do
+      {_key, mod} -> {:ok, mod}
+      nil -> {:error, {:unknown_provider, name}}
     end
   end
 

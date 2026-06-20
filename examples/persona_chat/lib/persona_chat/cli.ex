@@ -10,7 +10,6 @@ defmodule PersonaChat.CLI do
 
   alias SkillKit.Agent
   alias SkillKit.Event.Delta
-  alias SkillKit.Types.AssistantMessage
 
   @data_dir "data"
   @personas_dir "agents/personas"
@@ -110,29 +109,18 @@ defmodule PersonaChat.CLI do
 
   defp handle_input(agent, message) do
     SkillKit.send_message(agent, message)
-    receive_response()
+
+    agent.name
+    |> SkillKit.Stream.stream()
+    |> Stream.each(&print/1)
+    |> Stream.run()
+
+    IO.puts("")
     chat_loop(agent)
   end
 
-  defp receive_response do
-    receive do
-      %Delta{text: text} ->
-        IO.write(text)
-        receive_response()
-
-      %AssistantMessage{} ->
-        IO.puts("\n")
-
-      %SkillKit.Event.Error{reason: reason} ->
-        IO.puts("\n[error: #{inspect(reason)}]")
-
-      _other ->
-        receive_response()
-    after
-      60_000 ->
-        IO.puts("\n[timeout waiting for response]")
-    end
-  end
+  defp print(%Delta{text: text}), do: IO.write(text)
+  defp print(_event), do: :ok
 
   defp select_and_chat(username, owner) do
     personas = list_available_personas()
