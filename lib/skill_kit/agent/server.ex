@@ -23,6 +23,7 @@ defmodule SkillKit.Agent.Server do
   alias SkillKit.Event.ToolCallStart
   alias SkillKit.Event.Usage
   alias SkillKit.Hooks
+  alias SkillKit.LLM.Pricing
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.SystemMessage
   alias SkillKit.Types.ToolCall
@@ -301,6 +302,7 @@ defmodule SkillKit.Agent.Server do
 
       {:ok, event_stream} ->
         acc = Enum.reduce(event_stream, StreamAccumulator.new(), &process_event(&1, &2, state))
+        emit_usage_telemetry(acc.usage, state)
         response = StreamAccumulator.finalize(acc)
         state = %{state | messages: state.messages ++ [response]}
         handle_response(response, state)
@@ -367,19 +369,22 @@ defmodule SkillKit.Agent.Server do
     %{acc | tool_calls: acc.tool_calls ++ [tool_call]}
   end
 
-  defp process_event(%Usage{} = usage, acc, _state) do
-    merged = %{
-      input_tokens: acc.usage.input_tokens + usage.input_tokens,
-      output_tokens: acc.usage.output_tokens + usage.output_tokens
-    }
-
-    %{acc | usage: merged}
+  defp process_event(%Usage{} = usage, acc, state) do
+    notify_caller(state, %{usage | agent: state.agent.name})
+    %{acc | usage: StreamAccumulator.merge_usage(acc.usage, usage)}
   end
 
   defp process_event(%Done{}, acc, _state), do: acc
   defp process_event(_other, acc, _state), do: acc
 
   # --- Helpers ---
+
+  defp emit_usage_telemetry(usage_map, state) do
+    cost = Pricing.cost(struct(Usage, usage_map), state.agent.model)
+    measurements = Map.put(usage_map, :cost_usd, cost)
+    meta = %{agent_name: state.agent.name, model: state.agent.model}
+    SkillKit.Telemetry.event([:agent, :usage], measurements, meta)
+  end
 
   defp notify_caller(%{agent: %{caller: nil}}, _event), do: :ok
 

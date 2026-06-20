@@ -1,6 +1,7 @@
 defmodule SkillKit.LLM.AnthropicTest do
   use ExUnit.Case, async: true
 
+  alias SkillKit.LLM.Anthropic
   alias SkillKit.LLM.Anthropic, as: Adapter
   alias SkillKit.Types.UserMessage
 
@@ -16,8 +17,14 @@ defmodule SkillKit.LLM.AnthropicTest do
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         decoded = Jason.decode!(body)
 
-        # Verify the encoder produced Anthropic-format messages
-        assert [%{"role" => "user", "content" => "Hi"}] = decoded["messages"]
+        # Verify the encoder produced Anthropic-format messages with caching on by default
+        assert [
+                 %{
+                   "role" => "user",
+                   "content" => [%{"type" => "text", "text" => "Hi", "cache_control" => _}]
+                 }
+               ] =
+                 decoded["messages"]
 
         conn =
           conn
@@ -101,5 +108,48 @@ defmodule SkillKit.LLM.AnthropicTest do
       {:ok, conn} = Plug.Conn.chunk(conn, chunk)
       conn
     end)
+  end
+
+  describe "build_request/2 caching" do
+    test "caches the system prompt and the last message by default" do
+      {messages, opts} =
+        Anthropic.build_request([%UserMessage{content: "hi"}],
+          system: "You are a bot.",
+          model: "claude-sonnet-4-6"
+        )
+
+      assert [%{"type" => "text", "cache_control" => %{"type" => "ephemeral"}}] = opts[:system]
+
+      last_block =
+        messages
+        |> List.last()
+        |> Map.get("content")
+        |> List.last()
+
+      assert last_block["cache_control"] == %{"type" => "ephemeral"}
+    end
+
+    test "cache: false leaves the system a plain string and messages untagged" do
+      {messages, opts} =
+        Anthropic.build_request([%UserMessage{content: "hi"}],
+          system: "You are a bot.",
+          model: "claude-sonnet-4-6",
+          cache: false
+        )
+
+      assert opts[:system] == "You are a bot."
+      assert List.last(messages) == %{"role" => "user", "content" => "hi"}
+    end
+
+    test "cache_ttl: \"1h\" sets the 1h ttl on the system block" do
+      {_messages, opts} =
+        Anthropic.build_request([%UserMessage{content: "hi"}],
+          system: "S",
+          model: "claude-sonnet-4-6",
+          cache_ttl: "1h"
+        )
+
+      assert [%{"cache_control" => %{"type" => "ephemeral", "ttl" => "1h"}}] = opts[:system]
+    end
   end
 end

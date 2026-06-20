@@ -115,6 +115,22 @@ defmodule SkillKit.Event.StreamableTest do
       event = %MessageStart{id: "msg_1", usage: nil}
       assert {[], _acc} = Streamable.stream(event, new_acc())
     end
+
+    test "parses cache_creation and cache_read token fields" do
+      event = %MessageStart{
+        usage: %{
+          "input_tokens" => 50,
+          "cache_creation_input_tokens" => 200,
+          "cache_read_input_tokens" => 800
+        }
+      }
+
+      assert {[usage], _acc} = Streamable.stream(event, %{})
+      assert usage.input_tokens == 50
+      assert usage.cache_creation_input_tokens == 200
+      assert usage.cache_read_input_tokens == 800
+      assert usage.output_tokens == 0
+    end
   end
 
   describe "MessageDelta" do

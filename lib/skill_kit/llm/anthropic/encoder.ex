@@ -94,4 +94,38 @@ defmodule SkillKit.LLM.Anthropic.Encoder do
       "input_schema" => tool.input_schema
     }
   end
+
+  @doc "Builds an ephemeral cache_control map for the given TTL."
+  def cache_control("1h"), do: %{"type" => "ephemeral", "ttl" => "1h"}
+  def cache_control(_ttl), do: %{"type" => "ephemeral"}
+
+  @doc "Wraps a system prompt string in a cached text-block list."
+  def cache_system(nil, _ttl), do: nil
+  def cache_system("", _ttl), do: ""
+
+  def cache_system(system, ttl) when is_binary(system) do
+    [%{"type" => "text", "text" => system, "cache_control" => cache_control(ttl)}]
+  end
+
+  @doc "Tags the last content block of the last encoded message with cache_control."
+  def cache_last_message([], _ttl), do: []
+
+  def cache_last_message(messages, ttl) do
+    {init, [last]} = Enum.split(messages, -1)
+    init ++ [put_block_cache(last, ttl)]
+  end
+
+  defp put_block_cache(%{"content" => content} = message, ttl) when is_binary(content) do
+    block = %{"type" => "text", "text" => content, "cache_control" => cache_control(ttl)}
+    Map.put(message, "content", [block])
+  end
+
+  defp put_block_cache(%{"content" => blocks} = message, ttl)
+       when is_list(blocks) and blocks != [] do
+    {init, [last]} = Enum.split(blocks, -1)
+    tagged = Map.put(last, "cache_control", cache_control(ttl))
+    Map.put(message, "content", init ++ [tagged])
+  end
+
+  defp put_block_cache(message, _ttl), do: message
 end

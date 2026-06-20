@@ -173,4 +173,71 @@ defmodule SkillKit.LLM.Anthropic.EncoderTest do
       assert schema["properties"]["command"]
     end
   end
+
+  describe "cache_control/1" do
+    test "defaults to ephemeral with no ttl" do
+      assert Encoder.cache_control("5m") == %{"type" => "ephemeral"}
+    end
+
+    test "adds the 1h ttl when requested" do
+      assert Encoder.cache_control("1h") == %{"type" => "ephemeral", "ttl" => "1h"}
+    end
+  end
+
+  describe "cache_system/2" do
+    test "wraps a system string in a cached text block" do
+      assert Encoder.cache_system("You are a bot.", "5m") == [
+               %{
+                 "type" => "text",
+                 "text" => "You are a bot.",
+                 "cache_control" => %{"type" => "ephemeral"}
+               }
+             ]
+    end
+
+    test "passes nil through unchanged" do
+      assert Encoder.cache_system(nil, "5m") == nil
+    end
+  end
+
+  describe "cache_last_message/2" do
+    test "tags the last block of the last message, leaving earlier messages untouched" do
+      messages = [
+        %{"role" => "user", "content" => "first"},
+        %{"role" => "user", "content" => "last"}
+      ]
+
+      result = Encoder.cache_last_message(messages, "5m")
+
+      assert List.first(result) == %{"role" => "user", "content" => "first"}
+
+      assert List.last(result) == %{
+               "role" => "user",
+               "content" => [
+                 %{
+                   "type" => "text",
+                   "text" => "last",
+                   "cache_control" => %{"type" => "ephemeral"}
+                 }
+               ]
+             }
+    end
+
+    test "tags the final block when content is already a block list" do
+      messages = [
+        %{
+          "role" => "user",
+          "content" => [%{"type" => "tool_result", "tool_use_id" => "x", "content" => "r"}]
+        }
+      ]
+
+      [message] = Encoder.cache_last_message(messages, "5m")
+      last_block = List.last(message["content"])
+      assert last_block["cache_control"] == %{"type" => "ephemeral"}
+    end
+
+    test "passes an empty list through unchanged" do
+      assert Encoder.cache_last_message([], "5m") == []
+    end
+  end
 end

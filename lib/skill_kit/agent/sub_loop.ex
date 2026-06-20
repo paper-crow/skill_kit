@@ -120,13 +120,7 @@ defmodule SkillKit.Agent.SubLoop do
 
   defp process_event(%Usage{} = usage, acc, agent, sub_name) do
     notify_caller(agent, %{usage | agent: sub_name})
-
-    merged = %{
-      input_tokens: acc.usage.input_tokens + usage.input_tokens,
-      output_tokens: acc.usage.output_tokens + usage.output_tokens
-    }
-
-    %{acc | usage: merged}
+    %{acc | usage: StreamAccumulator.merge_usage(acc.usage, usage)}
   end
 
   defp process_event(%Done{}, acc, _agent, _sub_name), do: acc

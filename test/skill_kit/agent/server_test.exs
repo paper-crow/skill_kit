@@ -350,6 +350,52 @@ defmodule SkillKit.Agent.ServerTest do
     end
   end
 
+  describe "usage telemetry" do
+    test "emits token counts and cost after an LLM request", %{agent: agent} do
+      test_pid = self()
+      handler_id = "usage-telemetry-#{:erlang.unique_integer([:positive])}"
+
+      :telemetry.attach(
+        handler_id,
+        [:skill_kit, :agent, :usage],
+        fn _event, measurements, metadata, _config ->
+          send(test_pid, {:usage_event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      Mox.expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+        events = [
+          %SkillKit.Event.Delta{text: "hi"},
+          %SkillKit.Event.Usage{
+            input_tokens: 100,
+            output_tokens: 20,
+            cache_read_input_tokens: 900
+          },
+          %SkillKit.Event.Done{stop_reason: :end_turn}
+        ]
+
+        {:ok, Stream.map(events, & &1)}
+      end)
+
+      {:ok, pid} = Server.start_link(%{agent | model: "claude-sonnet-4-6", caller: self()})
+      Mox.allow(SkillKit.LLM.Mock, self(), pid)
+      send(pid, {:mailbox_flush, [%UserMessage{content: "hello"}]})
+
+      assert_receive {:usage_event, measurements, metadata}, 1000
+      assert measurements.input_tokens == 100
+      assert measurements.output_tokens == 20
+      assert measurements.cache_read_input_tokens == 900
+      assert metadata.agent_name == agent.name
+      assert metadata.model == "claude-sonnet-4-6"
+
+      expected = (100 * 3.0 + 20 * 15.0 + 900 * 3.0 * 0.1) / 1_000_000
+      assert_in_delta measurements.cost_usd, expected, 1.0e-9
+    end
+  end
+
   describe "natural completion" do
     test "subagent terminates with {:shutdown, {:result, msg}} after final response", %{
       agent: agent,

@@ -2,7 +2,14 @@ defimpl SkillKit.Event.Streamable, for: Anthropic.Event.MessageStart do
   alias SkillKit.Event.Usage
 
   def stream(%{usage: usage}, acc) when is_map(usage) do
-    {[%Usage{input_tokens: usage["input_tokens"] || 0, output_tokens: 0}], acc}
+    event = %Usage{
+      input_tokens: usage["input_tokens"] || 0,
+      output_tokens: 0,
+      cache_creation_input_tokens: usage["cache_creation_input_tokens"] || 0,
+      cache_read_input_tokens: usage["cache_read_input_tokens"] || 0
+    }
+
+    {[event], acc}
   end
 
   def stream(_, acc), do: {[], acc}
