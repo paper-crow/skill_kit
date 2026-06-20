@@ -5,13 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-06-20
 
 ### Added
 
 - Anthropic prompt caching, on by default: `SkillKit.LLM.Anthropic` places two cache breakpoints per request — one covering the system prompt + tool list (the stable prefix) and a rolling one on the last user message — so repeated turns read from Anthropic's prompt cache. TTL defaults to `"5m"`; disable with `cache: false` or extend with `cache_ttl: "1h"`, set via `config :skill_kit, SkillKit.LLM.Anthropic` or per-call `stream/2` opts. Cache read/write token counts now flow through `SkillKit.Event.Usage`. New transforms live in `SkillKit.LLM.Anthropic.Encoder` (`cache_last_message/2`, `cache_system/2`).
 - `SkillKit.LLM.Pricing`: derives request cost from token usage — including cache-read/write input tokens — for a given model, enabling per-call cost reporting.
 - Usage and cost telemetry: the agent's stream accumulator accumulates cache token counts and emits usage+cost telemetry, forwarding `Usage` events (now carrying cache counts) to the caller.
+
+[0.4.0]: https://github.com/paper-crow/skill_kit/releases/tag/v0.4.0
 
 ## [0.3.0] - 2026-06-20
 

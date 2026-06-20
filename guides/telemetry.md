@@ -85,12 +85,14 @@ SkillKit.Telemetry.attach_many(
 | `[:skill_kit, :llm, :stream, :start]` | span start | An LLM stream is about to begin |
 | `[:skill_kit, :llm, :stream, :stop]` | span stop | Stream completed (success or error) |
 | `[:skill_kit, :llm, :stream, :error]` | point | Model URI could not be resolved before the stream |
+| `[:skill_kit, :agent, :usage]` | point | Per-turn token usage and derived cost, after a turn's `Usage` events are merged |
 
 #### Measurements and metadata
 
 | Event | Measurements | Metadata keys |
 |---|---|---|
 | `:stream, :start` | `:system_time` | `:provider` (module), `:model` (string) |
+| `:agent, :usage` | `:input_tokens`, `:output_tokens`, `:cache_creation_input_tokens`, `:cache_read_input_tokens`, `:cost_usd` | `:agent_name` (string), `:model` (string) |
 | `:stream, :stop` | `:duration` | `:provider`, `:model`, `:error` (on failure) |
 | `:stream, :error` | `%{}` | `:error` (the `{:error, _}` tuple), `:model` (string) |
 
