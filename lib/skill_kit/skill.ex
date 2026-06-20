@@ -33,6 +33,27 @@ defmodule SkillKit.Skill do
   - Exactly one colon separates the namespace from the skill name
 
   Examples: `"files:read"`, `"tools:web-search"`, `"my-org:analyze_data"`
+
+  ## Reserved Metadata Keys
+
+  Most `:metadata` is opaque and passed through untouched. One key is
+  reserved by the framework:
+
+  - `"model"` — runs the skill's activation sub-loop on a specific model
+    instead of the parent agent's. The value is a provider-URI string in the
+    same form as `AGENT.md`'s `model:` (e.g. `"anthropic://claude-sonnet-4-6"`,
+    `"openinfer://..."`, or a bare model name resolving to the default
+    provider; `?max_tokens=...`-style query params ride along to the
+    provider). When unset, blank, or naming a provider that isn't configured,
+    the activation falls back to the parent agent's model (the fallback is
+    logged). Declared in `SKILL.md` frontmatter under `metadata:`:
+
+        ---
+        name: design
+        description: Authors the OG template Liquid.
+        metadata:
+          model: "anthropic://claude-sonnet-4-6?max_tokens=8000"
+        ---
   """
 
   alias SkillKit.Hook

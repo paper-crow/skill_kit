@@ -86,6 +86,51 @@ defmodule SkillKit.Agent.SubLoopTest do
     assert_receive %ToolCallComplete{agent: "parent/sub:x", id: "tc_1", name: "fake_tool"}
   end
 
+  test "uses the config's :model for the LLM call, overriding the parent agent's model" do
+    agent = %SkAgent{
+      name: "parent",
+      description: "t",
+      system_prompt: "You are the parent.",
+      model: "mock://parent-model",
+      caller: self()
+    }
+
+    state = %Server{agent: agent, messages: []}
+    pid = self()
+
+    expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+      send(pid, {:model_opt, Keyword.get(opts, :model)})
+      {:ok, Stream.map([%Delta{text: "ok"}, %Done{stop_reason: :end_turn}], & &1)}
+    end)
+
+    SubLoop.run(state, config(%{model: "mock://override-model"}))
+
+    assert_receive {:model_opt, "override-model"}
+  end
+
+  test "falls back to the parent agent's model when the config omits :model" do
+    agent = %SkAgent{
+      name: "parent",
+      description: "t",
+      system_prompt: "You are the parent.",
+      model: "mock://parent-model",
+      caller: self()
+    }
+
+    state = %Server{agent: agent, messages: []}
+    pid = self()
+
+    expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+      send(pid, {:model_opt, Keyword.get(opts, :model)})
+      {:ok, Stream.map([%Delta{text: "ok"}, %Done{stop_reason: :end_turn}], & &1)}
+    end)
+
+    # config/1 omits :model, mirroring the server.ex event sub-loop caller.
+    SubLoop.run(state, config())
+
+    assert_receive {:model_opt, "parent-model"}
+  end
+
   test "runs with empty initial_messages" do
     expect(SkillKit.LLM.Mock, :stream, fn messages, _opts ->
       send(self(), {:llm_called_with, messages})

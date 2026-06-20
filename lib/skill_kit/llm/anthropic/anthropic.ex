@@ -24,11 +24,13 @@ defmodule SkillKit.LLM.Anthropic do
 
     encoded_messages = Encoder.encode_messages(messages)
     {tools, opts} = Keyword.pop(opts, :tools, [])
+    {params, opts} = Keyword.pop(opts, :params, %{})
     encoded_tools = Encoder.encode_tools(tools)
 
     request_opts =
       opts
       |> Keyword.drop([:api_key, :endpoint])
+      |> merge_params(params)
       |> maybe_put_tools(encoded_tools)
       |> Keyword.put_new(:model, @default_model)
       |> Keyword.put_new(:max_tokens, @default_max_tokens)
@@ -41,6 +43,25 @@ defmodule SkillKit.LLM.Anthropic do
 
   defp maybe_put_tools(opts, []), do: opts
   defp maybe_put_tools(opts, tools), do: Keyword.put(opts, :tools, tools)
+
+  # Merge the resolver's opaque model-URI query map into request opts.
+  # Only the params Anthropic accepts are picked up — keyed by literal atoms,
+  # so URI input is never atomized — and coerced to the JSON types its API
+  # expects. Unrecognized params are dropped.
+  defp merge_params(opts, params) do
+    Enum.reduce(params, opts, fn {key, value}, acc -> put_param(acc, key, value) end)
+  end
+
+  defp put_param(opts, "max_tokens", value), do: Keyword.put(opts, :max_tokens, to_integer(value))
+  defp put_param(opts, "temperature", value), do: Keyword.put(opts, :temperature, to_float(value))
+  defp put_param(opts, "top_p", value), do: Keyword.put(opts, :top_p, to_float(value))
+  defp put_param(opts, _key, _value), do: opts
+
+  defp to_integer(value), do: parsed(Integer.parse(value), value)
+  defp to_float(value), do: parsed(Float.parse(value), value)
+
+  defp parsed({number, ""}, _raw), do: number
+  defp parsed(_unparsed, raw), do: raw
 
   defp to_skill_kit_stream(anthropic_stream) do
     Stream.transform(anthropic_stream, %{blocks: %{}, partial_json: %{}}, &Streamable.stream/2)

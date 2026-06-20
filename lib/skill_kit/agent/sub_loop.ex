@@ -38,7 +38,8 @@ defmodule SkillKit.Agent.SubLoop do
           required(:initial_messages) => [term()],
           required(:sub_tools) => [sub_tool()],
           required(:sub_name) => String.t(),
-          required(:error_prefix) => String.t()
+          required(:error_prefix) => String.t(),
+          optional(:model) => String.t() | nil
         }
 
   @spec run(Server.t(), config()) :: String.t()
@@ -53,7 +54,7 @@ defmodule SkillKit.Agent.SubLoop do
   defp loop(parent_state, config, system, messages, tool_defs) do
     dispatch_stream(
       LLM.stream(messages,
-        model: parent_state.agent.model,
+        model: Map.get(config, :model, parent_state.agent.model),
         system: system,
         tools: tool_defs
       ),

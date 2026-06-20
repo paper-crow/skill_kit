@@ -153,7 +153,7 @@ defmodule SkillKit.LLM do
   defp resolve_uri(%URI{scheme: scheme, host: model_name, query: query}) do
     with {:ok, mod} <- get_provider(scheme) do
       config = Application.get_env(:skill_kit, mod, [])
-      model_opts = parse_query_params(query) ++ [model: model_name]
+      model_opts = query_params(query) ++ [model: model_name]
       {:ok, mod, Keyword.merge(config, model_opts)}
     end
   end
@@ -173,30 +173,10 @@ defmodule SkillKit.LLM do
 
   # --- Query Params ---
 
-  @integer_params ~w(max_tokens)
-  @float_params ~w(temperature top_p)
-
-  defp parse_query_params(nil), do: []
-
-  defp parse_query_params(query) do
-    query
-    |> URI.decode_query()
-    |> Enum.map(&coerce_param/1)
-  end
-
-  defp coerce_param({key, value}) when key in @integer_params do
-    case Integer.parse(value) do
-      {int, ""} -> {String.to_atom(key), int}
-      _ -> {String.to_atom(key), value}
-    end
-  end
-
-  defp coerce_param({key, value}) when key in @float_params do
-    case Float.parse(value) do
-      {float, ""} -> {String.to_atom(key), float}
-      _ -> {String.to_atom(key), value}
-    end
-  end
-
-  defp coerce_param({key, value}), do: {String.to_atom(key), value}
+  # Model-URI query params ride along under a single `:params` key as an
+  # opaque string map. The resolver makes no assumptions about which params
+  # a provider supports or their types, and never atomizes URI input — each
+  # provider picks out and coerces the params it understands.
+  defp query_params(nil), do: []
+  defp query_params(query), do: [params: URI.decode_query(query)]
 end

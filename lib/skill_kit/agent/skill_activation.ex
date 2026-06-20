@@ -41,10 +41,13 @@ defmodule SkillKit.Agent.SkillActivation do
   the `:skill_activation` hook.
   """
 
+  require Logger
+
   alias SkillKit.Agent.Server
   alias SkillKit.Agent.SubLoop
   alias SkillKit.Catalog
   alias SkillKit.Hooks
+  alias SkillKit.LLM
   alias SkillKit.Skill
   alias SkillKit.Types.AssistantMessage
   alias SkillKit.Types.ToolResult
@@ -52,11 +55,12 @@ defmodule SkillKit.Agent.SkillActivation do
   @spec run(Server.t(), Skill.t(), String.t(), String.t()) :: ToolResult.t()
   def run(%Server{} = parent_state, %Skill{} = skill, body, tool_call_id)
       when is_binary(body) and is_binary(tool_call_id) do
-    hook_context = %{skill: skill, agent_name: parent_state.agent.name}
+    model = activation_model(skill, parent_state)
+    hook_context = %{skill: skill, agent_name: parent_state.agent.name, model: model}
 
     outcome =
       Hooks.call(parent_state.agent, :skill_activation, hook_context, fn ->
-        text = SubLoop.run(parent_state, build_config(parent_state, skill, body))
+        text = SubLoop.run(parent_state, build_config(parent_state, skill, body, model))
         {text, Map.put(hook_context, :result, text)}
       end)
 
@@ -106,14 +110,47 @@ defmodule SkillKit.Agent.SkillActivation do
 
   # -- sub-loop scope ------------------------------------------------------
 
-  defp build_config(parent_state, skill, body) do
+  defp build_config(parent_state, skill, body, model) do
     %{
       system_append: body,
       initial_messages: fork_messages(parent_state.messages),
       sub_tools: build_sub_tools(parent_state, skill),
       sub_name: "#{parent_state.agent.name}/skill:#{skill.name}",
-      error_prefix: "Skill activation error"
+      error_prefix: "Skill activation error",
+      model: model
     }
+  end
+
+  # A skill runs its activation on its own `metadata.model` (provider-URI
+  # string, same form as `AGENT.md`'s `model:`) when declared and resolvable,
+  # otherwise on the parent agent's model. Resolved once so the hook context
+  # and sub-loop config agree on which model ran. An unset, blank, or
+  # unresolvable model (e.g. an unconfigured provider) falls back to the
+  # parent rather than failing the activation.
+  defp activation_model(skill, parent_state) do
+    validated_model(Map.get(skill.metadata, "model"), skill, parent_state)
+  end
+
+  defp validated_model(model, _skill, parent_state) when model in [nil, ""] do
+    parent_state.agent.model
+  end
+
+  defp validated_model(model, skill, parent_state) when is_binary(model) do
+    resolved_model(LLM.get_provider_and_opts(model), model, skill, parent_state)
+  end
+
+  defp validated_model(_model, _skill, parent_state), do: parent_state.agent.model
+
+  defp resolved_model({:ok, _provider, _opts}, model, _skill, _parent_state), do: model
+
+  defp resolved_model({:error, reason}, model, skill, parent_state) do
+    Logger.warning("""
+    Skill #{skill.name} declared metadata.model #{inspect(model)}, but it did not \
+    resolve to a configured provider (#{inspect(reason)}); falling back to the \
+    agent's model.
+    """)
+
+    parent_state.agent.model
   end
 
   # The parent's trailing assistant message carries the `activate_skill`

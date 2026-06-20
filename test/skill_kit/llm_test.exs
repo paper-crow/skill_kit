@@ -47,6 +47,26 @@ defmodule SkillKit.LLMTest do
     end
   end
 
+  describe "get_provider_and_opts/1 query params" do
+    test "passes query params through to the provider as an opaque string map" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts(
+                 "mock://a-model?max_tokens=4096&temperature=0.7&custom=x"
+               )
+
+      assert opts[:model] == "a-model"
+      assert opts[:params] == %{"max_tokens" => "4096", "temperature" => "0.7", "custom" => "x"}
+    end
+
+    test "omits :params when the model URI has no query string" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock://a-model")
+
+      assert opts[:model] == "a-model"
+      refute Keyword.has_key?(opts, :params)
+    end
+  end
+
   describe "get_provider/1" do
     test "finds configured provider by atom" do
       assert {:ok, SkillKit.LLM.Mock} = SkillKit.LLM.get_provider(:mock)

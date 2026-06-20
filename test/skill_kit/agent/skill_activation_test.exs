@@ -1,6 +1,7 @@
 defmodule SkillKit.Agent.SkillActivationTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
   import Mox
 
   alias SkillKit.Agent, as: SkAgent
@@ -328,6 +329,160 @@ defmodule SkillKit.Agent.SkillActivationTest do
 
       assert %ToolResult{tool_call_id: "id", is_error: true, content: "Denied: nope"} =
                SkillActivation.run(deny_state, deny_skill, "body", "id")
+    end
+  end
+
+  describe "run/4 model selection" do
+    test "honors the skill's metadata.model for the sub-loop's LLM call", %{agent: agent} do
+      pid = self()
+      agent = %{agent | model: "mock://parent-model"}
+      state = %Server{agent: agent, messages: [%UserMessage{content: "go"}]}
+
+      skill = %Skill{
+        name: "modeled:do",
+        namespace: "modeled",
+        description: "skill with its own model",
+        body: "body",
+        tool: FakeTool,
+        metadata: %{"model" => "mock://skill-model"}
+      }
+
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(pid, {:model_opt, Keyword.get(opts, :model)})
+        text_stream("ok")
+      end)
+
+      SkillActivation.run(state, skill, "body", "id")
+
+      assert_receive {:model_opt, "skill-model"}
+    end
+
+    test "falls back to the parent agent's model when the skill declares no model",
+         %{agent: agent} do
+      pid = self()
+      agent = %{agent | model: "mock://parent-model"}
+      state = %Server{agent: agent, messages: [%UserMessage{content: "go"}]}
+
+      skill = %Skill{
+        name: "plain:do",
+        namespace: "plain",
+        description: "skill without its own model",
+        body: "body",
+        tool: FakeTool,
+        metadata: %{}
+      }
+
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(pid, {:model_opt, Keyword.get(opts, :model)})
+        text_stream("ok")
+      end)
+
+      SkillActivation.run(state, skill, "body", "id")
+
+      assert_receive {:model_opt, "parent-model"}
+    end
+
+    test "falls back to the parent model when the skill's model names an unconfigured provider",
+         %{agent: agent} do
+      pid = self()
+      agent = %{agent | model: "mock://parent-model"}
+      state = %Server{agent: agent, messages: [%UserMessage{content: "go"}]}
+
+      skill = %Skill{
+        name: "badprovider:do",
+        namespace: "badprovider",
+        description: "skill naming an unconfigured provider",
+        body: "body",
+        tool: FakeTool,
+        metadata: %{"model" => "bogus://unconfigured"}
+      }
+
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(pid, {:model_opt, Keyword.get(opts, :model)})
+        text_stream("ok")
+      end)
+
+      log =
+        capture_log(fn ->
+          SkillActivation.run(state, skill, "body", "id")
+        end)
+
+      assert_receive {:model_opt, "parent-model"}
+      assert log =~ "badprovider:do"
+      assert log =~ "bogus://unconfigured"
+    end
+
+    test "falls back to the parent model when the skill's model is blank", %{agent: agent} do
+      pid = self()
+      agent = %{agent | model: "mock://parent-model"}
+      state = %Server{agent: agent, messages: [%UserMessage{content: "go"}]}
+
+      skill = %Skill{
+        name: "blankmodel:do",
+        namespace: "blankmodel",
+        description: "skill with a blank model",
+        body: "body",
+        tool: FakeTool,
+        metadata: %{"model" => ""}
+      }
+
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, opts ->
+        send(pid, {:model_opt, Keyword.get(opts, :model)})
+        text_stream("ok")
+      end)
+
+      SkillActivation.run(state, skill, "body", "id")
+
+      assert_receive {:model_opt, "parent-model"}
+    end
+
+    test "exposes the resolved model in the skill_activation hook context",
+         %{agent: agent} do
+      pid = self()
+
+      capture_hook = %SkillKit.Hook{
+        event: :pre_skill_activation,
+        matcher: nil,
+        handler: fn ctx ->
+          send(pid, {:hook_ctx, ctx})
+          :ok
+        end
+      }
+
+      skill = %Skill{
+        name: "observed:do",
+        namespace: "observed",
+        description: "skill observed via hook",
+        body: "body",
+        tool: FakeTool,
+        metadata: %{"model" => "mock://skill-model"},
+        hooks: [capture_hook]
+      }
+
+      reg = :"hook_registry_#{:erlang.unique_integer([:positive])}"
+      start_supervised!({Registry, keys: :unique, name: reg}, id: :hook_reg)
+      name = "hook-agent-#{:erlang.unique_integer([:positive])}"
+
+      {:ok, provider} = Memory.start_link([])
+      Memory.put(provider, skill)
+
+      start_supervised!(
+        {SkillKit.Catalog,
+         name: {:via, Registry, {reg, {name, :catalog}}},
+         tools: [],
+         skills: [{Memory, provider: provider}]},
+        id: :hook_catalog
+      )
+
+      hook_agent = %{agent | name: name, registry: reg, model: "mock://parent-model"}
+      hook_state = %Server{agent: hook_agent, messages: [%UserMessage{content: "go"}]}
+
+      expect(SkillKit.LLM.Mock, :stream, fn _msgs, _opts -> text_stream("ok") end)
+
+      SkillActivation.run(hook_state, skill, "body", "id")
+
+      assert_receive {:hook_ctx, ctx}
+      assert ctx.model == "mock://skill-model"
     end
   end
 
