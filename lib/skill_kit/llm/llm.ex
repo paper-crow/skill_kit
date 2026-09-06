@@ -150,9 +150,14 @@ defmodule SkillKit.LLM do
     resolve_uri(%{uri | host: path, path: nil})
   end
 
-  defp resolve_uri(%URI{scheme: scheme, host: model_name, query: query}) do
+  # The model name is the authority host PLUS any path — provider-namespaced
+  # slugs like `openrouter://openai/gpt-4o` parse to host `openai` + path
+  # `/gpt-4o`, and both segments belong to the model. Single-segment models
+  # (`anthropic://claude-sonnet-4-6`) have a nil path, so this is a no-op for them.
+  defp resolve_uri(%URI{scheme: scheme, host: host, path: path, query: query}) do
     with {:ok, mod} <- get_provider(scheme) do
       config = Application.get_env(:skill_kit, mod, [])
+      model_name = host <> to_string(path)
       model_opts = query_params(query) ++ [model: model_name]
       {:ok, mod, Keyword.merge(config, model_opts)}
     end

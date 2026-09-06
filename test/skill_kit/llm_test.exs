@@ -67,6 +67,44 @@ defmodule SkillKit.LLMTest do
     end
   end
 
+  describe "get_provider_and_opts/1 namespaced model slugs" do
+    test "preserves a vendor/model slug from the authority form (host + path)" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock://openai/gpt-4o")
+
+      assert opts[:model] == "openai/gpt-4o"
+    end
+
+    test "preserves a multi-hyphen vendor/model slug" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock://z-ai/glm-5.3-flash")
+
+      assert opts[:model] == "z-ai/glm-5.3-flash"
+    end
+
+    test "single-segment models are unchanged (nil path)" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock://claude-sonnet-4-6")
+
+      assert opts[:model] == "claude-sonnet-4-6"
+    end
+
+    test "namespaced slug carries query params alongside the full model" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock://openai/gpt-4o?max_tokens=8000")
+
+      assert opts[:model] == "openai/gpt-4o"
+      assert opts[:params] == %{"max_tokens" => "8000"}
+    end
+
+    test "scheme-colon form also yields the full slug" do
+      assert {:ok, SkillKit.LLM.Mock, opts} =
+               SkillKit.LLM.get_provider_and_opts("mock:openai/gpt-4o")
+
+      assert opts[:model] == "openai/gpt-4o"
+    end
+  end
+
   describe "get_provider/1" do
     test "finds configured provider by atom" do
       assert {:ok, SkillKit.LLM.Mock} = SkillKit.LLM.get_provider(:mock)

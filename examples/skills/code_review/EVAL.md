@@ -20,7 +20,13 @@ Review this function:
 ```elixir
 @doc "Returns the user's display name, falling back to their email."
 def display_name(%User{name: nil, email: email}), do: email
-def display_name(%User{name: name}), do: name
+
+def display_name(%User{name: name, email: email}) do
+  case String.trim(name) do
+    "" -> email
+    trimmed -> trimmed
+  end
+end
 ```
 
 ### Expect
