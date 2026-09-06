@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-06
 
 ### Added
 
@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Eval docs and examples now use the authority-form model URI (`anthropic://claude-sonnet-4-6`) consistently with the rest of the codebase, instead of the scheme-colon form (`anthropic:claude-sonnet-4-6`). Both resolve identically; this is a consistency fix only.
+
+### Fixed
+
+- Model URIs with a provider-namespaced slug (`vendor/model`) now resolve correctly: `SkillKit.LLM.get_provider_and_opts/1` combines the URI authority and path, so `openrouter://openai/gpt-4o` resolves to the model `openai/gpt-4o` instead of dropping the path and yielding `openai`. Single-segment models are unaffected.
+
+[0.5.0]: https://github.com/paper-crow/skill_kit/releases/tag/v0.5.0
 
 ## [0.4.0] - 2026-06-20
 
