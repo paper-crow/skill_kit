@@ -92,6 +92,73 @@ defmodule SkillKit.Eval.RunnerTest do
     assert Enum.all?(result.checks, &(&1.name != "llm-judge: rubric satisfied"))
   end
 
+  test "captures the agent's token usage into the transcript" do
+    Mox.expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+      stream([
+        %SkillKit.Event.Delta{text: "Hello, Sam!"},
+        %SkillKit.Event.Usage{input_tokens: 100, output_tokens: 20},
+        %SkillKit.Event.Done{stop_reason: :end_turn}
+      ])
+    end)
+
+    SkillKit.Test.expect_response(%Text{content: "VERDICT: PASS"})
+
+    result = Runner.run(eval())
+
+    assert result.transcript.usage.input_tokens == 100
+    assert result.transcript.usage.output_tokens == 20
+  end
+
+  test "sums the agent's and judge's token usage on the result" do
+    Mox.expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+      stream([
+        %SkillKit.Event.Delta{text: "Hello, Sam!"},
+        %SkillKit.Event.Usage{input_tokens: 100, output_tokens: 20},
+        %SkillKit.Event.Done{stop_reason: :end_turn}
+      ])
+    end)
+
+    Mox.expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+      stream([
+        %SkillKit.Event.Delta{text: "VERDICT: PASS"},
+        %SkillKit.Event.Usage{input_tokens: 30, output_tokens: 5},
+        %SkillKit.Event.Done{stop_reason: :end_turn}
+      ])
+    end)
+
+    result = Runner.run(eval())
+
+    assert result.usage.input_tokens == 130
+    assert result.usage.output_tokens == 25
+  end
+
+  test "reports zero cost when the run used no tokens" do
+    SkillKit.Test.expect_responses([
+      %Text{content: "Hello, Sam!"},
+      %Text{content: "VERDICT: PASS"}
+    ])
+
+    result = Runner.run(eval())
+
+    assert result.cost == 0.0
+  end
+
+  test "cost is unknown (nil) when tokens are spent on a model with no known rate" do
+    Mox.expect(SkillKit.LLM.Mock, :stream, fn _messages, _opts ->
+      stream([
+        %SkillKit.Event.Delta{text: "Hello, Sam!"},
+        %SkillKit.Event.Usage{input_tokens: 100, output_tokens: 20},
+        %SkillKit.Event.Done{stop_reason: :end_turn}
+      ])
+    end)
+
+    result = Runner.run(eval(), judge: false)
+
+    assert result.cost == nil
+  end
+
+  defp stream(events), do: {:ok, Stream.map(events, & &1)}
+
   defp tmp_cache do
     path = Path.join(System.tmp_dir!(), "runner_cache_#{System.unique_integer([:positive])}.bin")
     on_exit(fn -> File.rm(path) end)

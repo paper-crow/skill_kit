@@ -54,12 +54,13 @@ defmodule SkillKit.Eval.Case do
       use SkillKit.Eval.Case,
         dir: "skills",
         run: [
-          model: "anthropic:claude-sonnet-4-6",
-          judge_model: "anthropic:claude-sonnet-4-6"
+          model: "anthropic://claude-sonnet-4-6",
+          judge_model: "anthropic://claude-sonnet-4-6"
         ]
   """
 
   alias SkillKit.Eval
+  alias SkillKit.Eval.Cost
   alias SkillKit.Eval.Result
 
   @doc false
@@ -130,10 +131,18 @@ defmodule SkillKit.Eval.Case do
       @tag :eval
       test unquote(test_name(eval)) do
         result = Runner.run(unquote(Macro.escape(eval)), unquote(Macro.escape(run_opts)))
+        SkillKit.Eval.Case.emit_cost(unquote(test_name(eval)), result)
         SkillKit.Eval.Case.emit_warnings(unquote(test_name(eval)), result)
         assert Result.passed?(result), Result.failure_message(result)
       end
     end
+  end
+
+  @doc false
+  # Reports each eval's cost (agent + judge) to stderr — ExUnit prints nothing
+  # for a pass, so this is the only place a passing eval's cost surfaces.
+  def emit_cost(name, result) do
+    IO.puts(:stderr, "  $ #{name}: #{Cost.format(result.cost)}")
   end
 
   @doc false

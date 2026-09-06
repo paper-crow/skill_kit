@@ -15,8 +15,8 @@ defmodule SkillKit.Examples.AgentsEvalTest do
   use SkillKit.Eval.Case,
     dir: "examples/agents",
     run: [
-      model: "anthropic:claude-sonnet-4-6",
-      judge_model: "anthropic:claude-sonnet-4-6",
+      model: "anthropic://claude-sonnet-4-6",
+      judge_model: "anthropic://claude-sonnet-4-6",
       cache: ".skill_kit/eval_cache.bin"
     ]
 end

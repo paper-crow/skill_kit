@@ -15,14 +15,17 @@ defmodule SkillKit.Eval.Runner do
   """
 
   alias SkillKit.Agent
+  alias SkillKit.Agent.StreamAccumulator
   alias SkillKit.Eval
   alias SkillKit.Eval.Cache
   alias SkillKit.Eval.Check
+  alias SkillKit.Eval.Cost
   alias SkillKit.Eval.Judge
   alias SkillKit.Eval.Result
   alias SkillKit.Eval.Transcript
   alias SkillKit.Event.Error, as: EventError
   alias SkillKit.Event.ToolCallComplete
+  alias SkillKit.Event.Usage
   alias SkillKit.Kit.Local
   alias SkillKit.Types.AssistantMessage
 
@@ -73,19 +76,40 @@ defmodule SkillKit.Eval.Runner do
   defp record_if_passed(false, _path, _fingerprint, _name), do: :ok
 
   defp cached_result(eval) do
-    %Result{eval: eval, transcript: %Transcript{status: :ok}, checks: [], cached: true}
+    %Result{eval: eval, transcript: %Transcript{status: :ok}, checks: [], cost: 0.0, cached: true}
   end
 
   defp score(eval, opts) do
-    transcript = run_agent(eval, opts)
-    checks = completion_checks(transcript) ++ judge_checks(eval, transcript, opts)
-    %Result{eval: eval, transcript: transcript, checks: checks}
+    {transcript, agent_model} = run_agent(eval, opts)
+    completion = completion_checks(transcript)
+    {judge, judge_usage} = judge_checks(eval, transcript, opts)
+
+    %Result{
+      eval: eval,
+      transcript: transcript,
+      checks: completion ++ judge,
+      usage: merge_usage(transcript.usage, judge_usage),
+      cost: total_cost(eval, opts, transcript, agent_model, judge_usage)
+    }
+  end
+
+  defp merge_usage(agent_usage, judge_usage) do
+    StreamAccumulator.merge_usage(agent_usage, struct(Usage, judge_usage))
+  end
+
+  defp total_cost(eval, opts, transcript, agent_model, judge_usage) do
+    Cost.total([
+      {transcript.usage, agent_model},
+      {judge_usage, judge_model(eval, opts)}
+    ])
   end
 
   # ---------------------------------------------------------------------------
   # Agent run
   # ---------------------------------------------------------------------------
 
+  # Returns the captured transcript and the model the agent actually ran on, so
+  # the agent's token usage can be priced at its own rate.
   defp run_agent(eval, opts) do
     timeout = Keyword.get(opts, :timeout, @default_timeout)
     {source, start_opts} = build_agent(Eval.agent_source(eval), eval, opts)
@@ -93,7 +117,7 @@ defmodule SkillKit.Eval.Runner do
 
     try do
       :ok = SkillKit.send_message(agent, eval.prompt)
-      collect(agent.name, timeout, %Transcript{})
+      {collect(agent.name, timeout, %Transcript{}), source.model}
     after
       SkillKit.stop_agent(agent)
     end
@@ -150,6 +174,9 @@ defmodule SkillKit.Eval.Runner do
       %ToolCallComplete{agent: ^name, name: tool} ->
         collect(name, timeout, %{acc | tool_calls: [tool | acc.tool_calls]})
 
+      %Usage{agent: ^name} = usage ->
+        collect(name, timeout, %{acc | usage: StreamAccumulator.merge_usage(acc.usage, usage)})
+
       %AssistantMessage{agent: ^name, content: content} ->
         finalize(acc, %{response: content, status: :ok})
 
@@ -187,25 +214,28 @@ defmodule SkillKit.Eval.Runner do
     [Check.fail("agent completed", "agent produced no response")]
   end
 
-  # No judging without a rubric, or when the run didn't complete cleanly.
-  defp judge_checks(%Eval{rubric: nil}, _transcript, _opts), do: []
-  defp judge_checks(_eval, %Transcript{status: status}, _opts) when status != :ok, do: []
+  # Returns `{checks, judge_usage}`. No judging (and no judge usage) without a
+  # rubric, when the run didn't complete cleanly, or when `judge: false`.
+  defp judge_checks(%Eval{rubric: nil}, _transcript, _opts), do: no_judge()
+  defp judge_checks(_eval, %Transcript{status: status}, _opts) when status != :ok, do: no_judge()
 
   defp judge_checks(eval, transcript, opts) do
     if Keyword.get(opts, :judge, true) do
-      [judge_check(eval, transcript, opts)]
+      judge_check(eval, transcript, opts)
     else
-      []
+      no_judge()
     end
   end
 
-  defp judge_check(eval, transcript, opts) do
-    judge_opts = [model: Keyword.get(opts, :judge_model, eval.model), prompt: eval.prompt]
+  defp no_judge, do: {[], StreamAccumulator.empty_usage()}
 
-    eval.rubric
-    |> Judge.judge(transcript, judge_opts)
-    |> verdict_check()
+  defp judge_check(eval, transcript, opts) do
+    judge_opts = [model: judge_model(eval, opts), prompt: eval.prompt]
+    {verdict, usage} = Judge.judge(eval.rubric, transcript, judge_opts)
+    {[verdict_check(verdict)], usage}
   end
+
+  defp judge_model(eval, opts), do: Keyword.get(opts, :judge_model, eval.model)
 
   defp verdict_check({:pass, reasoning, warning}) do
     Check.pass("llm-judge: rubric satisfied", reasoning, warning)

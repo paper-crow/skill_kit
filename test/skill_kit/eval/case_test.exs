@@ -46,6 +46,44 @@ defmodule SkillKit.Eval.CaseTest do
   end
 end
 
+defmodule SkillKit.Eval.CaseCostTest do
+  use ExUnit.Case, async: true
+
+  import ExUnit.CaptureIO
+
+  alias SkillKit.Eval
+  alias SkillKit.Eval.Result
+  alias SkillKit.Eval.Transcript
+
+  defp result(cost) do
+    %Result{
+      eval: %Eval{name: "greets"},
+      transcript: %Transcript{status: :ok},
+      checks: [],
+      cost: cost
+    }
+  end
+
+  test "emit_cost prints the eval's name and cost to stderr" do
+    output =
+      capture_io(:stderr, fn ->
+        SkillKit.Eval.Case.emit_cost("greeter: greets", result(0.0135))
+      end)
+
+    assert output =~ "greeter: greets"
+    assert output =~ "$0.0135"
+  end
+
+  test "emit_cost prints an unknown cost rather than crashing" do
+    output =
+      capture_io(:stderr, fn ->
+        SkillKit.Eval.Case.emit_cost("greeter: greets", result(nil))
+      end)
+
+    assert output =~ "cost unknown"
+  end
+end
+
 defmodule SkillKit.Eval.CaseStorageTest do
   # async: false — these mutate the global storage provider configuration.
   use ExUnit.Case, async: false

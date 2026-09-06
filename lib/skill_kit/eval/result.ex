@@ -10,17 +10,27 @@ defmodule SkillKit.Eval.Result do
 
   alias SkillKit.Eval
   alias SkillKit.Eval.Check
+  alias SkillKit.Eval.Cost
   alias SkillKit.Eval.Transcript
 
   @type t :: %__MODULE__{
           eval: Eval.t(),
           transcript: Transcript.t(),
           checks: [Check.t()],
+          usage: Transcript.usage(),
+          cost: float() | nil,
           cached: boolean()
         }
 
+  @empty_usage %{
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0
+  }
+
   @enforce_keys [:eval, :transcript, :checks]
-  defstruct [:eval, :transcript, :checks, cached: false]
+  defstruct [:eval, :transcript, :checks, usage: @empty_usage, cost: nil, cached: false]
 
   @doc "True when every check passed."
   @spec passed?(t()) :: boolean()
@@ -69,9 +79,10 @@ defmodule SkillKit.Eval.Result do
   defp format_failure(%Check{name: name, detail: nil}), do: "  ✗ #{name}"
   defp format_failure(%Check{name: name, detail: detail}), do: "  ✗ #{name}\n#{indent(detail)}"
 
-  defp format_transcript(%__MODULE__{eval: eval, transcript: transcript}) do
+  defp format_transcript(%__MODULE__{eval: eval, transcript: transcript, cost: cost}) do
     lines = [
       "── transcript ──",
+      "  cost: #{Cost.format(cost)}",
       labeled("prompt", eval.prompt),
       "  tools called: #{format_tools(transcript.tool_calls)}",
       transcript_body(transcript)

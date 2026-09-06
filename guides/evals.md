@@ -60,7 +60,7 @@ skills:
   - "skills/greeter"
 tools:
   - "SkillKit.Tools.Shell"
-model: "anthropic:claude-sonnet-4-6"
+model: "anthropic://claude-sonnet-4-6"
 system: "You are being evaluated."
 ---
 ## greets the user by name
@@ -189,8 +189,8 @@ explicit provider URI so the cases hit the real API:
 use SkillKit.Eval.Case,
   dir: "skills",
   run: [
-    model: "anthropic:claude-sonnet-4-6",
-    judge_model: "anthropic:claude-sonnet-4-6"
+    model: "anthropic://claude-sonnet-4-6",
+    judge_model: "anthropic://claude-sonnet-4-6"
   ]
 ```
 
@@ -238,6 +238,23 @@ printed too — ExUnit shows nothing for a pass otherwise — and are available 
 `SkillKit.Eval.Result.warnings/1`. Pass `run: [judge: false]` to skip the judge
 — a cheap smoke test that the agent responds at all without spending judge
 tokens.
+
+## Cost
+
+Every eval reports its USD cost to stderr — the agent run plus the judge call,
+each priced at its own model — so the price of a suite is visible even when
+tests pass (ExUnit prints nothing for a pass otherwise):
+
+```
+  $ greeter: greets the user by name: $0.0142
+  $ greeter: handles a missing name: $0.0117
+```
+
+The figure comes from the token usage the models report, priced by
+`SkillKit.LLM.Pricing`. A model with no known rate prints `cost unknown` rather
+than an understated number; a cached case (see below) prints `$0.0000` since it
+spent no tokens. The cost is also on `SkillKit.Eval.Result` (`:cost` and the
+combined `:usage`) and appears in the failure message when a case fails.
 
 ## Caching
 
@@ -315,7 +332,7 @@ The harness is plain functions, so you can run a case outside ExUnit:
 
 ```elixir
 {:ok, [eval | _]} = SkillKit.Eval.load_file("skills/greeter/EVAL.md")
-result = SkillKit.Eval.Runner.run(eval, model: "anthropic:claude-sonnet-4-6")
+result = SkillKit.Eval.Runner.run(eval, model: "anthropic://claude-sonnet-4-6")
 
 SkillKit.Eval.Result.passed?(result)
 #=> true

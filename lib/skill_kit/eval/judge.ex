@@ -23,8 +23,10 @@ defmodule SkillKit.Eval.Judge do
   `--only eval` runs, the mock in unit tests) decides the verdict.
   """
 
+  alias SkillKit.Agent.StreamAccumulator
   alias SkillKit.Eval.Transcript
   alias SkillKit.Event.Delta
+  alias SkillKit.Event.Usage
   alias SkillKit.Types.UserMessage
 
   @type verdict ::
@@ -39,19 +41,24 @@ defmodule SkillKit.Eval.Judge do
     * `:prompt` — the user prompt that was sent to the agent (judge context)
     * `:model` — model URI for the judge call (defaults to the default provider)
 
-  Returns `{:pass, reasoning, warning}` (warning is a string or `nil`),
-  `{:fail, reasoning}`, or `{:error, reason}` when the LLM call itself fails.
+  Returns `{verdict, usage}`, where `verdict` is `{:pass, reasoning, warning}`
+  (warning is a string or `nil`), `{:fail, reasoning}`, or `{:error, reason}`
+  when the LLM call itself fails, and `usage` is the judge call's own token
+  usage (all-zero when the call fails).
   """
-  @spec judge(String.t(), Transcript.t(), keyword()) :: verdict()
+  @spec judge(String.t(), Transcript.t(), keyword()) :: {verdict(), Transcript.usage()}
   def judge(rubric, %Transcript{} = transcript, opts \\ []) do
     content = build_prompt(rubric, transcript, Keyword.get(opts, :prompt))
     messages = [%UserMessage{content: content}]
-
-    case SkillKit.LLM.stream(messages, model: Keyword.get(opts, :model)) do
-      {:ok, stream} -> verdict(collect_text(stream))
-      {:error, reason} -> {:error, reason}
-    end
+    score(SkillKit.LLM.stream(messages, model: Keyword.get(opts, :model)))
   end
+
+  defp score({:ok, stream}) do
+    {text, usage} = collect(stream)
+    {verdict(text), usage}
+  end
+
+  defp score({:error, reason}), do: {{:error, reason}, StreamAccumulator.empty_usage()}
 
   # ---------------------------------------------------------------------------
   # Verdict parsing
@@ -76,14 +83,21 @@ defmodule SkillKit.Eval.Judge do
     end
   end
 
-  defp collect_text(stream) do
-    stream
-    |> Enum.flat_map(&delta_text/1)
-    |> Enum.join("")
+  # Walks the stream once, accumulating the assistant's text and the call's
+  # token usage together.
+  defp collect(stream) do
+    Enum.reduce(stream, {"", StreamAccumulator.empty_usage()}, &accumulate/2)
   end
 
-  defp delta_text(%Delta{text: text}) when is_binary(text), do: [text]
-  defp delta_text(_event), do: []
+  defp accumulate(%Delta{text: text}, {acc_text, usage}) when is_binary(text) do
+    {acc_text <> text, usage}
+  end
+
+  defp accumulate(%Usage{} = event, {acc_text, usage}) do
+    {acc_text, StreamAccumulator.merge_usage(usage, event)}
+  end
+
+  defp accumulate(_event, acc), do: acc
 
   # ---------------------------------------------------------------------------
   # Prompt construction

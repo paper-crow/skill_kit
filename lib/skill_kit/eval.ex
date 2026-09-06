@@ -43,7 +43,7 @@ defmodule SkillKit.Eval do
     - "skills/greeter"
   tools:
     - "SkillKit.Tools.Shell"
-  model: "anthropic:claude-sonnet-4-6"
+  model: "anthropic://claude-sonnet-4-6"
   system: "You are being evaluated."
   ---
   ## greets the user by name

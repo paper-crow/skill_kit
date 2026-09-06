@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Eval cost reporting: every eval case now reports its USD cost — the agent run plus the LLM judge call, each priced at its own model via `SkillKit.LLM.Pricing`. `SkillKit.Eval.Case` prints a per-case cost line to stderr (so it's visible even on a pass, which ExUnit otherwise renders silently), and the cost appears in `SkillKit.Eval.Result.failure_message/1` for failures. `SkillKit.Eval.Result` carries the combined `:usage` and total `:cost` (`nil` when a model has no known rate, `0.0` for a cached case). New module `SkillKit.Eval.Cost`; `SkillKit.Eval.Transcript` now carries the agent's `:usage`, and `SkillKit.Eval.Judge.judge/3` returns `{verdict, usage}`.
+
+### Changed
+
+- Eval docs and examples now use the authority-form model URI (`anthropic://claude-sonnet-4-6`) consistently with the rest of the codebase, instead of the scheme-colon form (`anthropic:claude-sonnet-4-6`). Both resolve identically; this is a consistency fix only.
+
 ## [0.4.0] - 2026-06-20
 
 ### Added

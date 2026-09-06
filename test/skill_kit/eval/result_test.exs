@@ -49,6 +49,16 @@ defmodule SkillKit.Eval.ResultTest do
     assert Result.warnings(result) == ["did not say LGTM"]
   end
 
+  test "failure_message includes the run's cost" do
+    transcript = %Transcript{status: :error, error: :boom}
+    checks = [Check.fail("agent completed", "agent errored: :boom")]
+    result = %{result(checks, transcript) | cost: 0.0135}
+
+    message = Result.failure_message(result)
+
+    assert message =~ "cost: $0.0135"
+  end
+
   test "failure_message reports an errored run instead of a response" do
     transcript = %Transcript{status: :error, error: :boom}
     checks = [Check.fail("agent completed", "agent errored: :boom")]

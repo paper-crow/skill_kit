@@ -26,7 +26,7 @@ defmodule SkillKit.E2ETest do
 
   @providers %{
     "anthropic" => %{
-      model: "anthropic:claude-sonnet-4-20250514",
+      model: "anthropic://claude-sonnet-4-20250514",
       env: "ANTHROPIC_API_KEY"
     }
   }

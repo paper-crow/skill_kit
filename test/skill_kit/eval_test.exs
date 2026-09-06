@@ -47,7 +47,7 @@ defmodule SkillKit.EvalTest do
     test "applies optional frontmatter to every case" do
       content = """
       ---
-      model: "anthropic:claude-sonnet-4-6"
+      model: "anthropic://claude-sonnet-4-6"
       system: "You are being evaluated."
       skills:
         - "skills/greeter"
@@ -70,7 +70,7 @@ defmodule SkillKit.EvalTest do
       assert {:ok, [one, two]} = Eval.parse(content)
 
       for eval <- [one, two] do
-        assert eval.model == "anthropic:claude-sonnet-4-6"
+        assert eval.model == "anthropic://claude-sonnet-4-6"
         assert eval.system == "You are being evaluated."
         assert eval.skills == ["skills/greeter"]
         assert eval.tools == [SkillKit.Tools.Shell]
