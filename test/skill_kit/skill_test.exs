@@ -169,7 +169,26 @@ defmodule SkillKit.SkillTest do
     end
   end
 
-  describe "dynamic command injection (!`command`)" do
+  describe "dynamic command injection (!`command`) disabled by default" do
+    test "leaves command tokens untouched" do
+      skill = %Skill{body: "Today is !`echo hello`"}
+      assert {:ok, "Today is !`echo hello`"} = Skill.render(skill, %{})
+    end
+
+    test "does not run the command even alongside other substitutions" do
+      skill = %Skill{body: "Count: !`echo 3` files with $ARGUMENTS"}
+
+      assert {:ok, "Count: !`echo 3` files with hello"} =
+               Skill.render(skill, %{"arguments" => "hello"})
+    end
+  end
+
+  describe "dynamic command injection (!`command`) when enabled" do
+    setup do
+      Application.put_env(:skill_kit, :allow_dynamic_commands, true)
+      on_exit(fn -> Application.delete_env(:skill_kit, :allow_dynamic_commands) end)
+    end
+
     test "executes command and substitutes output" do
       skill = %Skill{body: "Today is !`echo hello`"}
       assert {:ok, "Today is hello"} = Skill.render(skill, %{})

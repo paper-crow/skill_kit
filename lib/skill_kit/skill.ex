@@ -97,6 +97,16 @@ defmodule SkillKit.Skill do
   `$VAR` / `${VAR}` tokens are resolved via `Scope.resolve/3` as a final
   fallback. Unresolved scope variables are left as-is.
 
+  ## Dynamic command injection
+
+  `` !`cmd` `` tokens execute a shell command at render time and substitute
+  its output. This runs with the host process's OS permissions and bypasses
+  tool scope, so it is a code-execution vector when skill sources are not
+  fully trusted. It is **disabled by default**; the tokens are left untouched
+  unless explicitly enabled:
+
+      config :skill_kit, :allow_dynamic_commands, true
+
   If `$ARGUMENTS` (or `$N`) is NOT present in the body but arguments are provided,
   appends `\\n\\nARGUMENTS: <value>` to the end.
 
@@ -138,12 +148,24 @@ defmodule SkillKit.Skill do
   defp maybe_append_arguments(result, _has_token, _arguments), do: result
 
   defp substitute_dynamic_commands(body) do
-    Regex.replace(~r/!\`([^`]+)\`/, body, fn _full_match, command ->
-      case System.cmd("sh", ["-c", command], stderr_to_stdout: true) do
-        {output, 0} -> String.trim(output)
-        {output, _code} -> "[command failed: #{String.trim(output)}]"
-      end
-    end)
+    substitute_dynamic_commands(body, dynamic_commands_enabled?())
+  end
+
+  defp substitute_dynamic_commands(body, false), do: body
+
+  defp substitute_dynamic_commands(body, true) do
+    Regex.replace(~r/!\`([^`]+)\`/, body, fn _full_match, command -> run_command(command) end)
+  end
+
+  defp run_command(command) do
+    case System.cmd("sh", ["-c", command], stderr_to_stdout: true) do
+      {output, 0} -> String.trim(output)
+      {output, _code} -> "[command failed: #{String.trim(output)}]"
+    end
+  end
+
+  defp dynamic_commands_enabled? do
+    Application.get_env(:skill_kit, :allow_dynamic_commands, false)
   end
 
   defp substitute_arguments_indexed(body, positional) do

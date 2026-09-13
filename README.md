@@ -93,8 +93,10 @@ At the START of every conversation, read your memory file...
 ```
 
 Skills support template tokens (`$ARGUMENTS`, `$SKILL_DIR`, `$SESSION_ID`),
-scope variable resolution (`$USERNAME`, `$TENANT`), and dynamic command
+scope variable resolution (`$USERNAME`, `$TENANT`), and opt-in dynamic command
 injection (`` !`git branch --show-current` ``) that runs at render time.
+Dynamic commands are **disabled by default** — enable them only for trusted
+skill sources with `config :skill_kit, :allow_dynamic_commands, true`.
 
 ### [Hooks](guides/hooks-and-execution.md)
 

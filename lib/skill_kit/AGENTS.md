@@ -60,8 +60,10 @@ Start at the top. Pick the first match.
 `Kit.Local`) or ship it in a kit. No framework changes.
 
 Use template tokens (`$ARGUMENTS`, `$SKILL_DIR`, `$SESSION_ID`, `$SCOPE_VAR`,
-`` !`cmd` ``) for dynamic content. See `skill.ex:60-106` for the full token
-grammar and `guides/skill-format.md` for the frontmatter fields.
+`` !`cmd` ``) for dynamic content. `` !`cmd` `` shell injection is disabled by
+default (opt in with `config :skill_kit, :allow_dynamic_commands, true`). See
+`SkillKit.Skill.render/4` for the full token grammar and
+`guides/skill-format.md` for the frontmatter fields.
 
 ### Q2. Does the feature need to execute code when a skill runs?
 → **Build a kit module.** `use SkillKit.Kit` makes the module both a

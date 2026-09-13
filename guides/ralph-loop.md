@@ -201,7 +201,9 @@ Current contents:
 ```
 
 That keeps the iteration prompt fresh every turn without an extra
-shell tool call.
+shell tool call. Dynamic commands are disabled by default; this loop
+requires `config :skill_kit, :allow_dynamic_commands, true` (only enable it
+for skill sources you trust — see [skill-format.md](skill-format.md#dynamic-commands)).
 
 The agent's job is to route — its `AGENT.md` says "if the user asks
 to plan, activate `plan`; if to iterate, activate `iterate`; then

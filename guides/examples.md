@@ -25,7 +25,7 @@ mix persona_chat --user alice --persona captain_nova
 | Agent identity | `AGENT.md` at root of each agent directory |
 | Skills | 7 skills across lobby and memory kits drive all behavior |
 | Subagent delegation | Lobby delegates file writing to a `persona_writer` subagent |
-| Dynamic context injection | `` !`command` `` in skills runs at render time, injecting live persona lists and user memories |
+| Dynamic context injection | `` !`command` `` in skills runs at render time (opt-in via `config :skill_kit, :allow_dynamic_commands, true`), injecting live persona lists and user memories |
 | Conversation persistence | Per-user conversation isolation via `Conversation.Store.Filesystem` |
 | Scope-based authorization | Owner vs visitor permissions — owners create/delete, visitors chat |
 | Scope variable resolution | `$USERNAME` and `$PERSONA` replaced in skill bodies and system prompts |

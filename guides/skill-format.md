@@ -132,6 +132,15 @@ Current branch: !`git branch --show-current`
 Recent commits: !`git log --oneline -5`
 ```
 
+> **Security — disabled by default.** These commands run with the host
+> process's OS permissions and bypass tool scope, so they are a
+> code-execution vector when skill sources are not fully trusted. Rendering
+> leaves the `` !`cmd` `` tokens untouched unless you explicitly opt in:
+>
+> ```elixir
+> config :skill_kit, :allow_dynamic_commands, true
+> ```
+
 ## Naming conventions
 
 SkillKit uses a `"namespace:skill_name"` naming scheme:
