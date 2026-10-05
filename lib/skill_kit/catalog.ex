@@ -290,12 +290,11 @@ defmodule SkillKit.Catalog do
   defp authorize_single_skill(skill, %{permissions: nil}), do: {:ok, skill}
 
   defp authorize_single_skill(skill, %{permissions: permissions}) do
-    if Authorization.authorized?(skill, permissions) do
-      {:ok, skill}
-    else
-      {:error, :unauthorized}
-    end
+    authorize_skill_permissions(Authorization.authorized?(skill, permissions), skill)
   end
+
+  defp authorize_skill_permissions(true, skill), do: {:ok, skill}
+  defp authorize_skill_permissions(false, _skill), do: {:error, :unauthorized}
 
   # -------------------------------------------------------------------
   # Agents
@@ -348,12 +347,15 @@ defmodule SkillKit.Catalog do
     |> Enum.uniq()
   end
 
-  # A kit in the `:tools` list contributes a tool module. Prefer the
-  # explicit `metadata.tool` if set; otherwise fall back to the kit's
-  # own module (a kit without skills/subagents is itself the tool,
-  # matching the pattern used by SkillKit.Tools.Shell).
-  defp tool_module_for_kit(%SkillKit.Kit{metadata: %{tool: tool}}), do: tool
-  defp tool_module_for_kit(_), do: nil
+  # A kit in the `:tools` list contributes a tool module via
+  # `metadata.tool`. `use SkillKit.Kit` sets that key in the default
+  # `load_kits/1`; providers that build `%Kit{}` by hand (e.g. Memory
+  # fixtures) must set it themselves.
+  defp tool_module_for_kit(%SkillKit.Kit{metadata: %{tool: tool}}) when is_atom(tool) do
+    tool
+  end
+
+  defp tool_module_for_kit(%SkillKit.Kit{}), do: nil
 
   defp find_tool_config(kits, tool_name) do
     kit = Enum.find(kits, &kit_tool_named?(&1, tool_name))
@@ -368,13 +370,20 @@ defmodule SkillKit.Catalog do
   end
 
   defp to_tool_config(nil), do: nil
-  defp to_tool_config(%SkillKit.Kit{metadata: meta} = _kit), do: {meta.tool, meta}
+  defp to_tool_config(%SkillKit.Kit{metadata: %{tool: tool} = meta}), do: {tool, meta}
 
-  defp tool_definition_name(module) do
-    module.definition().name
-  rescue
-    _ -> nil
+  defp tool_definition_name(module) when is_atom(module) do
+    named_tool_definition(Code.ensure_loaded?(module), module)
   end
+
+  defp named_tool_definition(true, module) do
+    exported_tool_name(function_exported?(module, :definition, 0), module)
+  end
+
+  defp named_tool_definition(false, _module), do: nil
+
+  defp exported_tool_name(true, module), do: module.definition().name
+  defp exported_tool_name(false, _module), do: nil
 
   defp build_activate_skill_tool([]), do: []
 
@@ -434,8 +443,11 @@ defmodule SkillKit.Catalog do
       |> Enum.flat_map(& &1.subagents)
       |> MapSet.new(& &1.name)
 
-    if MapSet.member?(agent_names, tool_name), do: :subagent, else: :tool
+    classify_name(MapSet.member?(agent_names, tool_name))
   end
+
+  defp classify_name(true), do: :subagent
+  defp classify_name(false), do: :tool
 
   @doc """
   Extracts the short name from a namespaced skill name.

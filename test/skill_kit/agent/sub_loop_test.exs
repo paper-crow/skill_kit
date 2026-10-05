@@ -10,6 +10,7 @@ defmodule SkillKit.Agent.SubLoopTest do
   alias SkillKit.Event.Done
   alias SkillKit.Event.ToolCallComplete
   alias SkillKit.Event.ToolCallStart
+  alias SkillKit.Types.ToolResult
   alias SkillKit.Types.UserMessage
 
   setup :verify_on_exit!
@@ -30,6 +31,32 @@ defmodule SkillKit.Agent.SubLoopTest do
     @impl SkillKit.Tool
     def execute(%SkillKit.ToolExecution{input: input}) do
       {:ok, Map.get(input, "payload", "ok")}
+    end
+
+    @impl SkillKit.Tool
+    def resume(_exec, _state, _decision), do: {:error, "resume not supported"}
+  end
+
+  defmodule ContentBlockTool do
+    @moduledoc false
+    @behaviour SkillKit.Tool
+
+    @impl SkillKit.Tool
+    def definition do
+      %SkillKit.Tool{
+        name: "content_blocks",
+        description: "returns content-block maps",
+        input_schema: %{"type" => "object", "properties" => %{}}
+      }
+    end
+
+    @impl SkillKit.Tool
+    def execute(_exec) do
+      {:ok,
+       [
+         %{"type" => "text", "text" => "resolved data"},
+         %{"type" => "image", "source" => %{"type" => "base64", "data" => "AAAA"}}
+       ]}
     end
 
     @impl SkillKit.Tool
@@ -141,5 +168,40 @@ defmodule SkillKit.Agent.SubLoopTest do
 
     assert result == "ok"
     assert_receive {:llm_called_with, []}
+  end
+
+  test "passes content-block tool results through unchanged" do
+    definition = ContentBlockTool.definition()
+
+    blocks = [
+      %{"type" => "text", "text" => "resolved data"},
+      %{"type" => "image", "source" => %{"type" => "base64", "data" => "AAAA"}}
+    ]
+
+    expect(SkillKit.LLM.Mock, :stream, 2, fn _msgs, _opts ->
+      count = (Process.get(:calls) || 0) + 1
+      Process.put(:calls, count)
+
+      events =
+        case count do
+          1 ->
+            [
+              %ToolCallComplete{id: "tc_1", name: "content_blocks", input: %{}},
+              %Done{stop_reason: :tool_use}
+            ]
+
+          2 ->
+            [%Delta{text: "done"}, %Done{stop_reason: :end_turn}]
+        end
+
+      {:ok, Stream.map(events, & &1)}
+    end)
+
+    SubLoop.run(
+      parent_state(),
+      config(%{sub_tools: [{ContentBlockTool, %{}, definition}]})
+    )
+
+    assert_receive %ToolResult{tool_call_id: "tc_1", content: ^blocks, is_error: false}
   end
 end

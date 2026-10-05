@@ -20,7 +20,7 @@ defmodule SkillKit.Authorization do
   - `{:error, :unauthorized}` — caller lacks required scopes
   - `{:error, reason}` — provider returned an error (passed through unchanged)
   - `{:error, :not_found}` — **never returned by this module**; that atom is
-    exclusive to `SkillKit.Registry.get_skill/2`
+    exclusive to `SkillKit.Catalog.get_skill/2`
 
   ## Usage
 
@@ -101,7 +101,7 @@ defmodule SkillKit.Authorization do
   @doc """
   Returns `true` when `authorize(skill, granted_scopes)` would return `{:ok, _}`.
 
-  Convenience wrapper for use in boolean contexts (guards, filters, pipeline conditions).
+  Convenience wrapper for use in boolean contexts (filters, pipeline conditions).
   """
   @spec authorized?(Skill.t(), [String.t()]) :: boolean()
   def authorized?(%Skill{} = skill, granted_scopes) do

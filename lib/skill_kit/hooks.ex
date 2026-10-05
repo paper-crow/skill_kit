@@ -53,7 +53,7 @@ defmodule SkillKit.Hooks do
     end)
   catch
     :exit, {reason, {GenServer, :call, _}} when reason in [:noproc, :normal, :shutdown] ->
-      func.() |> elem(0)
+      elem(func.(), 0)
   end
 
   @doc """

@@ -4,7 +4,7 @@ defmodule SkillKit.Agent.StreamAccumulator do
   `%AssistantMessage{}`.
 
   Used by `SkillKit.Agent.Server` for the main agent loop and by
-  `SkillKit.Agent.SkillActivation` for the in-process skill sub-loop.
+  `SkillKit.Agent.SubLoop` for in-process skill and event sub-loops.
 
   The accumulator is a plain map holding partial text, the running list
   of tool calls, and accumulated usage. `new/0` builds an empty one and

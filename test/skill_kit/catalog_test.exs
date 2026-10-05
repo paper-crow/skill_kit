@@ -7,6 +7,7 @@ defmodule SkillKit.CatalogTest do
   alias SkillKit.Kit
   alias SkillKit.Kit.Memory
   alias SkillKit.Skill
+  alias SkillKit.Tools.SendMessage
   alias SkillKit.Tools.Shell
 
   # --- Test scope struct ---
@@ -277,6 +278,18 @@ defmodule SkillKit.CatalogTest do
 
       tool_def = Enum.find(tools, &(&1.name == Shell.definition().name))
       assert tool_def != nil
+    end
+
+    test "includes kits that use SkillKit.Kit without overriding load_kits" do
+      {:ok, provider} = Memory.start_link([])
+
+      catalog = start_catalog(provider, tools: [{SendMessage, []}])
+      tools = Catalog.tool_definitions(catalog, [])
+
+      assert Enum.any?(tools, &(&1.name == SendMessage.definition().name))
+
+      assert Catalog.tool_config(catalog, SendMessage.definition().name) ==
+               {SendMessage, %{tool: SendMessage}}
     end
   end
 

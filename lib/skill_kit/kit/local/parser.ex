@@ -61,7 +61,6 @@ defmodule SkillKit.Kit.Local.Parser do
   alias SkillKit.Hook
   alias SkillKit.Skill
 
-  # Namespace segment validation — same regex as SkillKit.Registry.
   # Built in a function (not a module attribute): a compiled regex holds a
   # #Reference under OTP 28, which can't be escaped into an attribute.
   defp name_segment_regex, do: ~r/^[a-z][a-z0-9_-]*$/
@@ -243,8 +242,8 @@ defmodule SkillKit.Kit.Local.Parser do
   # Validates that name matches "namespace:skill_name" format.
   # Returns {:ok, namespace} on success or {:error, :invalid_name_format} on failure.
   #
-  # Validation rules (same as SkillKit.Registry):
-  # - Exactly one colon separating namespace and skill name
+  # Validation rules:
+  # - Exactly one colon separating namespace and skill name, or a bare name
   # - Both segments must be non-empty
   # - Both segments must match ~r/^[a-z][a-z0-9_-]*$/ (lowercase, letter start)
   @spec validate_name_format(String.t()) ::

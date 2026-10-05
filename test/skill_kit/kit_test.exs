@@ -90,6 +90,11 @@ defmodule SkillKit.KitTest do
       {:ok, [kit]} = TestKit.load_kits([])
       assert kit.name == "test_kit"
     end
+
+    test "load_kits/1 sets metadata.tool to the using module" do
+      {:ok, [kit]} = TestKit.load_kits([])
+      assert kit.metadata.tool == TestKit
+    end
   end
 
   describe "compile-time TOOL.md loading" do

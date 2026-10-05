@@ -39,21 +39,12 @@ defmodule SkillKit.Agent.ToolDispatch do
   @spec execute_one(Server.t(), ToolCall.t()) ::
           {ToolResult.t(), [side_effect()]} | {:suspended, ToolExecution.t(), [side_effect()]}
   def execute_one(state, %ToolCall{} = tc) do
-    result =
-      case SkillKit.Catalog.classify(state.agent, tc.name) do
-        :tool -> execute_command(state, tc)
-        :activate_skill -> activate_skill(state, tc)
-        :subagent -> spawn_subagent(state, tc)
-      end
-
-    wrap_error(result, tc.id)
+    case SkillKit.Catalog.classify(state.agent, tc.name) do
+      :tool -> execute_command(state, tc)
+      :activate_skill -> activate_skill(state, tc)
+      :subagent -> spawn_subagent(state, tc)
+    end
   end
-
-  defp wrap_error({:error, reason}, id) do
-    {%ToolResult{tool_call_id: id, content: "Error: #{inspect(reason)}", is_error: true}, []}
-  end
-
-  defp wrap_error(result, _id), do: result
 
   defp execute_command(state, %ToolCall{id: id, name: name, input: input}) do
     dispatch_known_tool(find_tool(state, name), state, id, name, input)
@@ -92,7 +83,7 @@ defmodule SkillKit.Agent.ToolDispatch do
     {%ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}, []}
   end
 
-  defp dispatch_hook_result(tool_result, id), do: {unwrap_tool_result(id, tool_result), []}
+  defp dispatch_hook_result(tool_result, _id), do: {tool_result, []}
 
   defp do_execute_command(id, tool, input, tool_context, hook_context) do
     exec = %ToolExecution{tool: tool, input: input, context: tool_context}
@@ -159,7 +150,8 @@ defmodule SkillKit.Agent.ToolDispatch do
   def extract_output([block | _] = blocks) when is_map(block), do: blocks
   def extract_output(other), do: inspect(other)
 
-  defp extract_error(execution) do
+  @doc false
+  def extract_error(execution) do
     case execution.result do
       {output, _code} -> ensure_non_empty(output)
       reason when is_binary(reason) -> ensure_non_empty(reason)
@@ -171,12 +163,6 @@ defmodule SkillKit.Agent.ToolDispatch do
   defp ensure_non_empty(str) when is_binary(str), do: str
   defp ensure_non_empty(nil), do: "(no output)"
 
-  defp unwrap_tool_result(id, {:deny, reason}) do
-    %ToolResult{tool_call_id: id, content: "Denied: #{reason}", is_error: true}
-  end
-
-  defp unwrap_tool_result(_id, result), do: result
-
   # --- Skill Activation (in-process sub-loop) ---
 
   defp activate_skill(state, %ToolCall{id: id, input: input}) do
@@ -185,32 +171,37 @@ defmodule SkillKit.Agent.ToolDispatch do
 
   # --- Subagent Spawning ---
 
+  defp spawn_subagent(
+         %{agent: %{depth: depth, max_agent_depth: max}},
+         %ToolCall{id: id}
+       )
+       when depth >= max do
+    result = %ToolResult{
+      tool_call_id: id,
+      content: "Cannot spawn subagent: max depth (#{max}) reached.",
+      is_error: true
+    }
+
+    {result, []}
+  end
+
   defp spawn_subagent(state, %ToolCall{id: id, name: name, input: input}) do
     task = Map.get(input, "task", "")
+    start_known_subagent(SkillKit.Catalog.get_agent(state.agent, name), state, id, name, task)
+  end
 
-    if state.agent.depth >= state.agent.max_agent_depth do
-      result = %ToolResult{
-        tool_call_id: id,
-        content: "Cannot spawn subagent: max depth (#{state.agent.max_agent_depth}) reached.",
-        is_error: true
-      }
+  defp start_known_subagent({:error, :not_found}, _state, id, name, _task) do
+    result = %ToolResult{
+      tool_call_id: id,
+      content: "Unknown agent: #{name}",
+      is_error: true
+    }
 
-      {result, []}
-    else
-      case SkillKit.Catalog.get_agent(state.agent, name) do
-        {:error, :not_found} ->
-          result = %ToolResult{
-            tool_call_id: id,
-            content: "Unknown agent: #{name}",
-            is_error: true
-          }
+    {result, []}
+  end
 
-          {result, []}
-
-        {:ok, agent_def} ->
-          spawn_subagent_with_hook(state, id, name, task, agent_def)
-      end
-    end
+  defp start_known_subagent({:ok, agent_def}, state, id, name, task) do
+    spawn_subagent_with_hook(state, id, name, task, agent_def)
   end
 
   defp spawn_subagent_with_hook(state, id, name, task, agent_def) do

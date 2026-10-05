@@ -88,7 +88,14 @@ defmodule SkillKit.Kit do
       @impl SkillKit.Kit.Provider
       def load_kits(config) do
         skills = patch_source_config(@compiled_skills, config)
-        kit = %SkillKit.Kit{name: @kit_name, skills: skills, agent: @compiled_agent}
+
+        kit = %SkillKit.Kit{
+          name: @kit_name,
+          skills: skills,
+          agent: @compiled_agent,
+          metadata: %{tool: __MODULE__}
+        }
+
         {:ok, [kit]}
       end
 
@@ -174,7 +181,7 @@ defmodule SkillKit.Kit do
          {:ok, agent} <- Agent.parse(content) do
       agent
     else
-      _ -> nil
+      {:error, _reason} -> nil
     end
   end
 
@@ -187,7 +194,7 @@ defmodule SkillKit.Kit do
          {:ok, name} <- fetch_required_string(yaml, "name") do
       {name, String.trim(body)}
     else
-      _ -> {kit_name, "Kit tool for #{kit_name}"}
+      {:error, _reason} -> {kit_name, "Kit tool for #{kit_name}"}
     end
   end
 

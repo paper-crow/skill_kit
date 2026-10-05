@@ -8,9 +8,9 @@ defmodule SkillKit.Agent.SubLoop do
   # Used by:
   #   * `SkillKit.Agent.SkillActivation` — nested skill calls driven by
   #     the LLM's `activate_skill` tool use
-  #   * `SkillKit.send_event/3` (future) — webhook deliveries and other
-  #     event triggers that want isolated processing with a scoped tool
-  #     set and no pollution of the parent's message history
+  #   * `SkillKit.send_event/3` — webhook deliveries and other event
+  #     triggers that want isolated processing with a scoped tool set
+  #     and no pollution of the parent's message history
   #
   # Callers prepare the scope (sub_tools, initial_messages, system_append,
   # sub_name, error_prefix) and this module runs the LLM + tool-dispatch
@@ -20,6 +20,7 @@ defmodule SkillKit.Agent.SubLoop do
   alias SkillKit.Agent.Server
   alias SkillKit.Agent.SkillActivation
   alias SkillKit.Agent.StreamAccumulator
+  alias SkillKit.Agent.ToolDispatch
   alias SkillKit.Event.Delta
   alias SkillKit.Event.Done
   alias SkillKit.Event.ToolCallComplete
@@ -156,11 +157,11 @@ defmodule SkillKit.Agent.SubLoop do
   end
 
   defp to_result({:ok, execution}, id) do
-    %ToolResult{tool_call_id: id, content: extract_output(execution.result)}
+    %ToolResult{tool_call_id: id, content: ToolDispatch.extract_output(execution.result)}
   end
 
   defp to_result({:error, execution}, id) do
-    %ToolResult{tool_call_id: id, content: extract_error(execution), is_error: true}
+    %ToolResult{tool_call_id: id, content: ToolDispatch.extract_error(execution), is_error: true}
   end
 
   defp to_result({:pending, _execution}, id) do
@@ -170,22 +171,6 @@ defmodule SkillKit.Agent.SubLoop do
       is_error: true
     }
   end
-
-  defp extract_output({:ok, output}), do: ensure_non_empty(output)
-  defp extract_output(output) when is_binary(output), do: ensure_non_empty(output)
-  defp extract_output(other), do: inspect(other)
-
-  defp extract_error(execution) do
-    case execution.result do
-      {output, _code} -> ensure_non_empty(output)
-      reason when is_binary(reason) -> ensure_non_empty(reason)
-      _ -> "Execution failed"
-    end
-  end
-
-  defp ensure_non_empty(""), do: "(no output)"
-  defp ensure_non_empty(nil), do: "(no output)"
-  defp ensure_non_empty(str) when is_binary(str), do: str
 
   # -- notifications -------------------------------------------------------
 

@@ -13,6 +13,8 @@ defmodule SkillKit.Agent.Server do
 
   use GenServer
 
+  require Logger
+
   alias SkillKit.Agent.StreamAccumulator
   alias SkillKit.Agent.SubLoop
   alias SkillKit.Agent.ToolRunner
@@ -153,8 +155,6 @@ defmodule SkillKit.Agent.Server do
 
       {entry, subagents} ->
         state = %{state | subagents: subagents}
-
-        require Logger
 
         Logger.warning(
           "Subagent crashed: name=#{entry.name} task=#{entry.task} reason=#{inspect(reason, pretty: true, limit: :infinity)}"
