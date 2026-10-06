@@ -57,21 +57,46 @@ jobs:
   # Real-provider skill evals. Gated by the RUN_EVALS flag so any repo can turn
   # them off: set the RUN_EVALS variable to "false" to skip, or use the manual
   # run_evals input. Default is on, and a failure blocks the check.
+  #
+  # Public-repo gates: skip the job on fork PRs (compare head repo to this
+  # repository — cleaner than github.event.pull_request.head.repo.fork, and
+  # keeps same-repo PRs + main pushes + workflow_dispatch running). Secrets
+  # are not available in job-level `if`, so an empty ANTHROPIC_API_KEY is a
+  # no-op success rather than a failed mix test.
   evals:
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_evals) ||
-      (github.event_name != 'workflow_dispatch' && vars.RUN_EVALS != 'false')
+      (
+        (github.event_name == 'workflow_dispatch' && inputs.run_evals) ||
+        (github.event_name != 'workflow_dispatch' && vars.RUN_EVALS != 'false')
+      ) &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check Anthropic API key
+        id: anthropic
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "ANTHROPIC_API_KEY is empty; skipping real-provider evals."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.anthropic.outputs.present == 'true'
 
       - uses: erlef/setup-beam@v1
+        if: steps.anthropic.outputs.present == 'true'
         with:
           elixir-version: "1.17"
           otp-version: "27"
 
       - name: Cache deps
+        if: steps.anthropic.outputs.present == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -83,6 +108,7 @@ jobs:
       # Rolling cache: the run_id key never pre-exists, so the result cache is
       # re-saved every run, while restore-keys loads the most recent prior copy.
       - name: Cache eval results
+        if: steps.anthropic.outputs.present == 'true'
         uses: actions/cache@v4
         with:
           path: .skill_kit/eval_cache.bin
@@ -90,6 +116,7 @@ jobs:
           restore-keys: ${{ runner.os }}-evalcache-
 
       - name: Install dependencies
+        if: steps.anthropic.outputs.present == 'true'
         run: mix deps.get
 
       # Scope to the dogfood suites so only their eval-tagged cases run (a bare
@@ -97,6 +124,7 @@ jobs:
       # macro's setup swaps in File storage so colocated SKILL.md / AGENT.md
       # files resolve.
       - name: Run skill and agent evals
+        if: steps.anthropic.outputs.present == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: mix test test/examples/ --only eval

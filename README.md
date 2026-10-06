@@ -364,9 +364,6 @@ plug Plug.Parsers,
   json_decoder: Jason
 ```
 
-See `docs/superpowers/specs/2026-04-21-webhook-adapter-design.md` for the
-full design.
-
 ## Guides
 
 - [Examples](guides/examples.md) — persona chat walkthrough, sample agents, directory structures
