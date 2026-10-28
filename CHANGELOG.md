@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-10-28
+
+### Security
+
+- Dynamic command injection (`` !`cmd` `` tokens in skill bodies) is now disabled by default. Those tokens ran shell commands at render time with the host process's OS permissions, bypassing tool scope. Opt back in with `config :skill_kit, :allow_dynamic_commands, true`; when disabled, the tokens pass through the rendered body untouched.
+
+### Fixed
+
+- `use SkillKit.Kit` no longer generates an unreachable `error -> error` clause in `get_kit/2`. Elixir 1.19+ reported it as a type warning in every module using the macro, failing downstream builds compiled with `--warnings-as-errors`.
+- `use SkillKit.Kit` sets `metadata.tool` in the default `load_kits/1`, so kits listed under `:tools` show up in the catalog without each provider re-stating the using module.
+- Sub-loops reuse `ToolDispatch` output formatting, so content-block tool results no longer raise `FunctionClauseError`.
+
+[0.5.1]: https://github.com/paper-crow/skill_kit/releases/tag/v0.5.1
+
 ## [0.5.0] - 2026-09-06
 
 ### Added
