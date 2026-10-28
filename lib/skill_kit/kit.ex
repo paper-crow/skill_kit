@@ -104,15 +104,15 @@ defmodule SkillKit.Kit do
 
       @impl SkillKit.Kit.Provider
       def get_kit(config, name) do
-        case list_kits(config) do
-          {:ok, kits} ->
-            case Enum.find(kits, &(&1.name == name)) do
-              nil -> {:error, :not_found}
-              kit -> {:ok, kit}
-            end
-
-          error ->
-            error
+        # `with` (no catch-all clause): the default list_kits/1 never errors, so
+        # an `error -> error` clause is unreachable and Elixir 1.19+ flags it in
+        # every module that uses SkillKit.Kit. Overrides that do error still
+        # pass straight through.
+        with {:ok, kits} <- list_kits(config) do
+          case Enum.find(kits, &(&1.name == name)) do
+            nil -> {:error, :not_found}
+            kit -> {:ok, kit}
+          end
         end
       end
 
